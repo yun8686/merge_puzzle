@@ -26,17 +26,25 @@ class GameController extends ChangeNotifier {
   bool get isTracing => path.isNotEmpty;
 
   /// なぞり中のパスの合計値。
-  int get pathTotal {
-    var t = 0;
-    for (final c in path) {
-      t += board.tileAt(c)?.value ?? 0;
-    }
-    return t;
-  }
+  int get pathTotal => board.totalOf(path);
+
+  /// いま成立に必要な合計値。
+  int get requiredTotal => board.requiredTotal;
+
+  /// 今離したらチェインが成立するか。
+  bool get pathIsValid =>
+      path.length >= Board.minPathLength && pathTotal >= requiredTotal;
+
+  /// 成立まであと何枚必要か（合計値が足りているときは 0）。
+  int get missingTiles =>
+      (Board.minPathLength - path.length).clamp(0, Board.minPathLength);
+
+  /// 成立まであといくつ合計値が足りないか。
+  int get missingTotal => (requiredTotal - pathTotal).clamp(0, requiredTotal);
 
   /// 今離したら入る点数。
   int get pendingScore =>
-      path.length >= Board.minPathLength ? Board.scoreFor(pathTotal, path.length) : 0;
+      pathIsValid ? Board.scoreFor(pathTotal, path.length) : 0;
 
   bool isSelected(Cell c) => path.contains(c);
 
