@@ -85,8 +85,13 @@ flutter run
 
 ### 初回だけ必要な設定
 
-リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** に変更する。
-（既定の "Deploy from a branch" のままだとワークフローが権限エラーで落ちる）
+**リポジトリを public にする**（Settings → General → Danger Zone → Change repository visibility）。
+
+Pages の有効化自体はワークフローの `enablement: true` が行うので、それ以外の設定は不要。
+
+なお、private リポジトリのまま Pages を使うには GitHub Pro 以上が必要になる。
+また、どちらの場合でも**公開されたサイトは URL を知っていれば誰でも閲覧できる**
+（サイトにアクセス制限をかけられるのは Enterprise Cloud のみ）。
 
 ### Flutter web を Pages に載せるときの注意点
 

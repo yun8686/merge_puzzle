@@ -47,7 +47,12 @@ jobs:
       - name: Add SPA fallback
         run: cp build/web/index.html build/web/404.html
 
+      # enablement: true で Pages 自体の有効化まで行う。
+      # 手動で Settings → Pages を触る必要が無くなる。
+      # ただしリポジトリが private の場合、Pages は GitHub Pro 以上が必要。
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
