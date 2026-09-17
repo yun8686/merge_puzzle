@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../game/game_controller.dart';
@@ -39,42 +41,126 @@ class _GameScreenState extends State<GameScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Palette.background,
-      body: SafeArea(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final board = _controller.board;
-            final evenRatio = board.evenCount / board.tileCount;
-            return Stack(
-              children: [
-                Column(
-                  children: [
-                    _Header(controller: _controller, best: _best),
-                    _StatusBar(
-                      ratio: evenRatio,
-                      count: board.evenCount,
-                      requiredTotal: board.requiredTotal,
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: BoardView(controller: _controller),
-                      ),
-                    ),
-                    _Footer(controller: _controller, onRestart: _restart),
-                  ],
+      body: Stack(
+        children: [
+          // 盤面の後ろだけ明るくして、視線を中央に集める。
+          const Positioned.fill(
+            key: ValueKey('backdrop'),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.15),
+                  radius: 1.0,
+                  colors: [Palette.backgroundGlow, Palette.background],
+                  stops: [0, 0.85],
                 ),
-                if (_controller.phase == GamePhase.gameOver)
-                  _GameOverOverlay(
-                    controller: _controller,
-                    onRestart: _restart,
-                  ),
-              ],
-            );
-          },
+              ),
+            ),
+          ),
+          SafeArea(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final board = _controller.board;
+                return Stack(
+                  children: [
+                    Column(
+                      children: [
+                        const _TitleBar(),
+                        _Header(controller: _controller, best: _best),
+                        _StatusBar(
+                          evenCount: board.evenCount,
+                          evenRatio: board.evenCount / board.tileCount,
+                          requiredTotal: board.requiredTotal,
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            child: BoardView(controller: _controller),
+                          ),
+                        ),
+                        _Footer(controller: _controller, onRestart: _restart),
+                      ],
+                    ),
+                    if (_controller.phase == GamePhase.gameOver)
+                      _GameOverOverlay(
+                        controller: _controller,
+                        onRestart: _restart,
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ロゴタイプ。奇数=暖色、偶数=寒色というルールの色をそのまま使うので、
+/// 見出しがそのまま配色の説明になっている。
+class _TitleBar extends StatelessWidget {
+  const _TitleBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: ShaderMask(
+        shaderCallback: (rect) => const LinearGradient(
+          colors: [Palette.oddA, Palette.oddB, Palette.evenB, Palette.evenA],
+        ).createShader(rect),
+        child: Text(
+          'PARITY CHAIN',
+          style: AppFont.number(
+            19,
+            color: Colors.white,
+          ).copyWith(letterSpacing: 5),
+        ),
+      ),
+    );
+  }
+}
+
+/// パネル1枚。ラベルを上、数字を下に置くだけの共通の器。
+class _StatPanel extends StatelessWidget {
+  const _StatPanel({required this.label, required this.value, this.accent});
+
+  final String label;
+  final Widget value;
+
+  /// 指定すると枠と背景がその色に寄る。目立たせたいパネル用。
+  final Color? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = this.accent;
+    return DecoratedBox(
+      decoration: panelDecoration(
+        color: accent == null
+            ? Palette.panel
+            : Color.alphaBlend(accent.withValues(alpha: 0.10), Palette.panel),
+        border: accent == null
+            ? Palette.panelBorder
+            : accent.withValues(alpha: 0.45),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 9, 14, 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppFont.label(10, color: accent ?? Palette.textDim),
+            ),
+            const SizedBox(height: 6),
+            value,
+          ],
         ),
       ),
     );
@@ -91,139 +177,156 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayBest = best > controller.score ? best : controller.score;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'SCORE',
-                  style: TextStyle(
-                    color: Palette.textMuted,
-                    fontSize: 11,
-                    letterSpacing: 2.4,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                TweenAnimationBuilder<double>(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      // 高さは中身任せなので、隣り合うパネルを揃えるには実測が要る。
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _StatPanel(
+                label: 'SCORE',
+                value: TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: controller.score.toDouble()),
                   duration: const Duration(milliseconds: 450),
                   curve: Curves.easeOutCubic,
-                  builder: (context, value, _) => Text(
-                    value.round().toString(),
-                    style: const TextStyle(
-                      color: Palette.textPrimary,
-                      fontSize: 38,
-                      height: 1.05,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                  builder: (context, value, _) =>
+                      Text(value.round().toString(), style: AppFont.number(42)),
                 ),
-              ],
+              ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text(
-                'BEST',
-                style: TextStyle(
-                  color: Palette.textMuted,
-                  fontSize: 11,
-                  letterSpacing: 2.4,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
+            const SizedBox(width: 10),
+            _StatPanel(
+              label: 'BEST',
+              value: Text(
                 '$displayBest',
-                style: const TextStyle(
-                  color: Palette.textMuted,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: AppFont.number(22, color: Palette.textMuted),
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// 偶数の残量メーター。これが尽きると詰むので、盤面の寿命そのもの。
-/// 偶数の残量と、いま必要な合計値。どちらも「あと何手遊べるか」の目安。
+/// 成立に必要な合計値と、偶数の残量。どちらも「あと何手遊べるか」の目安。
 class _StatusBar extends StatelessWidget {
   const _StatusBar({
-    required this.ratio,
-    required this.count,
+    required this.evenCount,
+    required this.evenRatio,
     required this.requiredTotal,
   });
 
-  final double ratio;
-  final int count;
+  final int evenCount;
+  final double evenRatio;
   final int requiredTotal;
 
   @override
   Widget build(BuildContext context) {
-    final danger = ratio < 0.18;
-    final color = danger ? Palette.danger : Palette.evenA;
+    final danger = evenRatio < 0.18;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-      child: Row(
-        children: [
-          Text(
-            '偶数 $count',
-            style: TextStyle(
-              color: danger ? Palette.danger : Palette.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _StatPanel(
+              label: 'TARGET',
+              accent: Palette.gold,
+              value: Text(
+                '$requiredTotal',
+                style: AppFont.number(24, color: Palette.gold),
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(5),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
-                duration: const Duration(milliseconds: 350),
-                builder: (context, value, _) => Stack(
-                  children: [
-                    Container(height: 6, color: Palette.surface),
-                    FractionallySizedBox(
-                      widthFactor: value,
-                      child: Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: color,
-                          boxShadow: [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.6),
-                              blurRadius: 8,
+            const SizedBox(width: 10),
+            Expanded(
+              child: DecoratedBox(
+                decoration: panelDecoration(),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 9, 14, 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'EVEN LEFT',
+                            style: AppFont.label(
+                              10,
+                              color: danger ? Palette.danger : Palette.textDim,
                             ),
-                          ],
-                        ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '$evenCount',
+                            style: AppFont.number(
+                              13,
+                              color: danger
+                                  ? Palette.danger
+                                  : Palette.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      _Meter(ratio: evenRatio, danger: danger),
+                    ],
+                  ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Meter extends StatelessWidget {
+  const _Meter({required this.ratio, required this.danger});
+
+  final double ratio;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? Palette.danger : Palette.evenA;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        height: 9,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
+          duration: const Duration(milliseconds: 350),
+          builder: (context, value, _) => Stack(
+            children: [
+              const Positioned.fill(
+                child: ColoredBox(color: Color(0xFF232338)),
+              ),
+              FractionallySizedBox(
+                widthFactor: value,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: danger
+                          ? const [Palette.danger, Color(0xFFFF8A4E)]
+                          : const [Palette.evenB, Palette.evenA],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.7),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Text(
-            '必要合計 $requiredTotal',
-            style: const TextStyle(
-              color: Palette.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -245,54 +348,91 @@ class _Footer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tracing = controller.isTracing;
+    final valid = controller.pathIsValid;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       child: Row(
         children: [
           Expanded(
-            child: AnimatedSwitcher(
+            child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              child: tracing
-                  ? Row(
-                      key: const ValueKey('tracing'),
-                      children: [
-                        Text(
-                          '${controller.path.length} 枚 · '
-                          '${controller.pathTotal}/${controller.requiredTotal}',
-                          style: TextStyle(
-                            color: controller.pathIsValid
-                                ? Palette.textPrimary
-                                : Palette.textMuted,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: panelDecoration(
+                color: valid
+                    ? Color.alphaBlend(
+                        Palette.gold.withValues(alpha: 0.14),
+                        Palette.panel,
+                      )
+                    : Palette.panel,
+                border: valid
+                    ? Palette.gold.withValues(alpha: 0.5)
+                    : Palette.panelBorder,
+                radius: 16,
+              ),
+              alignment: Alignment.centerLeft,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: tracing
+                    ? Row(
+                        key: const ValueKey('tracing'),
+                        children: [
+                          Text(
+                            '${controller.path.length}',
+                            style: AppFont.number(22),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _pendingLabel(controller),
-                          style: TextStyle(
-                            color: controller.pathIsValid
-                                ? const Color(0xFFFFE14E)
-                                : Palette.textMuted,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                          Text(
+                            ' 枚',
+                            style: TextStyle(
+                              color: Palette.textMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '${controller.pathTotal}',
+                            style: AppFont.number(
+                              22,
+                              color: valid ? Palette.gold : Palette.textMuted,
+                            ),
+                          ),
+                          Text(
+                            ' / ${controller.requiredTotal}',
+                            style: AppFont.number(
+                              14,
+                              color: Palette.gold.withValues(alpha: 0.65),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            _pendingLabel(controller),
+                            style: valid
+                                ? AppFont.number(20, color: Palette.gold)
+                                : const TextStyle(
+                                    color: Palette.textMuted,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        '奇数と偶数を交互になぞる',
+                        key: ValueKey('hint'),
+                        style: TextStyle(
+                          color: Palette.textMuted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
-                    )
-                  : const Text(
-                      '奇数 → 偶数 → 奇数 … と交互になぞる',
-                      key: ValueKey('hint'),
-                      style: TextStyle(
-                        color: Palette.textMuted,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
+              ),
             ),
           ),
+          const SizedBox(width: 10),
           _IconAction(
-            icon: Icons.lightbulb_outline,
+            icon: Icons.lightbulb,
+            tint: Palette.gold,
             onTap: () {
               controller.showHint();
               Future<void>.delayed(
@@ -302,7 +442,11 @@ class _Footer extends StatelessWidget {
             },
           ),
           const SizedBox(width: 8),
-          _IconAction(icon: Icons.refresh, onTap: onRestart),
+          _IconAction(
+            icon: Icons.refresh,
+            tint: Palette.evenA,
+            onTap: onRestart,
+          ),
         ],
       ),
     );
@@ -310,22 +454,34 @@ class _Footer extends StatelessWidget {
 }
 
 class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.onTap});
+  const _IconAction({
+    required this.icon,
+    required this.onTap,
+    required this.tint,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+  final Color tint;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Palette.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: Palette.textMuted, size: 22),
+    return SizedBox(
+      width: 52,
+      height: 52,
+      child: DecoratedBox(
+        decoration: panelDecoration(
+          color: Color.alphaBlend(tint.withValues(alpha: 0.12), Palette.panel),
+          border: tint.withValues(alpha: 0.4),
+          radius: 16,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Icon(icon, color: tint, size: 22),
+          ),
         ),
       ),
     );
@@ -341,62 +497,122 @@ class _GameOverOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: ColoredBox(
-        color: const Color(0xE60E0E16),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '繋げる手がなくなりました',
-                style: TextStyle(
-                  color: Palette.textMuted,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '${controller.score}',
-                style: const TextStyle(
-                  color: Palette.textPrimary,
-                  fontSize: 64,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '最長チェイン ${controller.bestChain} 枚',
-                style: const TextStyle(
-                  color: Palette.textMuted,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: onRestart,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Palette.evenB,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 44,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: const Text(
-                  'もう一度',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: ColoredBox(
+          color: const Color(0xCC07070F),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: DecoratedBox(
+                decoration: panelDecoration(radius: 26),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'GAME OVER',
+                        style: AppFont.number(30, color: Palette.danger),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        '繋げる手がなくなりました',
+                        style: TextStyle(
+                          color: Palette.textMuted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Text('SCORE', style: AppFont.label(10)),
+                      const SizedBox(height: 8),
+                      Text('${controller.score}', style: AppFont.number(56)),
+                      const SizedBox(height: 18),
+                      _ResultRow(
+                        label: '最長チェイン',
+                        value: '${controller.bestChain} 枚',
+                      ),
+                      const SizedBox(height: 8),
+                      _ResultRow(
+                        label: '最終 TARGET',
+                        value: '${controller.requiredTotal}',
+                      ),
+                      const SizedBox(height: 26),
+                      _RestartButton(onRestart: onRestart),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Palette.textDim,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(value, style: AppFont.number(16, color: Palette.textMuted)),
+      ],
+    );
+  }
+}
+
+class _RestartButton extends StatelessWidget {
+  const _RestartButton({required this.onRestart});
+
+  final VoidCallback onRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Palette.evenA, Palette.evenB]),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.evenB.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onRestart,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 46, vertical: 15),
+            child: Text(
+              'もう一度',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                shadows: AppFont.number(16).shadows,
+              ),
+            ),
           ),
         ),
       ),
