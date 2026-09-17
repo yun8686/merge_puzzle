@@ -78,9 +78,9 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   }
 
   Offset _centerOf(Cell c) => Offset(
-        _originX + (c.col + 0.5) * _cell,
-        _originY + (c.row + 0.5) * _cell,
-      );
+    _originX + (c.col + 0.5) * _cell,
+    _originY + (c.row + 0.5) * _cell,
+  );
 
   Cell? _cellAt(Offset local) {
     if (_cell <= 0) return null;
@@ -211,14 +211,38 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
               children: [
                 Positioned(
                   key: const ValueKey('board-bg'),
-                  left: _originX - cell * 0.08,
-                  top: _originY - cell * 0.08,
-                  width: boardW + cell * 0.16,
-                  height: boardH + cell * 0.16,
+                  left: _originX - cell * 0.12,
+                  top: _originY - cell * 0.12,
+                  width: boardW + cell * 0.24,
+                  height: boardH + cell * 0.24,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: Palette.boardBg,
-                      borderRadius: BorderRadius.circular(cell * 0.4),
+                      borderRadius: BorderRadius.circular(cell * 0.45),
+                      border: Border.all(
+                        color: Palette.panelBorder,
+                        width: 1.5,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x99000000),
+                          blurRadius: 24,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // 空きマスのくぼみ。タイルが「受け皿に乗っている」ように見せる。
+                Positioned.fill(
+                  key: const ValueKey('wells'),
+                  child: CustomPaint(
+                    painter: _WellPainter(
+                      rows: board.rows,
+                      cols: board.cols,
+                      cell: cell,
+                      originX: _originX,
+                      originY: _originY,
                     ),
                   ),
                 ),
@@ -227,8 +251,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     key: const ValueKey('hint-path'),
                     child: CustomPaint(
                       painter: _RibbonPainter(
-                        points:
-                            controller.hintPath.map(_centerOf).toList(),
+                        points: controller.hintPath.map(_centerOf).toList(),
                         core: Colors.white.withValues(alpha: 0.35),
                         glow: Colors.white.withValues(alpha: 0.2),
                         width: cell * 0.18,
@@ -353,6 +376,50 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   }
 }
 
+/// 空きマスのくぼみ。タイルと同じ位置・同じ角丸で敷いておくと、
+/// タイルが消えた瞬間に「穴」ではなく「受け皿」が見える。
+class _WellPainter extends CustomPainter {
+  const _WellPainter({
+    required this.rows,
+    required this.cols,
+    required this.cell,
+    required this.originX,
+    required this.originY,
+  });
+
+  final int rows;
+  final int cols;
+  final double cell;
+  final double originX;
+  final double originY;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Palette.boardWell;
+    final inset = cell * 0.06;
+    final radius = Radius.circular(cell * 0.28);
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final rect = Rect.fromLTWH(
+          originX + c * cell + inset,
+          originY + r * cell + inset,
+          cell - inset * 2,
+          cell - inset * 2,
+        );
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WellPainter old) =>
+      old.rows != rows ||
+      old.cols != cols ||
+      old.cell != cell ||
+      old.originX != originX ||
+      old.originY != originY;
+}
+
 class _Pop {
   _Pop({
     required this.id,
@@ -449,44 +516,46 @@ class _TileWidgetState extends State<TileWidget>
         margin: EdgeInsets.all(size * 0.06),
         decoration: BoxDecoration(
           gradient: Palette.gradientFor(isOdd),
-          borderRadius: BorderRadius.circular(size * 0.26),
+          borderRadius: BorderRadius.circular(size * 0.28),
           boxShadow: [
             BoxShadow(
-              color: glow.withValues(alpha: widget.selected ? 0.8 : 0.3),
-              blurRadius: widget.selected ? size * 0.55 : size * 0.22,
+              color: glow.withValues(alpha: widget.selected ? 0.8 : 0.32),
+              blurRadius: widget.selected ? size * 0.55 : size * 0.24,
               spreadRadius: widget.selected ? size * 0.05 : 0,
+            ),
+            BoxShadow(
+              color: const Color(0x73000000),
+              blurRadius: size * 0.12,
+              offset: Offset(0, size * 0.05),
             ),
           ],
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
+            // 上面のツヤ。これだけで平面がふくらんで見える。
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: Palette.gloss,
+                borderRadius: BorderRadius.circular(size * 0.28),
+              ),
+              child: const SizedBox.expand(),
+            ),
             if (widget.selected)
               Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(size * 0.26),
-                  border: Border.all(
-                    color: Colors.white,
-                    width: size * 0.06,
-                  ),
+                  borderRadius: BorderRadius.circular(size * 0.28),
+                  border: Border.all(color: Colors.white, width: size * 0.06),
                 ),
               ),
             if (widget.candidate && !widget.selected)
               _CandidatePulse(size: size),
             Padding(
-              padding: EdgeInsets.all(size * 0.2),
+              padding: EdgeInsets.all(size * 0.18),
               child: FittedBox(
                 child: Text(
                   '${widget.tile.value}',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: size * 0.5,
-                    height: 1,
-                    shadows: const [
-                      Shadow(color: Color(0x66000000), blurRadius: 4),
-                    ],
-                  ),
+                  style: AppFont.number(size * 0.56, color: Colors.white),
                 ),
               ),
             ),
@@ -639,16 +708,11 @@ class _PopTileState extends State<_PopTile>
         ),
         child: Center(
           child: Padding(
-            padding: EdgeInsets.all(size * 0.2),
+            padding: EdgeInsets.all(size * 0.18),
             child: FittedBox(
               child: Text(
                 '${widget.value}',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: size * 0.5,
-                  height: 1,
-                ),
+                style: AppFont.number(size * 0.56, color: Colors.white),
               ),
             ),
           ),
@@ -711,21 +775,11 @@ class _ScorePopupState extends State<_ScorePopup>
                 Text(
                   '+${widget.gained}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFFFFF0B8),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 26,
-                    shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
-                  ),
+                  style: AppFont.number(28, color: const Color(0xFFFFF0B8)),
                 ),
                 Text(
                   '${widget.length} CHAIN',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    letterSpacing: 1.6,
-                  ),
+                  style: AppFont.label(12, color: Colors.white70),
                 ),
               ],
             ),
@@ -774,9 +828,7 @@ class _RankBannerState extends State<_RankBanner>
       animation: _c,
       builder: (context, _) {
         final t = _c.value;
-        final pop = t < 0.25
-            ? Curves.easeOutBack.transform(t / 0.25)
-            : 1.0;
+        final pop = t < 0.25 ? Curves.easeOutBack.transform(t / 0.25) : 1.0;
         return Opacity(
           opacity: t > 0.7 ? (1 - (t - 0.7) / 0.3).clamp(0.0, 1.0) : 1.0,
           child: Transform.scale(
@@ -785,12 +837,18 @@ class _RankBannerState extends State<_RankBanner>
               widget.rank.label,
               textAlign: TextAlign.center,
               style: TextStyle(
+                fontFamily: AppFont.display,
                 color: widget.rank.color,
-                fontWeight: FontWeight.w900,
-                fontSize: 40,
-                letterSpacing: 2,
-                shadows: const [
-                  Shadow(color: Colors.black, blurRadius: 12),
+                fontWeight: FontWeight.w800,
+                fontSize: 42,
+                height: 1.0,
+                letterSpacing: 1.5,
+                shadows: [
+                  const Shadow(color: Colors.black, blurRadius: 12),
+                  Shadow(
+                    color: widget.rank.color.withValues(alpha: 0.7),
+                    blurRadius: 24,
+                  ),
                 ],
               ),
             ),

@@ -57,6 +57,17 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 数字とスコアの書体。丸くて太いので、ゲームらしい見た目になる。
+  # 同梱しておくと、フォントを取りに行けない環境でも数字が消えない。
+  # Baloo 2 (SIL Open Font License 1.1) — assets/fonts/OFL.txt
+  fonts:
+    - family: Baloo2
+      fonts:
+        - asset: assets/fonts/Baloo2-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Baloo2-ExtraBold.ttf
+          weight: 800
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
