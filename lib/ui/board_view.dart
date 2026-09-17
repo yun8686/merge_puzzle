@@ -24,11 +24,21 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final ParticleField _particles = ParticleField();
   final List<_Pop> _pops = <_Pop>[];
   final List<_Popup> _popups = <_Popup>[];
+  final List<_ChainFlash> _flashes = <_ChainFlash>[];
 
   late final Ticker _ticker;
   Duration _lastTick = Duration.zero;
   double _shake = 0;
   double _shakeTime = 0;
+
+  /// 盤面の枠が消した色に光る量（0〜1）。フレーム全体が反応すると、
+  /// 消えたのが盤面上の一部でも「盤ごと鳴った」感じになる。
+  double _frameGlow = 0;
+  Color _frameColor = Palette.evenA;
+
+  /// 長いチェインのときだけ焚く盤面全体のフラッシュ。
+  double _screenFlash = 0;
+  Color _screenFlashColor = Palette.evenA;
 
   double _cell = 0;
   double _originX = 0;
@@ -70,8 +80,13 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     } else {
       _shake = 0;
     }
+    _frameGlow = _frameGlow > 0.01 ? _frameGlow * exp(-5.5 * dt) : 0;
+    _screenFlash = _screenFlash > 0.004 ? _screenFlash * exp(-9 * dt) : 0;
 
-    if (_particles.isEmpty && _shake == 0) {
+    if (_particles.isEmpty &&
+        _shake == 0 &&
+        _frameGlow == 0 &&
+        _screenFlash == 0) {
       _ticker.stop();
     }
     if (mounted) setState(() {});
@@ -140,6 +155,34 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       );
     }
 
+    // なぞった線が白く光って消える。どこを消したのかが一瞬で分かる。
+    final endIsOdd = result.values.last.isOdd;
+    _flashes.add(
+      _ChainFlash(
+        id: _seq++,
+        points: result.cells.map(_centerOf).toList(),
+        color: Palette.glowFor(endIsOdd),
+      ),
+    );
+
+    // 終端から大きな輪を1つ。長いチェインほど大きく広がる。
+    _particles.shockwave(
+      _centerOf(result.endCell),
+      Palette.glowFor(endIsOdd),
+      radius: (_cell * (1.4 + result.length * 0.3)).clamp(0.0, _cell * 5),
+      life: 0.5,
+      width: 7,
+    );
+
+    _frameGlow = (result.length / 6).clamp(0.45, 1.0);
+    _frameColor = Palette.glowFor(endIsOdd);
+    if (result.length >= 8) {
+      // 強くすると盤面が白飛びして、何が消えたのか読めなくなる。
+      // あくまで枠の発光を後押しする程度に留める。
+      _screenFlash = (result.length / 60).clamp(0.0, 0.2);
+      _screenFlashColor = Palette.glowFor(endIsOdd);
+    }
+
     _popups.add(
       _Popup(
         id: _seq++,
@@ -154,7 +197,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       _rank = _Rank(id: _seq++, rank: rank);
     }
 
-    _shake = (result.length * 2.4).clamp(3.0, 26.0);
+    _shake = (result.length * 3.0).clamp(4.0, 32.0);
     _shakeTime = 0;
     _ensureTicking();
     setState(() {});
@@ -164,8 +207,15 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     _particles.burst(
       center,
       Palette.baseFor(isOdd),
-      count: 9,
-      power: _cell * 4.2,
+      count: 16,
+      power: _cell * 5.0,
+    );
+    _particles.shockwave(
+      center,
+      Palette.glowFor(isOdd),
+      radius: _cell * 1.15,
+      life: 0.34,
+      width: 3.5,
     );
     _ensureTicking();
   }
@@ -220,15 +270,27 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       color: Palette.boardBg,
                       borderRadius: BorderRadius.circular(cell * 0.45),
                       border: Border.all(
-                        color: Palette.panelBorder,
+                        color: Color.lerp(
+                          Palette.panelBorder,
+                          _frameColor,
+                          _frameGlow,
+                        )!,
                         width: 1.5,
                       ),
-                      boxShadow: const [
-                        BoxShadow(
+                      boxShadow: [
+                        const BoxShadow(
                           color: Color(0x99000000),
                           blurRadius: 24,
                           offset: Offset(0, 8),
                         ),
+                        if (_frameGlow > 0)
+                          BoxShadow(
+                            color: _frameColor.withValues(
+                              alpha: 0.55 * _frameGlow,
+                            ),
+                            blurRadius: 26 + 30 * _frameGlow,
+                            spreadRadius: 2 * _frameGlow,
+                          ),
                       ],
                     ),
                   ),
@@ -296,10 +358,58 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       },
                     ),
                   ),
+                for (final flash in _flashes)
+                  Positioned.fill(
+                    key: ValueKey('flash-${flash.id}'),
+                    child: IgnorePointer(
+                      child: _ChainFlashView(
+                        points: flash.points,
+                        color: flash.color,
+                        width: cell * 0.15,
+                        onDone: () {
+                          _flashes.removeWhere((f) => f.id == flash.id);
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ),
+                  ),
+                if (_screenFlash > 0)
+                  Positioned.fill(
+                    key: const ValueKey('screen-flash'),
+                    child: IgnorePointer(
+                      child: ClipPath(
+                        clipper: _BoardClipper(
+                          left: _originX - cell * 0.12,
+                          top: _originY - cell * 0.12,
+                          width: boardW + cell * 0.24,
+                          height: boardH + cell * 0.24,
+                          radius: cell * 0.45,
+                        ),
+                        child: ColoredBox(
+                          color: _screenFlashColor.withValues(
+                            alpha: _screenFlash,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 粒と輪は盤面の中に閉じ込める。外に出るとヘッダーの上を
+                // 横切って、何が起きたのか読み取れなくなる。
                 Positioned.fill(
                   key: const ValueKey('particles'),
                   child: IgnorePointer(
-                    child: CustomPaint(painter: ParticlePainter(_particles)),
+                    child: ClipPath(
+                      clipper: _BoardClipper(
+                        left: _originX - cell * 0.12,
+                        top: _originY - cell * 0.12,
+                        width: boardW + cell * 0.24,
+                        height: boardH + cell * 0.24,
+                        radius: cell * 0.45,
+                      ),
+                      child: CustomPaint(
+                        painter: ParticlePainter(_particles),
+                      ),
+                    ),
                   ),
                 ),
                 for (final popup in _popups)
@@ -373,6 +483,110 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       }
     }
     return widgets;
+  }
+}
+
+/// 盤面の枠と同じ角丸で切り抜く。演出を盤の中だけに閉じ込めるため。
+class _BoardClipper extends CustomClipper<Path> {
+  const _BoardClipper({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.radius,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final double radius;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, width, height),
+        Radius.circular(radius),
+      ),
+    );
+
+  @override
+  bool shouldReclip(_BoardClipper old) =>
+      old.left != left ||
+      old.top != top ||
+      old.width != width ||
+      old.height != height ||
+      old.radius != radius;
+}
+
+/// なぞった線を白く光らせてから消す演出のデータ。
+class _ChainFlash {
+  _ChainFlash({required this.id, required this.points, required this.color});
+
+  final int id;
+  final List<Offset> points;
+  final Color color;
+}
+
+/// なぞった経路が太く光って、広がりながら消えていく。
+/// タイルが1枚ずつ弾けるより先に「線ごと消えた」ことを伝える役。
+class _ChainFlashView extends StatefulWidget {
+  const _ChainFlashView({
+    required this.points,
+    required this.color,
+    required this.width,
+    required this.onDone,
+  });
+
+  final List<Offset> points;
+  final Color color;
+  final double width;
+  final VoidCallback onDone;
+
+  @override
+  State<_ChainFlashView> createState() => _ChainFlashViewState();
+}
+
+class _ChainFlashViewState extends State<_ChainFlashView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 340),
+    )..forward();
+    _c.addStatusListener((s) {
+      if (s == AnimationStatus.completed) widget.onDone();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(_c.value);
+        final fade = (1 - t * t).clamp(0.0, 1.0);
+        return CustomPaint(
+          painter: _RibbonPainter(
+            points: widget.points,
+            core: Colors.white.withValues(alpha: fade),
+            glow: widget.color.withValues(alpha: fade * 0.9),
+            width: widget.width * (1 + t * 2.4),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -568,9 +782,14 @@ class _TileWidgetState extends State<TileWidget>
       animation: _entry,
       builder: (context, child) {
         final e = Curves.easeOutCubic.transform(_entry.value);
+        // 落ちている間だけ縦に伸ばす。着地で 1.0 に戻るので跳ねて見える。
         return Transform.translate(
           offset: Offset(0, (1 - e) * -size * 2.6),
-          child: Opacity(opacity: e.clamp(0.0, 1.0), child: child),
+          child: Transform.scale(
+            scaleX: 1 - (1 - e) * 0.16,
+            scaleY: 1 + (1 - e) * 0.28,
+            child: Opacity(opacity: e.clamp(0.0, 1.0), child: child),
+          ),
         );
       },
       child: face,
@@ -686,12 +905,36 @@ class _PopTileState extends State<_PopTile>
       builder: (context, child) {
         final t = _c.value;
         // 一瞬膨らんでから消える。溜めがあると弾けた感じが出る。
-        final scale = t < 0.3
-            ? 1 + (t / 0.3) * 0.35
-            : 1.35 * (1 - ((t - 0.3) / 0.7)).clamp(0.0, 1.0);
+        final scale = t < 0.28
+            ? 1 + (t / 0.28) * 0.6
+            : 1.6 * (1 - ((t - 0.28) / 0.72)).clamp(0.0, 1.0);
+        // 弾け始めの白飛び。色が一度飛ぶと、破裂の瞬間が立つ。
+        final flash = _started ? (1 - t / 0.25).clamp(0.0, 1.0) : 0.0;
         return Opacity(
           opacity: _started ? (1 - t * t).clamp(0.0, 1.0) : 1.0,
-          child: Transform.scale(scale: _started ? scale : 1.0, child: child),
+          child: Transform.scale(
+            scale: _started ? scale : 1.0,
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                child!,
+                if (flash > 0)
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.all(widget.size * 0.06),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: flash),
+                          borderRadius: BorderRadius.circular(
+                            widget.size * 0.28,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         );
       },
       child: Container(
@@ -765,23 +1008,30 @@ class _ScorePopupState extends State<_ScorePopup>
       animation: _c,
       builder: (context, _) {
         final t = Curves.easeOutCubic.transform(_c.value);
+        // 出た瞬間だけ大きく、すぐ等倍に戻る。数字が飛び出して見える。
+        final pop = _c.value < 0.18
+            ? Curves.easeOutBack.transform(_c.value / 0.18)
+            : 1.0;
         return Transform.translate(
-          offset: Offset(0, -t * 46),
-          child: Opacity(
-            opacity: (1 - t * t).clamp(0.0, 1.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '+${widget.gained}',
-                  textAlign: TextAlign.center,
-                  style: AppFont.number(28, color: const Color(0xFFFFF0B8)),
-                ),
-                Text(
-                  '${widget.length} CHAIN',
-                  style: AppFont.label(12, color: Colors.white70),
-                ),
-              ],
+          offset: Offset(0, -t * 52),
+          child: Transform.scale(
+            scale: 0.6 + pop * 0.55,
+            child: Opacity(
+              opacity: (1 - t * t).clamp(0.0, 1.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '+${widget.gained}',
+                    textAlign: TextAlign.center,
+                    style: AppFont.number(28, color: const Color(0xFFFFF0B8)),
+                  ),
+                  Text(
+                    '${widget.length} CHAIN',
+                    style: AppFont.label(12, color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ),
         );
