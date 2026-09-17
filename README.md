@@ -78,6 +78,30 @@ flutter run
 | `Board.minPathLength` (既定 3) | チェイン成立に必要な枚数 |
 | `Board.scoreFor` | 得点式。倍率は線形（3枚=等倍、12枚=10倍）。指数にすると数手で桁が壊れる |
 
+## GitHub Pages への公開
+
+`.github/workflows/deploy-pages.yml` が、デフォルトブランチへのプッシュで自動ビルド・公開する。
+公開先は `https://<ユーザー名>.github.io/merge_puzzle/`。
+
+### 初回だけ必要な設定
+
+リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** に変更する。
+（既定の "Deploy from a branch" のままだとワークフローが権限エラーで落ちる）
+
+### Flutter web を Pages に載せるときの注意点
+
+| 注意点 | 対処 |
+|---|---|
+| Pages はリポジトリ名のサブパス (`/merge_puzzle/`) で配信される。既定のビルドはルート配信前提なのでアセットを取りに行けず**真っ白な画面**になる | `--base-href "/merge_puzzle/"` を付ける。ワークフローではリポジトリ名から自動で組み立てている |
+| CanvasKit（描画エンジン、約 1.5MB）が既定では Google の CDN から実行時に取得される。CDN が塞がれている環境では起動しない | `--no-web-resources-cdn` でビルドに同梱する |
+| 直リンクやリロードで 404 になる | `index.html` を `404.html` に複製する |
+| Service Worker が古い版をキャッシュし、更新が反映されないことがある | 利用者側でハードリロード。頻発するなら `--pwa-strategy=none` を検討 |
+
+いずれもワークフロー側で対処済み。ローカルでサブパス配信・CDN 遮断の条件を再現して、起動することを確認している。
+
+なお、日本語とラテン文字のフォントは実行時に Google Fonts から取得される。表示はされるが、
+外部依存を完全に断ちたい場合はフォントをアセットとして同梱する必要がある（CJK は容量が大きい）。
+
 ## 未実装
 
 - 効果音（音が入ると爽快感は大きく伸びるが、音源アセットが必要なため未着手）
