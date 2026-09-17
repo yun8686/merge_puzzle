@@ -60,6 +60,62 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
+  testWidgets('長いチェインでもスコア表示は作り直されない', (tester) async {
+    final controller = GameController(board: Board(rng: Random(3)));
+    paintCheckerboard(controller.board);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 400,
+              child: BoardView(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final origin = tester.getTopLeft(find.byType(BoardView));
+    Offset centerOf(int row, int col) =>
+        origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
+
+    // 上段を右へ6マス、下段を左へ3マスなぞって9チェインにする。
+    final gesture = await tester.startGesture(centerOf(0, 0));
+    await tester.pump();
+    for (var col = 1; col < 6; col++) {
+      await gesture.moveTo(centerOf(0, col));
+      await tester.pump();
+    }
+    for (var col = 5; col >= 3; col--) {
+      await gesture.moveTo(centerOf(1, col));
+      await tester.pump();
+    }
+    expect(controller.path.length, 9);
+
+    await gesture.up();
+    await tester.pump();
+
+    expect(find.text('9 CHAIN'), findsOneWidget);
+    final popup = tester.element(find.text('9 CHAIN'));
+
+    // 消えるタイルが1枚ずつ片付く間、スコア表示の要素が作り直されると
+    // アニメーションが頭から流れ直し、同じ表示が何度も出てしまう。
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('9 CHAIN'), findsOneWidget);
+      expect(identical(tester.element(find.text('9 CHAIN')), popup), isTrue);
+    }
+
+    // 850ms のアニメーションが終われば、繰り返さずに消えること。
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('9 CHAIN'), findsNothing);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
   testWidgets('偶奇が同じマスへは伸びない', (tester) async {
     final controller = GameController(board: Board(rng: Random(2)));
     // 全部奇数にすると、どこへも繋がらない。

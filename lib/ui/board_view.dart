@@ -204,8 +204,13 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
             offset: shakeOffset,
             child: Stack(
               clipBehavior: Clip.none,
+              // Stack の子は並び順で古い要素と突き合わされる。消えるタイルが
+              // 1枚ずつ減ると後ろの子の位置がずれるので、キーを中の
+              // ウィジェットではなく直接の子に付けておかないと State ごと
+              // 作り直され、スコア表示などのアニメーションが頭から流れ直す。
               children: [
                 Positioned(
+                  key: const ValueKey('board-bg'),
                   left: _originX - cell * 0.08,
                   top: _originY - cell * 0.08,
                   width: boardW + cell * 0.16,
@@ -219,6 +224,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                 ),
                 if (controller.hintPath.isNotEmpty)
                   Positioned.fill(
+                    key: const ValueKey('hint-path'),
                     child: CustomPaint(
                       painter: _RibbonPainter(
                         points:
@@ -234,6 +240,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                 // どの順でなぞったのかが読み取れなくなる。
                 if (controller.path.length >= 2)
                   Positioned.fill(
+                    key: const ValueKey('drag-path'),
                     child: IgnorePointer(
                       child: CustomPaint(
                         painter: _RibbonPainter(
@@ -249,12 +256,12 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                   ),
                 for (final pop in _pops)
                   Positioned(
+                    key: ValueKey('pop-${pop.id}'),
                     left: pop.center.dx - cell / 2,
                     top: pop.center.dy - cell / 2,
                     width: cell,
                     height: cell,
                     child: _PopTile(
-                      key: ValueKey('pop-${pop.id}'),
                       value: pop.value,
                       isOdd: pop.isOdd,
                       size: cell,
@@ -267,19 +274,20 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     ),
                   ),
                 Positioned.fill(
+                  key: const ValueKey('particles'),
                   child: IgnorePointer(
                     child: CustomPaint(painter: ParticlePainter(_particles)),
                   ),
                 ),
                 for (final popup in _popups)
                   Positioned(
+                    key: ValueKey('popup-${popup.id}'),
                     left: popup.center.dx - cell * 1.5,
                     top: popup.center.dy - cell * 0.9,
                     width: cell * 3,
                     height: cell * 1.2,
                     child: IgnorePointer(
                       child: _ScorePopup(
-                        key: ValueKey('popup-${popup.id}'),
                         gained: popup.gained,
                         length: popup.length,
                         onDone: () {
@@ -291,12 +299,12 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                   ),
                 if (_rank != null)
                   Positioned(
+                    key: ValueKey('rank-${_rank!.id}'),
                     left: _originX,
                     top: _originY + boardH * 0.34,
                     width: boardW,
                     child: IgnorePointer(
                       child: _RankBanner(
-                        key: ValueKey('rank-${_rank!.id}'),
                         rank: _rank!.rank,
                         onDone: () {
                           _rank = null;
