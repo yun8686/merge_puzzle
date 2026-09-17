@@ -12,7 +12,8 @@ void paintCheckerboard(Board board) {
   var id = 0;
   for (var r = 0; r < board.rows; r++) {
     for (var c = 0; c < board.cols; c++) {
-      board.grid[r][c] = Tile(id: id++, value: (r + c).isEven ? 1 : 2);
+      // 3 と 2 の市松。3枚で合計 8 になり、初期の必要合計値 6 を満たす。
+      board.grid[r][c] = Tile(id: id++, value: (r + c).isEven ? 3 : 2);
     }
   }
 }

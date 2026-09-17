@@ -561,7 +561,6 @@ class _CandidatePulseState extends State<_CandidatePulse>
 /// 消える瞬間のタイル。膨らんでから弾ける。
 class _PopTile extends StatefulWidget {
   const _PopTile({
-    super.key,
     required this.value,
     required this.isOdd,
     required this.size,
@@ -661,7 +660,6 @@ class _PopTileState extends State<_PopTile>
 
 class _ScorePopup extends StatefulWidget {
   const _ScorePopup({
-    super.key,
     required this.gained,
     required this.length,
     required this.onDone,
@@ -739,7 +737,7 @@ class _ScorePopupState extends State<_ScorePopup>
 }
 
 class _RankBanner extends StatefulWidget {
-  const _RankBanner({super.key, required this.rank, required this.onDone});
+  const _RankBanner({required this.rank, required this.onDone});
 
   final ChainRank rank;
   final VoidCallback onDone;

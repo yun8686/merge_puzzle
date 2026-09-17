@@ -77,7 +77,7 @@ void main() {
     });
   });
 
-  test('パスを消すと終端に合計値が残る', () {
+  test('パスを消すとタイルが全部消える', () {
     final board = boardOf([
       [1, 2, 3],
       [4, 5, 6],
@@ -88,9 +88,11 @@ void main() {
 
     expect(result.total, 1 + 2 + 3);
     expect(result.length, 3);
+    // 合成タイルは残さない。残すと際限なく育って必要合計値を素通りできる。
     expect(board.grid[0][0], isNull);
     expect(board.grid[0][1], isNull);
-    expect(board.grid[0][2]!.value, 6);
+    expect(board.grid[0][2], isNull);
+    expect(board.clearedTotal, 1 + 2 + 3);
   });
 
   test('重力で下に詰まる', () {
@@ -142,12 +144,12 @@ void main() {
       expect(board.findBestPath().length, greaterThanOrEqualTo(3));
     });
 
-    test('偶数が1枚だけでも3枚繋がれば詰みではない', () {
+    test('偶数が1枚だけでも合計が足りれば詰みではない', () {
       final board = boardOf([
-        [1, 2],
-        [1, 1],
+        [3, 2],
+        [3, 3],
       ]);
-      // 1(0,0) -> 2(0,1) -> 1(1,1) で3枚繋がる。
+      // 3(0,0) -> 2(0,1) -> 3(1,1) で3枚繋がり、合計 8 で成立する。
       expect(board.hasAnyPath(), isTrue);
     });
 
@@ -159,6 +161,61 @@ void main() {
       ]);
       expect(board.evenCount, 0);
       expect(board.hasAnyPath(), isFalse);
+    });
+  });
+
+  group('必要合計値', () {
+    test('合計が足りないパスは成立しない', () {
+      final board = boardOf([
+        [1, 2, 1],
+        [1, 1, 1],
+      ]);
+      // 偶奇は交互だが 1+2+1 = 4 で、初期の必要合計値 6 に届かない。
+      expect(
+        board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]),
+        isFalse,
+      );
+      // 偶数が1枚しかないのでこれ以上伸ばせず、盤面ごと詰み。
+      expect(board.hasAnyPath(), isFalse);
+    });
+
+    test('消した合計値が積み上がると必要合計値が上がる', () {
+      final board = boardOf([
+        [1, 2],
+        [3, 4],
+      ]);
+      expect(board.requiredTotal, Board.baseRequiredTotal);
+      board.clearedTotal = Board.requiredTotalStep * 3;
+      expect(board.requiredTotal, Board.baseRequiredTotal + 3);
+    });
+
+    test('必要合計値が上がると同じ盤面でも詰む', () {
+      final board = boardOf([
+        [1, 2, 1],
+        [2, 1, 2],
+        [1, 2, 1],
+      ]);
+      // 1+2+1+2 = 6 で成立する手がある。
+      expect(board.hasAnyPath(), isTrue);
+
+      // 全マス辿っても 13 にしかならないので、必要合計値を超えると詰む。
+      board.clearedTotal = Board.requiredTotalStep * 20;
+      expect(board.requiredTotal, greaterThan(13));
+      expect(board.hasAnyPath(), isFalse);
+      expect(board.findBestPath(), isEmpty);
+    });
+
+    test('ヒントは必要合計値を満たすパスを返す', () {
+      final board = boardOf([
+        [1, 2, 1, 2],
+        [2, 1, 2, 1],
+        [1, 2, 1, 2],
+      ]);
+      board.clearedTotal = Board.requiredTotalStep * 4; // 必要合計 10
+      final hint = board.findBestPath();
+      expect(hint, isNotEmpty);
+      expect(board.totalOf(hint), greaterThanOrEqualTo(board.requiredTotal));
+      expect(board.isValidPath(hint), isTrue);
     });
   });
 

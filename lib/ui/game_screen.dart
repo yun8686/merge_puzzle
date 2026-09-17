@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../game/board.dart';
 import '../game/game_controller.dart';
 import 'board_view.dart';
 import 'theme.dart';
@@ -51,7 +50,11 @@ class _GameScreenState extends State<GameScreen> {
                 Column(
                   children: [
                     _Header(controller: _controller, best: _best),
-                    _EvenGauge(ratio: evenRatio, count: board.evenCount),
+                    _StatusBar(
+                      ratio: evenRatio,
+                      count: board.evenCount,
+                      requiredTotal: board.requiredTotal,
+                    ),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -151,11 +154,17 @@ class _Header extends StatelessWidget {
 }
 
 /// 偶数の残量メーター。これが尽きると詰むので、盤面の寿命そのもの。
-class _EvenGauge extends StatelessWidget {
-  const _EvenGauge({required this.ratio, required this.count});
+/// 偶数の残量と、いま必要な合計値。どちらも「あと何手遊べるか」の目安。
+class _StatusBar extends StatelessWidget {
+  const _StatusBar({
+    required this.ratio,
+    required this.count,
+    required this.requiredTotal,
+  });
 
   final double ratio;
   final int count;
+  final int requiredTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -204,10 +213,27 @@ class _EvenGauge extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 12),
+          Text(
+            '必要合計 $requiredTotal',
+            style: const TextStyle(
+              color: Palette.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// 成立まで何が足りないかを一言で。枚数が先、足りたら合計値を出す。
+String _pendingLabel(GameController controller) {
+  if (controller.pathIsValid) return '+${controller.pendingScore}';
+  if (controller.missingTiles > 0) return 'あと ${controller.missingTiles} 枚';
+  return 'あと ${controller.missingTotal}';
 }
 
 class _Footer extends StatelessWidget {
@@ -231,20 +257,21 @@ class _Footer extends StatelessWidget {
                       key: const ValueKey('tracing'),
                       children: [
                         Text(
-                          '${controller.path.length} 枚',
-                          style: const TextStyle(
-                            color: Palette.textPrimary,
+                          '${controller.path.length} 枚 · '
+                          '${controller.pathTotal}/${controller.requiredTotal}',
+                          style: TextStyle(
+                            color: controller.pathIsValid
+                                ? Palette.textPrimary
+                                : Palette.textMuted,
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          controller.pendingScore > 0
-                              ? '+${controller.pendingScore}'
-                              : 'あと ${Board.minPathLength - controller.path.length} 枚',
+                          _pendingLabel(controller),
                           style: TextStyle(
-                            color: controller.pendingScore > 0
+                            color: controller.pathIsValid
                                 ? const Color(0xFFFFE14E)
                                 : Palette.textMuted,
                             fontSize: 18,
