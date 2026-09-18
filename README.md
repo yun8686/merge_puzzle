@@ -78,6 +78,40 @@ flutter run
 | `Board.minPathLength` (既定 3) | チェイン成立に必要な枚数 |
 | `Board.scoreFor` | 得点式。倍率は線形（3枚=等倍、12枚=10倍）。指数にすると数手で桁が壊れる |
 
+## モバイル向けビルド
+
+アプリ ID は Android / iOS とも `yun.app.chain_puzzle`。ホーム画面での表示名は「奇偶チェイン」。
+
+### アイコン
+
+`assets/icon/` のマスター画像から `flutter_launcher_icons` で各サイズを生成している。
+マスターを差し替えたら再生成する。
+
+```bash
+dart run flutter_launcher_icons
+```
+
+Android のアダプティブアイコンは前景側にセーフゾーン（108dp 中央の 66dp）を作り込んであるため、
+`adaptive_icon_foreground_inset: 0` にしてある。前景を描き直すときは、丸マスクで角が切れないか確認すること。
+
+### リリース署名（Android）
+
+`android/key.properties` があれば本番鍵、無ければデバッグ鍵で署名される。
+デバッグ鍵の成果物は Play Store に提出できないので、配布前に鍵を用意する。
+
+```bash
+keytool -genkey -v -keystore chain_puzzle-upload.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+生成した `.jks` はリポジトリの外（例: `~/keystores/`）に置き、`android/key.properties.example` をコピーして
+`android/key.properties` を作り、パスとパスワードを書く。**この鍵を失うと同じアプリとして更新できなくなる**ので、
+バックアップを取ること。
+
+```bash
+flutter build appbundle --release   # Play Store 提出用 (.aab)
+flutter build apk --release         # 直接配布・動作確認用
+```
+
 ## GitHub Pages への公開
 
 `.github/workflows/deploy-pages.yml` が、デフォルトブランチへのプッシュで自動ビルド・公開する。

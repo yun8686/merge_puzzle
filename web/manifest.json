@@ -1,11 +1,11 @@
 {
-    "name": "parity_chain",
-    "short_name": "parity_chain",
+    "name": "奇偶チェイン",
+    "short_name": "奇偶チェイン",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#07070F",
+    "theme_color": "#07070F",
+    "description": "奇数と偶数を交互になぞってつなぐ、チェインパズル。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

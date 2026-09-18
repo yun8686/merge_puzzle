@@ -1,3 +1,13 @@
+import java.util.Properties
+
+// リリース署名の鍵は android/key.properties に置く（.gitignore 済み）。
+// 手元に鍵がない環境では null のままにして、デバッグ鍵にフォールバックする。
+val keystoreProperties = Properties().takeIf { props ->
+    rootProject.file("key.properties").let { f ->
+        if (f.exists()) { f.inputStream().use(props::load); true } else false
+    }
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -29,11 +39,24 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystoreProperties != null) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // key.properties があれば本番鍵、なければデバッグ鍵。
+            // デバッグ鍵で署名した成果物は Play Store には提出できない。
+            signingConfig = signingConfigs.getByName(
+                if (keystoreProperties != null) "release" else "debug"
+            )
         }
     }
 }

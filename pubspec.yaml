@@ -1,5 +1,5 @@
 name: parity_chain
-description: "A new Flutter project."
+description: "奇数と偶数を交互になぞってつなぐ、チェインパズル。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -45,6 +45,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  # 1枚のマスター画像から各プラットフォームのアイコンを生成する。
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -98,3 +100,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# アプリアイコン。assets/icon/ のマスター画像から生成する。
+# 生成コマンド: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: "ic_launcher"
+  adaptive_icon_background: "assets/icon/app_icon_background.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  # 前景は生成時点でセーフゾーンに収めてあるので、追加の inset は入れない。
+  adaptive_icon_foreground_inset: 0
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    background_color: "#07070F"
+    theme_color: "#07070F"
