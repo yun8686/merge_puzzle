@@ -1,4 +1,4 @@
-package com.example.parity_chain
+package yun.app.chain_puzzle
 
 import io.flutter.embedding.android.FlutterActivity
 
