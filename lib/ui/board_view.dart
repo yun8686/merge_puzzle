@@ -511,6 +511,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
               fresh: controller.freshTileIds.contains(tile.id),
               willClear: controller.willClear(at),
               resistCount: _resists[tile.id] ?? 0,
+              unclearable: controller.isUnclearable(at),
             ),
           ),
         );
@@ -749,6 +750,7 @@ class TileWidget extends StatefulWidget {
     required this.fresh,
     required this.willClear,
     required this.resistCount,
+    required this.unclearable,
   });
 
   final Tile tile;
@@ -764,6 +766,10 @@ class TileWidget extends StatefulWidget {
   /// このブロックが「長さが足りなくて耐えた」回数。
   /// 増えたフレームで揺らす。
   final int resistCount;
+
+  /// いまの盤面ではどう繋いでも消せない目標ブロックか。
+  /// 数字を暗く落として「今は無理」と伝える。
+  final bool unclearable;
 
   @override
   State<TileWidget> createState() => _TileWidgetState();
@@ -857,11 +863,13 @@ class _TileWidgetState extends State<TileWidget>
               _CandidatePulse(size: size),
             // 数字が書かれているのは目標ブロックだけ。通常ブロックは
             // 偶奇の色しか持たない。
-            if (widget.tile.isTarget) _TargetFace(
-              requiredLength: widget.tile.requiredLength!,
-              size: size,
-              willClear: widget.willClear,
-            ),
+            if (widget.tile.isTarget)
+              _TargetFace(
+                requiredLength: widget.tile.requiredLength!,
+                size: size,
+                willClear: widget.willClear,
+                unclearable: widget.unclearable,
+              ),
           ],
         ),
       ),
@@ -947,15 +955,21 @@ class _TargetFace extends StatelessWidget {
     required this.requiredLength,
     required this.size,
     required this.willClear,
+    required this.unclearable,
   });
 
   final int requiredLength;
   final double size;
   final bool willClear;
 
+  /// いまの盤面では消せない。数字を沈めて、先に周りを崩すよう促す。
+  final bool unclearable;
+
   @override
   Widget build(BuildContext context) {
-    final tint = willClear ? Palette.gold : Colors.white;
+    final tint = willClear
+        ? Palette.gold
+        : (unclearable ? Palette.textDim : Colors.white);
     return Center(
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),

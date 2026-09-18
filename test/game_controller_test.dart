@@ -226,6 +226,44 @@ void main() {
     });
   });
 
+  group('いま消せない目標ブロック', () {
+    test('どう繋いでも届かない目標は unclearable になる', () {
+      final controller = newController();
+      final board = controller.board;
+      // 偶数が目標ブロック1枚しか無い盤面。交互に繋ぐには偶数が要るので、
+      // この目標を通るパスは「奇・偶・奇」の3枚が限界になる。
+      var id = 0;
+      for (var r = 0; r < board.rows; r++) {
+        for (var c = 0; c < board.cols; c++) {
+          board.grid[r][c] = Tile(id: id++, isOdd: true);
+        }
+      }
+      board.grid[7][5] = Tile(id: id++, isOdd: false, requiredLength: 4);
+
+      // 3枚までしか伸ばせないので、4 には届かない。
+      expect(board.canClearTarget(const Cell(7, 5)), isFalse);
+      expect(board.findPathThrough(const Cell(7, 5), 3), isNotEmpty);
+
+      // 盤面が変わったので、いったん settle を通して計算し直させる。
+      controller.isSettling = true;
+      controller.settle();
+      expect(controller.phase, GamePhase.playing);
+      expect(controller.isUnclearable(const Cell(7, 5)), isTrue);
+    });
+
+    test('届く目標は unclearable にならない', () {
+      final controller = newController();
+      paintCheckerboard(
+        controller.board,
+        target: const Cell(7, 5),
+        requiredLength: 4,
+      );
+      controller.isSettling = true;
+      controller.settle();
+      expect(controller.isUnclearable(const Cell(7, 5)), isFalse);
+    });
+  });
+
   test('繋げる手が無くなると失敗する', () {
     final controller = newController();
     final board = controller.board;

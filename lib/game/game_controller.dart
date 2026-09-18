@@ -34,6 +34,19 @@ class GameController extends ChangeNotifier {
 
   List<Cell> hintPath = <Cell>[];
 
+  /// いまの盤面ではどう繋いでも消せない目標ブロック。
+  ///
+  /// 盤面が変わるたびに計算し直す。毎フレーム引き直すと無駄なので、
+  /// 手が進んだときだけ更新して結果を持っておく。
+  Set<Cell> unclearableTargets = <Cell>{};
+
+  void _refreshUnclearable() {
+    unclearableTargets = <Cell>{
+      for (final cell in board.targetCells)
+        if (!board.canClearTarget(cell)) cell,
+    };
+  }
+
   /// 消した直後、重力と補充を当てるまでの間。なぞった順に1枚ずつ消える様子を
   /// 見せたいので、その間は盤面を凍らせて穴が開いたままにしておく。
   bool isSettling = false;
@@ -62,6 +75,7 @@ class GameController extends ChangeNotifier {
       maxRequiredLength: maxRequiredFor(n),
     );
     movesLeft = moveLimitFor(n);
+    _refreshUnclearable();
     path.clear();
     hintPath = const [];
     freshTileIds = const <int>{};
@@ -138,6 +152,9 @@ class GameController extends ChangeNotifier {
   /// パスに入っていない目標ブロックには関係しない。
   bool willClear(Cell c) => path.contains(c) && board.clearsAt(c, path.length);
 
+  /// [c] の目標ブロックが、いまの盤面ではどう繋いでも消せないか。
+  bool isUnclearable(Cell c) => unclearableTargets.contains(c);
+
   /// 次に繋げられるマスか（候補のハイライト用）。
   bool isCandidate(Cell c) {
     if (path.isEmpty || !acceptsInput) return false;
@@ -208,6 +225,7 @@ class GameController extends ChangeNotifier {
 
     board.applyGravity();
     freshTileIds = board.refill();
+    _refreshUnclearable();
 
     if (board.remainingTargets == 0) {
       phase = GamePhase.stageCleared;
