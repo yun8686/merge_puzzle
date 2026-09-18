@@ -156,7 +156,8 @@ void main() {
     }
 
     // なぞった順に弾けている最中も、盤面は止まったまま。
-    await tester.pump(const Duration(milliseconds: 200));
+    // 間隔を詰めても壊れないよう、余裕を持った時刻で見る。
+    await tester.pump(const Duration(milliseconds: 100));
     expect(
       controller.isSettling,
       isTrue,

@@ -132,11 +132,11 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// なぞった順に弾けていく間隔。1枚ずつ順に消えたと分かる程度に空けつつ、
   /// 長いチェインでは詰めて、全体の尺が伸びすぎないようにする。
   static Duration _staggerFor(int length) =>
-      Duration(milliseconds: (420 ~/ length).clamp(34, 90));
+      Duration(milliseconds: (240 ~/ length).clamp(26, 48));
 
-  /// 最後の1枚が弾けてから盤面を詰めるまでの間。ここが短いと、
-  /// 消えきる前に新しいタイルが降ってきて順番が埋もれる。
-  static const Duration _settleTail = Duration(milliseconds: 200);
+  /// 最後の1枚が弾けてから盤面を詰めるまでの間。短すぎると消えきる前に
+  /// 新しいタイルが降ってきて順番が埋もれるが、長いと手が止まって間延びする。
+  static const Duration _settleTail = Duration(milliseconds: 90);
 
   void _onPanEnd(DragEndDetails d) {
     final result = widget.controller.commitPath();
@@ -591,7 +591,7 @@ class _ChainFlashViewState extends State<_ChainFlashView>
     _c = AnimationController(
       vsync: this,
       // 焼き切ったあと、残り香が消えるまでの分を足しておく。
-      duration: Duration(milliseconds: _burnMs + 220),
+      duration: Duration(milliseconds: _burnMs + 140),
     )..forward();
     _c.addStatusListener((s) {
       if (s == AnimationStatus.completed) widget.onDone();
@@ -627,7 +627,7 @@ class _ChainFlashViewState extends State<_ChainFlashView>
         // 焼け残りは最後に向かって薄くなる。
         final fade = _burnMs == 0
             ? 1.0
-            : (1 - (elapsed - _burnMs) / 220).clamp(0.0, 1.0);
+            : (1 - (elapsed - _burnMs) / 140).clamp(0.0, 1.0);
         return CustomPaint(
           painter: _RibbonPainter(
             points: points,
@@ -929,7 +929,7 @@ class _PopTileState extends State<_PopTile>
     super.initState();
     _c = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 230),
     );
     _c.addStatusListener((s) {
       if (s == AnimationStatus.completed) widget.onDone();
