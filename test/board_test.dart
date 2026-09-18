@@ -239,13 +239,27 @@ void main() {
     });
   });
 
-  test('偶数の残量を数える', () {
+  test('奇数と偶数の残量を数える', () {
     final board = boardOf([
       [1, 2, 3],
       [4, 5, 6],
     ]);
     expect(board.evenCount, 3);
+    expect(board.oddCount, 3);
     expect(board.tileCount, 6);
+  });
+
+  test('盤面が埋まっていれば奇数と偶数の合計はマス数と一致する', () {
+    // 比率の表示はこの前提で1本のバーを分け合っている。
+    for (var seed = 0; seed < 10; seed++) {
+      final board = Board(rng: Random(seed));
+      board.fillInitial();
+      expect(
+        board.oddCount + board.evenCount,
+        board.tileCount,
+        reason: 'seed=$seed',
+      );
+    }
   });
 
   test('初期盤面は必ず手がある状態で始まる', () {

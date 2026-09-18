@@ -320,6 +320,18 @@ class Board {
     return list;
   }
 
+  /// 盤面に残っている奇数タイルの数。偶数との比率を見せるのに使う。
+  int get oddCount {
+    var n = 0;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final t = grid[r][c];
+        if (t != null && t.isOdd) n++;
+      }
+    }
+    return n;
+  }
+
   /// 盤面に残っている偶数タイルの数。これが尽きると詰む。
   int get evenCount {
     var n = 0;
