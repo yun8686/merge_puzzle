@@ -117,6 +117,65 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
+  testWidgets('消え終わるまで盤面は止まったままで、あとから詰まる', (tester) async {
+    final controller = GameController(board: Board(rng: Random(4)));
+    paintCheckerboard(controller.board);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 400,
+              child: BoardView(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final origin = tester.getTopLeft(find.byType(BoardView));
+    Offset centerOf(int row, int col) =>
+        origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
+
+    final gesture = await tester.startGesture(centerOf(0, 0));
+    await tester.pump();
+    for (var col = 1; col < 6; col++) {
+      await gesture.moveTo(centerOf(0, col));
+      await tester.pump();
+    }
+    final cleared = List.of(controller.path);
+    await gesture.up();
+    await tester.pump();
+
+    // 消えた直後。盤面には穴が開いたままで、まだ詰まっていない。
+    expect(controller.isSettling, isTrue);
+    for (final c in cleared) {
+      expect(controller.board.tileAt(c), isNull);
+    }
+
+    // なぞった順に弾けている最中も、盤面は止まったまま。
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      controller.isSettling,
+      isTrue,
+      reason: '演出の途中で詰めると、弾ける順番が新しいタイルに埋もれる',
+    );
+
+    // 弾け終われば詰めて補充する。
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(controller.isSettling, isFalse);
+    final board = controller.board;
+    for (var r = 0; r < board.rows; r++) {
+      for (var c = 0; c < board.cols; c++) {
+        expect(board.grid[r][c], isNotNull);
+      }
+    }
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
   testWidgets('偶奇が同じマスへは伸びない', (tester) async {
     final controller = GameController(board: Board(rng: Random(2)));
     // 全部奇数にすると、どこへも繋がらない。
