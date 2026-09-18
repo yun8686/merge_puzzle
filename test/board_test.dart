@@ -3,34 +3,50 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
 
-/// 0 を空マスとして、決め打ちの盤面を作る。
-Board boardOf(List<List<int>> values) {
+/// 決め打ちの盤面を作る。
+///
+///  - `'o'` / `'e'` … 奇数 / 偶数の通常ブロック（数字は書かれていない）
+///  - `'o5'` / `'e3'` … その必要チェイン長を持つ目標ブロック
+///  - `'.'` … 空マス
+Board boardOf(List<List<String>> spec) {
   final board = Board(
-    rows: values.length,
-    cols: values.first.length,
+    rows: spec.length,
+    cols: spec.first.length,
     rng: Random(1),
   );
   var id = 0;
-  for (var r = 0; r < values.length; r++) {
-    for (var c = 0; c < values[r].length; c++) {
-      final v = values[r][c];
-      board.grid[r][c] = v == 0 ? null : Tile(id: id++, value: v);
+  for (var r = 0; r < spec.length; r++) {
+    for (var c = 0; c < spec[r].length; c++) {
+      final s = spec[r][c];
+      if (s == '.') {
+        board.grid[r][c] = null;
+        continue;
+      }
+      board.grid[r][c] = Tile(
+        id: id++,
+        isOdd: s[0] == 'o',
+        requiredLength: s.length > 1 ? int.parse(s.substring(1)) : null,
+      );
     }
   }
   return board;
 }
 
-List<List<int>> dump(Board b) => [
+/// 盤面の偶奇を 'o' / 'e' / '.' で書き出す。重力の確認用。
+List<List<String>> dump(Board b) => [
       for (var r = 0; r < b.rows; r++)
-        [for (var c = 0; c < b.cols; c++) b.grid[r][c]?.value ?? 0],
+        [
+          for (var c = 0; c < b.cols; c++)
+            b.grid[r][c] == null ? '.' : (b.grid[r][c]!.isOdd ? 'o' : 'e'),
+        ],
     ];
 
 void main() {
   group('パスの判定', () {
     final board = boardOf([
-      [1, 2, 3],
-      [4, 5, 6],
-      [7, 8, 9],
+      ['o', 'e', 'o'],
+      ['e', 'o', 'e'],
+      ['o', 'e', 'o'],
     ]);
 
     test('偶奇が交互で隣接していれば成立する', () {
@@ -41,232 +57,208 @@ void main() {
     });
 
     test('同じ偶奇が隣り合っていても繋げない', () {
-      final sameParity = boardOf([
-        [1, 3, 2],
-        [2, 4, 6],
+      final same = boardOf([
+        ['o', 'o', 'e'],
+        ['e', 'e', 'o'],
       ]);
-      // 1(奇) -> 3(奇) は隣接しているが偶奇が同じなので不可。
-      expect(sameParity.canExtend(const Cell(0, 0), const Cell(0, 1)), isFalse);
-      // 2(偶) -> 4(偶) も同様。
-      expect(sameParity.canExtend(const Cell(1, 0), const Cell(1, 1)), isFalse);
-      // 偶奇が同じマスを含むパスは成立しない。
+      expect(same.canExtend(const Cell(0, 0), const Cell(0, 1)), isFalse);
+      expect(same.canExtend(const Cell(1, 0), const Cell(1, 1)), isFalse);
       expect(
-        sameParity.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
+        same.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
         isFalse,
       );
-      // 交互になっていれば成立する: 4(偶) -> 3(奇) -> 2(偶)。
+      // 交互になっていれば成立する。
       expect(
-        sameParity.isValidPath(const [Cell(1, 1), Cell(0, 1), Cell(0, 2)]),
+        same.isValidPath(const [Cell(1, 1), Cell(0, 1), Cell(0, 2)]),
         isTrue,
       );
     });
 
-    test('斜めは繋げない', () {
-      expect(board.canExtend(const Cell(0, 0), const Cell(1, 1)), isFalse);
+    test('3枚未満は成立しない', () {
+      expect(board.isValidPath(const [Cell(0, 0), Cell(0, 1)]), isFalse);
     });
 
-    test('同じマスを2度通れない', () {
+    test('離れたマスや同じマスの二度通りは成立しない', () {
+      expect(
+        board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(2, 2)]),
+        isFalse,
+      );
       expect(
         board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 0)]),
         isFalse,
       );
     });
+  });
 
-    test('最低枚数に満たないと成立しない', () {
-      expect(board.isValidPath(const [Cell(0, 0), Cell(0, 1)]), isFalse);
+  group('目標ブロック', () {
+    List<List<String>> layout() => [
+          ['o', 'e5', 'o'],
+          ['e', 'o', 'e'],
+        ];
+
+    test('長さが足りないと消えずに残る', () {
+      final board = boardOf(layout());
+      const path = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
+      // 3枚では 5 に届かない。
+      expect(board.clearMaskFor(path), [true, false, true]);
+      // 通常ブロックは消えるので、チェインとしては成立する。
+      expect(board.isValidPath(path), isTrue);
+
+      final result = board.applyPath(path);
+      expect(result.clearedTargets, 0);
+      expect(board.tileAt(const Cell(0, 1)), isNotNull);
+      expect(board.tileAt(const Cell(0, 0)), isNull);
+      expect(board.tileAt(const Cell(0, 2)), isNull);
+    });
+
+    test('長さが足りれば消える', () {
+      final board = boardOf(layout());
+      // e o e5 o e の5枚。目標ブロックを真ん中に巻き込む。
+      const path = [
+        Cell(1, 0),
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(1, 2),
+      ];
+      expect(board.isConnected(path), isTrue);
+      expect(board.clearMaskFor(path).every((x) => x), isTrue);
+
+      final result = board.applyPath(path);
+      expect(result.clearedTargets, 1);
+      expect(result.length, 5);
+      expect(board.remainingTargets, 0);
+    });
+
+    test('何も消えないチェインは成立しない', () {
+      // 3枚とも要求 5 の目標ブロックなので、1枚も消えない。
+      final board = boardOf([
+        ['o5', 'e5', 'o5'],
+      ]);
+      const path = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
+      expect(board.isConnected(path), isTrue);
+      expect(board.isValidPath(path), isFalse);
+    });
+
+    test('目標ブロックは補充で降ってこない', () {
+      final board = boardOf([
+        ['o3', 'e', 'o'],
+        ['e', 'o', 'e'],
+        ['o', 'e', 'o'],
+      ]);
+      expect(board.remainingTargets, 1);
+      board.applyPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      board.applyGravity();
+      board.refill();
+      // 盤面は埋め戻されるが、目標ブロックは1つも増えない。
+      expect(board.remainingTargets, 0);
+      for (var r = 0; r < board.rows; r++) {
+        for (var c = 0; c < board.cols; c++) {
+          expect(board.grid[r][c], isNotNull);
+        }
+      }
     });
   });
 
-  test('パスを消すとタイルが全部消える', () {
-    final board = boardOf([
-      [1, 2, 3],
-      [4, 5, 6],
-      [7, 8, 9],
-    ]);
-    final result =
-        board.applyPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
-
-    expect(result.total, 1 + 2 + 3);
-    expect(result.length, 3);
-    // 合成タイルは残さない。残すと際限なく育って必要合計値を素通りできる。
-    expect(board.grid[0][0], isNull);
-    expect(board.grid[0][1], isNull);
-    expect(board.grid[0][2], isNull);
-    expect(board.clearedTotal, 1 + 2 + 3);
-  });
-
-  test('重力で下に詰まる', () {
-    final board = boardOf([
-      [1, 0, 3],
-      [0, 0, 0],
-      [0, 8, 9],
-    ]);
-    board.applyGravity();
-    expect(dump(board), [
-      [0, 0, 0],
-      [0, 0, 3],
-      [1, 8, 9],
-    ]);
-  });
-
-  test('補充で空きマスが全部埋まる', () {
-    final board = boardOf([
-      [0, 0],
-      [0, 3],
-    ]);
-    final added = board.refill();
-    expect(added.length, 3);
-    for (var r = 0; r < board.rows; r++) {
-      for (var c = 0; c < board.cols; c++) {
-        expect(board.grid[r][c], isNotNull);
-      }
-    }
-  });
-
-  group('詰み判定', () {
-    test('全部奇数なら手が無い', () {
+  group('重力', () {
+    test('空いた分だけ下に詰む', () {
       final board = boardOf([
-        [1, 3, 5],
-        [7, 1, 3],
-        [5, 7, 1],
+        ['o', 'e'],
+        ['.', 'o'],
+        ['.', 'e'],
       ]);
-      expect(board.hasAnyPath(), isFalse);
-      expect(board.findBestPath(), isEmpty);
+      board.applyGravity();
+      expect(dump(board), [
+        ['.', 'e'],
+        ['.', 'o'],
+        ['o', 'e'],
+      ]);
+    });
+  });
+
+  group('探索', () {
+    final board = boardOf([
+      ['o', 'e', 'o'],
+      ['e', 'o', 'e'],
+      ['o', 'e', 'o'],
+    ]);
+
+    test('指定のマスを通る、長さ N 以上のパスを返す', () {
+      final path = board.findPathThrough(const Cell(1, 1), 5);
+      expect(path.length, greaterThanOrEqualTo(5));
+      expect(path, contains(const Cell(1, 1)));
+      expect(board.isConnected(path), isTrue);
+    });
+
+    test('盤面より長いパスは見つからない', () {
+      expect(board.findPathThrough(const Cell(1, 1), 100), isEmpty);
+    });
+
+    test('偶奇が一色の盤面では手が無い', () {
+      final stuck = boardOf([
+        ['o', 'o', 'o'],
+        ['o', 'o', 'o'],
+      ]);
+      expect(stuck.hasAnyChain(), isFalse);
+      expect(stuck.findHint(), isEmpty);
     });
 
     test('交互に並んでいれば手がある', () {
-      final board = boardOf([
-        [1, 2, 3],
-        [2, 1, 2],
-        [3, 2, 1],
-      ]);
-      expect(board.hasAnyPath(), isTrue);
-      expect(board.findBestPath().length, greaterThanOrEqualTo(3));
+      expect(board.hasAnyChain(), isTrue);
+      expect(board.findHint().length, greaterThanOrEqualTo(3));
     });
 
-    test('偶数が1枚だけでも合計が足りれば詰みではない', () {
-      final board = boardOf([
-        [3, 2],
-        [3, 3],
+    test('ヒントは目標ブロックを消せる手を優先する', () {
+      final withTarget = boardOf([
+        ['o', 'e3', 'o'],
+        ['e', 'o', 'e'],
+        ['o', 'e', 'o'],
       ]);
-      // 3(0,0) -> 2(0,1) -> 3(1,1) で3枚繋がり、合計 8 で成立する。
-      expect(board.hasAnyPath(), isTrue);
+      final hint = withTarget.findHint();
+      expect(hint, contains(const Cell(0, 1)));
+      expect(hint.length, greaterThanOrEqualTo(3));
     });
 
-    test('偶数が尽きると詰む', () {
-      final board = boardOf([
-        [1, 1, 1],
-        [3, 5, 3],
-        [5, 1, 7],
+    test('消せない目標ブロックは canClearTarget が false', () {
+      // 要求 8 だが盤面が 6 マスしかないので、どう繋いでも届かない。
+      final tight = boardOf([
+        ['o', 'e8', 'o'],
+        ['e', 'o', 'e'],
       ]);
-      expect(board.evenCount, 0);
-      expect(board.hasAnyPath(), isFalse);
+      expect(tight.canClearTarget(const Cell(0, 1)), isFalse);
     });
   });
 
-  group('必要合計値', () {
-    test('合計が足りないパスは成立しない', () {
-      final board = boardOf([
-        [1, 2, 1],
-        [1, 1, 1],
-      ]);
-      // 偶奇は交互だが 1+2+1 = 4 で、初期の必要合計値 6 に届かない。
-      expect(
-        board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]),
-        isFalse,
-      );
-      // 偶数が1枚しかないのでこれ以上伸ばせず、盤面ごと詰み。
-      expect(board.hasAnyPath(), isFalse);
+  group('ステージの数値', () {
+    test('手数は目標の数から決まる', () {
+      expect(Board.movesFor(1), 5);
+      expect(Board.movesFor(3), 11);
+      expect(Board.movesFor(5), 17);
     });
 
-    test('消した合計値が積み上がると必要合計値が上がる', () {
-      final board = boardOf([
-        [1, 2],
-        [3, 4],
-      ]);
-      expect(board.requiredTotal, Board.baseRequiredTotal);
-      board.clearedTotal = Board.requiredTotalStep * 3;
-      expect(board.requiredTotal, Board.baseRequiredTotal + 3);
+    test('長いチェインほど点が伸びる', () {
+      expect(Board.scoreFor(4, 0), greaterThan(Board.scoreFor(3, 0)));
+      expect(Board.scoreFor(6, 0), greaterThan(Board.scoreFor(4, 0)));
     });
 
-    test('必要合計値が上がると同じ盤面でも詰む', () {
-      final board = boardOf([
-        [1, 2, 1],
-        [2, 1, 2],
-        [1, 2, 1],
-      ]);
-      // 1+2+1+2 = 6 で成立する手がある。
-      expect(board.hasAnyPath(), isTrue);
-
-      // 全マス辿っても 13 にしかならないので、必要合計値を超えると詰む。
-      board.clearedTotal = Board.requiredTotalStep * 20;
-      expect(board.requiredTotal, greaterThan(13));
-      expect(board.hasAnyPath(), isFalse);
-      expect(board.findBestPath(), isEmpty);
-    });
-
-    test('ヒントは必要合計値を満たすパスを返す', () {
-      final board = boardOf([
-        [1, 2, 1, 2],
-        [2, 1, 2, 1],
-        [1, 2, 1, 2],
-      ]);
-      board.clearedTotal = Board.requiredTotalStep * 4; // 必要合計 10
-      final hint = board.findBestPath();
-      expect(hint, isNotEmpty);
-      expect(board.totalOf(hint), greaterThanOrEqualTo(board.requiredTotal));
-      expect(board.isValidPath(hint), isTrue);
+    test('目標を消すと加点される', () {
+      expect(Board.scoreFor(3, 1), greaterThan(Board.scoreFor(3, 0)));
     });
   });
 
-  test('ヒントは実際に成立するパスを返す', () {
-    final board = boardOf([
-      [1, 2, 3],
-      [2, 1, 2],
-      [3, 2, 1],
-    ]);
-    final hint = board.findBestPath();
-    expect(board.isValidPath(hint), isTrue);
-  });
-
-  group('得点', () {
-    test('長いチェインほど指数的に伸びる', () {
-      final three = Board.scoreFor(30, 3);
-      final four = Board.scoreFor(30, 4);
-      final six = Board.scoreFor(30, 6);
-      expect(four, greaterThan(three));
-      expect(six, greaterThan(four * 2));
+  group('生成した盤面', () {
+    test('開幕から手があり、目標ブロックが指定の数だけ置かれる', () {
+      for (var seed = 0; seed < 30; seed++) {
+        final board = Board(rng: Random(seed));
+        board.buildStage(targetCount: 3, maxRequiredLength: 6);
+        expect(board.remainingTargets, 3, reason: 'seed=$seed');
+        expect(board.hasAnyChain(), isTrue, reason: 'seed=$seed');
+        for (final cell in board.targetCells) {
+          final need = board.tileAt(cell)!.requiredLength!;
+          expect(need, greaterThanOrEqualTo(Board.minRequired));
+          expect(need, lessThanOrEqualTo(6));
+        }
+      }
     });
-  });
-
-  test('奇数と偶数の残量を数える', () {
-    final board = boardOf([
-      [1, 2, 3],
-      [4, 5, 6],
-    ]);
-    expect(board.evenCount, 3);
-    expect(board.oddCount, 3);
-    expect(board.tileCount, 6);
-  });
-
-  test('盤面が埋まっていれば奇数と偶数の合計はマス数と一致する', () {
-    // 比率の表示はこの前提で1本のバーを分け合っている。
-    for (var seed = 0; seed < 10; seed++) {
-      final board = Board(rng: Random(seed));
-      board.fillInitial();
-      expect(
-        board.oddCount + board.evenCount,
-        board.tileCount,
-        reason: 'seed=$seed',
-      );
-    }
-  });
-
-  test('初期盤面は必ず手がある状態で始まる', () {
-    for (var seed = 0; seed < 30; seed++) {
-      final board = Board(rng: Random(seed));
-      board.fillInitial();
-      expect(board.hasAnyPath(), isTrue, reason: 'seed=$seed');
-    }
   });
 }

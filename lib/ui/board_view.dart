@@ -26,6 +26,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final List<_Popup> _popups = <_Popup>[];
   final List<_ChainFlash> _flashes = <_ChainFlash>[];
 
+  /// 目標ブロックの id ごとの「耐えた回数」。値が変わったフレームで
+  /// そのブロックを揺らす。消えずに残ったことを、その場で伝えるため。
+  final Map<int, int> _resists = <int, int>{};
+
   late final Ticker _ticker;
   Duration _lastTick = Duration.zero;
   double _shake = 0;
@@ -152,14 +156,22 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       HapticFeedback.lightImpact();
     }
 
+    // 消えたマスだけ弾けさせる。長さが足りずに耐えた目標ブロックは
+    // その場に残るので、弾ける代わりに揺らして「効かなかった」ことを見せる。
     for (var i = 0; i < result.cells.length; i++) {
       final cell = result.cells[i];
-      final value = result.values[i];
+      if (!result.cleared[i]) {
+        final tile = widget.controller.board.tileAt(cell);
+        if (tile != null) {
+          _resists[tile.id] = (_resists[tile.id] ?? 0) + 1;
+        }
+        continue;
+      }
       _pops.add(
         _Pop(
           id: _seq++,
-          value: value,
-          isOdd: value.isOdd,
+          requiredLength: result.requiredLengths[i],
+          isOdd: result.isOdds[i],
           center: _centerOf(cell),
           delay: stagger * i,
         ),
@@ -174,7 +186,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
     // なぞった線が、弾ける位置に合わせて先頭から焼き切れていく。
     // どの順で消えたのかが線そのもので分かる。
-    final endIsOdd = result.values.last.isOdd;
+    final endIsOdd = result.isOdds.last;
     _flashes.add(
       _ChainFlash(
         id: _seq++,
@@ -366,7 +378,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     width: cell,
                     height: cell,
                     child: _PopTile(
-                      value: pop.value,
+                      requiredLength: pop.requiredLength,
                       isOdd: pop.isOdd,
                       size: cell,
                       delay: pop.delay,
@@ -497,6 +509,8 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
               selected: controller.isSelected(at),
               candidate: controller.isCandidate(at),
               fresh: controller.freshTileIds.contains(tile.id),
+              willClear: controller.willClear(at),
+              resistCount: _resists[tile.id] ?? 0,
             ),
           ),
         );
@@ -688,14 +702,16 @@ class _WellPainter extends CustomPainter {
 class _Pop {
   _Pop({
     required this.id,
-    required this.value,
+    required this.requiredLength,
     required this.isOdd,
     required this.center,
     required this.delay,
   });
 
   final int id;
-  final int value;
+
+  /// 目標ブロックなら書かれていた数字。通常ブロックは null。
+  final int? requiredLength;
   final bool isOdd;
   final Offset center;
   final Duration delay;
@@ -731,6 +747,8 @@ class TileWidget extends StatefulWidget {
     required this.selected,
     required this.candidate,
     required this.fresh,
+    required this.willClear,
+    required this.resistCount,
   });
 
   final Tile tile;
@@ -739,13 +757,22 @@ class TileWidget extends StatefulWidget {
   final bool candidate;
   final bool fresh;
 
+  /// 目標ブロックが、いまなぞっている長さで消えるか。
+  /// パスに入っていないブロックでは常に false。
+  final bool willClear;
+
+  /// このブロックが「長さが足りなくて耐えた」回数。
+  /// 増えたフレームで揺らす。
+  final int resistCount;
+
   @override
   State<TileWidget> createState() => _TileWidgetState();
 }
 
 class _TileWidgetState extends State<TileWidget>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _entry;
+  late final AnimationController _resist;
 
   @override
   void initState() {
@@ -753,6 +780,10 @@ class _TileWidgetState extends State<TileWidget>
     _entry = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
+    );
+    _resist = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
     );
     if (widget.fresh) {
       _entry.forward();
@@ -762,8 +793,17 @@ class _TileWidgetState extends State<TileWidget>
   }
 
   @override
+  void didUpdateWidget(TileWidget old) {
+    super.didUpdateWidget(old);
+    if (widget.resistCount != old.resistCount) {
+      _resist.forward(from: 0);
+    }
+  }
+
+  @override
   void dispose() {
     _entry.dispose();
+    _resist.dispose();
     super.dispose();
   }
 
@@ -815,14 +855,12 @@ class _TileWidgetState extends State<TileWidget>
               ),
             if (widget.candidate && !widget.selected)
               _CandidatePulse(size: size),
-            Padding(
-              padding: EdgeInsets.all(size * 0.18),
-              child: FittedBox(
-                child: Text(
-                  '${widget.tile.value}',
-                  style: AppFont.number(size * 0.56, color: Colors.white),
-                ),
-              ),
+            // 数字が書かれているのは目標ブロックだけ。通常ブロックは
+            // 偶奇の色しか持たない。
+            if (widget.tile.isTarget) _TargetFace(
+              requiredLength: widget.tile.requiredLength!,
+              size: size,
+              willClear: widget.willClear,
             ),
           ],
         ),
@@ -830,12 +868,16 @@ class _TileWidgetState extends State<TileWidget>
     );
 
     return AnimatedBuilder(
-      animation: _entry,
+      animation: Listenable.merge([_entry, _resist]),
       builder: (context, child) {
         final e = Curves.easeOutCubic.transform(_entry.value);
+        // 耐えたときの横揺れ。減衰する正弦で「弾かれずに踏みとどまった」感じを出す。
+        final r = _resist.isAnimating || _resist.value > 0
+            ? sin(_resist.value * pi * 6) * (1 - _resist.value) * size * 0.16
+            : 0.0;
         // 落ちている間だけ縦に伸ばす。着地で 1.0 に戻るので跳ねて見える。
         return Transform.translate(
-          offset: Offset(0, (1 - e) * -size * 2.6),
+          offset: Offset(r, (1 - e) * -size * 2.6),
           child: Transform.scale(
             scaleX: 1 - (1 - e) * 0.16,
             scaleY: 1 + (1 - e) * 0.28,
@@ -897,10 +939,61 @@ class _CandidatePulseState extends State<_CandidatePulse>
   }
 }
 
+/// 目標ブロックの顔。書かれている数字は「消すのに必要なチェイン長」であって、
+/// このブロックの値ではない。通常ブロックと読み違えられないよう、輪で囲って
+/// 別物に見せる。なぞっている長さが足りていれば金色に光る。
+class _TargetFace extends StatelessWidget {
+  const _TargetFace({
+    required this.requiredLength,
+    required this.size,
+    required this.willClear,
+  });
+
+  final int requiredLength;
+  final double size;
+  final bool willClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = willClear ? Palette.gold : Colors.white;
+    return Center(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        width: size * 0.64,
+        height: size * 0.64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: const Color(0x7307070F),
+          border: Border.all(color: tint, width: size * 0.055),
+          boxShadow: willClear
+              ? [
+                  BoxShadow(
+                    color: Palette.gold.withValues(alpha: 0.75),
+                    blurRadius: size * 0.36,
+                  ),
+                ]
+              : null,
+        ),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(size * 0.07),
+            child: FittedBox(
+              child: Text(
+                '$requiredLength',
+                style: AppFont.number(size * 0.42, color: tint),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 消える瞬間のタイル。膨らんでから弾ける。
 class _PopTile extends StatefulWidget {
   const _PopTile({
-    required this.value,
+    required this.requiredLength,
     required this.isOdd,
     required this.size,
     required this.delay,
@@ -908,7 +1001,7 @@ class _PopTile extends StatefulWidget {
     required this.onDone,
   });
 
-  final int value;
+  final int? requiredLength;
   final bool isOdd;
   final double size;
   final Duration delay;
@@ -1000,17 +1093,19 @@ class _PopTileState extends State<_PopTile>
             ),
           ],
         ),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(size * 0.18),
-            child: FittedBox(
-              child: Text(
-                '${widget.value}',
-                style: AppFont.number(size * 0.56, color: Colors.white),
+        child: widget.requiredLength == null
+            ? null
+            : Center(
+                child: Padding(
+                  padding: EdgeInsets.all(size * 0.18),
+                  child: FittedBox(
+                    child: Text(
+                      '${widget.requiredLength}',
+                      style: AppFont.number(size * 0.56, color: Colors.white),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
