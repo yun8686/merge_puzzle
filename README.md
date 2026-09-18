@@ -103,9 +103,24 @@ Android のアダプティブアイコンは前景側にセーフゾーン（108
 keytool -genkey -v -keystore chainpuzzle-upload.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ```
 
-生成した `.jks` はリポジトリの外（例: `~/keystores/`）に置き、`android/key.properties.example` をコピーして
-`android/key.properties` を作り、パスとパスワードを書く。**この鍵を失うと同じアプリとして更新できなくなる**ので、
-バックアップを取ること。
+Windows の場合、`keytool` は PATH に入っていない。Android Studio 同梱の JDK にあるので、フルパスで呼ぶ
+（PowerShell はパスに空白があるため `&` が要る）。パスは `flutter doctor -v` の "Java binary at" で確認できる。
+
+```powershell
+mkdir "$env:USERPROFILE\keystores"
+cd "$env:USERPROFILE\keystores"
+& "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkey -v -keystore chainpuzzle-upload.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+対話で聞かれるパスワードと識別名（姓名・組織など）を入力する。パスワードは後で `key.properties` に書くので控えておく。
+識別名は空欄のままでも進めるが、証明書に残るので最低限「姓名」は埋めておくとよい。
+
+生成した `.jks` はリポジトリの外（上記なら `%USERPROFILE%\keystores\`）に置き、`android/key.properties.example` を
+コピーして `android/key.properties` を作り、パスとパスワードを書く。
+**`.properties` ではバックスラッシュがエスケープ扱いになるので、パスは `C:/Users/.../chainpuzzle-upload.jks` と
+スラッシュ区切りで書く**（または `\\` に二重化する）。
+
+**この鍵を失うと同じアプリとして更新できなくなる**ので、バックアップを取ること。
 
 ```bash
 flutter build appbundle --release   # Play Store 提出用 (.aab)
