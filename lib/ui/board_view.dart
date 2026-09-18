@@ -129,9 +129,20 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     }
   }
 
+  /// なぞった順に弾けていく間隔。1枚ずつ順に消えたと分かる程度に空けつつ、
+  /// 長いチェインでは詰めて、全体の尺が伸びすぎないようにする。
+  static Duration _staggerFor(int length) =>
+      Duration(milliseconds: (420 ~/ length).clamp(34, 90));
+
+  /// 最後の1枚が弾けてから盤面を詰めるまでの間。ここが短いと、
+  /// 消えきる前に新しいタイルが降ってきて順番が埋もれる。
+  static const Duration _settleTail = Duration(milliseconds: 200);
+
   void _onPanEnd(DragEndDetails d) {
     final result = widget.controller.commitPath();
     if (result == null) return;
+
+    final stagger = _staggerFor(result.length);
 
     if (result.length >= 8) {
       HapticFeedback.heavyImpact();
@@ -150,18 +161,26 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
           value: value,
           isOdd: value.isOdd,
           center: _centerOf(cell),
-          delay: Duration(milliseconds: 26 * i),
+          delay: stagger * i,
         ),
       );
     }
 
-    // なぞった線が白く光って消える。どこを消したのかが一瞬で分かる。
+    // 最後の1枚が弾けたら盤面を詰める。ここまで盤面は穴が開いたまま止まる。
+    Future<void>.delayed(stagger * (result.length - 1) + _settleTail, () {
+      if (!mounted) return;
+      widget.controller.settle();
+    });
+
+    // なぞった線が、弾ける位置に合わせて先頭から焼き切れていく。
+    // どの順で消えたのかが線そのもので分かる。
     final endIsOdd = result.values.last.isOdd;
     _flashes.add(
       _ChainFlash(
         id: _seq++,
         points: result.cells.map(_centerOf).toList(),
         color: Palette.glowFor(endIsOdd),
+        stagger: stagger,
       ),
     );
 
@@ -365,6 +384,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       child: _ChainFlashView(
                         points: flash.points,
                         color: flash.color,
+                        stagger: flash.stagger,
                         width: cell * 0.15,
                         onDone: () {
                           _flashes.removeWhere((f) => f.id == flash.id);
@@ -522,25 +542,36 @@ class _BoardClipper extends CustomClipper<Path> {
 
 /// なぞった線を白く光らせてから消す演出のデータ。
 class _ChainFlash {
-  _ChainFlash({required this.id, required this.points, required this.color});
+  _ChainFlash({
+    required this.id,
+    required this.points,
+    required this.color,
+    required this.stagger,
+  });
 
   final int id;
   final List<Offset> points;
   final Color color;
+
+  /// 1枚ずつ弾ける間隔。線が焼き切れる速さをこれに合わせる。
+  final Duration stagger;
 }
 
-/// なぞった経路が太く光って、広がりながら消えていく。
-/// タイルが1枚ずつ弾けるより先に「線ごと消えた」ことを伝える役。
+/// なぞった経路が、弾ける位置に合わせて先頭から焼き切れていく。
+/// タイルが1枚ずつ弾けるのと同じ順・同じ速さで線が短くなるので、
+/// 「どの順でなぞって、どの順で消えたのか」が線そのもので読める。
 class _ChainFlashView extends StatefulWidget {
   const _ChainFlashView({
     required this.points,
     required this.color,
+    required this.stagger,
     required this.width,
     required this.onDone,
   });
 
   final List<Offset> points;
   final Color color;
+  final Duration stagger;
   final double width;
   final VoidCallback onDone;
 
@@ -551,13 +582,16 @@ class _ChainFlashView extends StatefulWidget {
 class _ChainFlashViewState extends State<_ChainFlashView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
+  late final int _burnMs;
 
   @override
   void initState() {
     super.initState();
+    _burnMs = widget.stagger.inMilliseconds * (widget.points.length - 1);
     _c = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 340),
+      // 焼き切ったあと、残り香が消えるまでの分を足しておく。
+      duration: Duration(milliseconds: _burnMs + 220),
     )..forward();
     _c.addStatusListener((s) {
       if (s == AnimationStatus.completed) widget.onDone();
@@ -570,19 +604,36 @@ class _ChainFlashViewState extends State<_ChainFlashView>
     super.dispose();
   }
 
+  /// 先頭から [head] 枚ぶん焼けた状態の、残っている線。
+  List<Offset> _remaining(double head) {
+    final pts = widget.points;
+    final i = head.floor();
+    if (i >= pts.length - 1) return const <Offset>[];
+    final next = Offset.lerp(pts[i], pts[i + 1], head - i)!;
+    return <Offset>[next, ...pts.sublist(i + 1)];
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
-        final t = Curves.easeOutCubic.transform(_c.value);
-        final fade = (1 - t * t).clamp(0.0, 1.0);
+        final elapsed = _c.value * _c.duration!.inMilliseconds;
+        final head = _burnMs == 0
+            ? widget.points.length.toDouble()
+            : (elapsed / widget.stagger.inMilliseconds);
+        final points = _remaining(head);
+        if (points.length < 2) return const SizedBox.shrink();
+        // 焼け残りは最後に向かって薄くなる。
+        final fade = _burnMs == 0
+            ? 1.0
+            : (1 - (elapsed - _burnMs) / 220).clamp(0.0, 1.0);
         return CustomPaint(
           painter: _RibbonPainter(
-            points: widget.points,
+            points: points,
             core: Colors.white.withValues(alpha: fade),
             glow: widget.color.withValues(alpha: fade * 0.9),
-            width: widget.width * (1 + t * 2.4),
+            width: widget.width * 1.8,
           ),
         );
       },

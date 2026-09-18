@@ -5,7 +5,7 @@ import 'package:parity_chain/game/board.dart';
 import 'package:parity_chain/game/game_controller.dart';
 
 void main() {
-  test('なぞって離すと点が入り、盤面が補充される', () {
+  test('なぞって離すと点が入り、settle で盤面が補充される', () {
     final controller = GameController(board: Board(rng: Random(3)));
     final path = controller.board.findBestPath();
     expect(path.length, greaterThanOrEqualTo(Board.minPathLength));
@@ -21,13 +21,42 @@ void main() {
     expect(controller.score, greaterThan(0));
     expect(controller.path, isEmpty);
 
-    // 消した後も盤面は満杯のまま。
+    // 消える演出を見せている間、盤面は穴が開いたまま止まっている。
     final board = controller.board;
+    expect(controller.isSettling, isTrue);
+    expect(controller.acceptsInput, isFalse);
+    for (final c in path) {
+      expect(board.tileAt(c), isNull);
+    }
+
+    // 演出が終わったら詰めて補充する。
+    controller.settle();
+    expect(controller.isSettling, isFalse);
+    expect(controller.acceptsInput, isTrue);
     for (var r = 0; r < board.rows; r++) {
       for (var c = 0; c < board.cols; c++) {
         expect(board.grid[r][c], isNotNull);
       }
     }
+  });
+
+  test('演出の途中は次のなぞりを受け付けない', () {
+    final controller = GameController(board: Board(rng: Random(23)));
+    final path = controller.board.findBestPath();
+    controller.beginPath(path.first);
+    for (final c in path.skip(1)) {
+      controller.extendPath(c);
+    }
+    expect(controller.commitPath(), isNotNull);
+
+    // 穴が開いた盤面をなぞらせると、消えたはずのマスを拾ってしまう。
+    controller.beginPath(const Cell(0, 0));
+    expect(controller.path, isEmpty);
+    expect(controller.commitPath(), isNull);
+
+    controller.settle();
+    controller.beginPath(const Cell(0, 0));
+    expect(controller.path.length, 1);
   });
 
   test('1つ戻ると縮む', () {
@@ -115,6 +144,7 @@ void main() {
           controller.extendPath(c);
         }
         if (controller.commitPath() == null) break;
+        controller.settle();
         moves++;
       }
       // 必要合計値が上がっていくので、最短チェイン連打でも無限には遊べない。
