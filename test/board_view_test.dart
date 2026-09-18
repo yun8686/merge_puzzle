@@ -72,7 +72,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
-  testWidgets('長いチェインでもスコア表示は作り直されない', (tester) async {
+  testWidgets('長い鎖でもスコア表示は作り直されない', (tester) async {
     final controller = newController(3);
     paintCheckerboard(controller.board);
 
@@ -110,20 +110,20 @@ void main() {
     await gesture.up();
     await tester.pump();
 
-    expect(find.text('9 CHAIN'), findsOneWidget);
-    final popup = tester.element(find.text('9 CHAIN'));
+    expect(find.text('POWER 9'), findsOneWidget);
+    final popup = tester.element(find.text('POWER 9'));
 
     // 消えるタイルが1枚ずつ片付く間、スコア表示の要素が作り直されると
     // アニメーションが頭から流れ直し、同じ表示が何度も出てしまう。
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('9 CHAIN'), findsOneWidget);
-      expect(identical(tester.element(find.text('9 CHAIN')), popup), isTrue);
+      expect(find.text('POWER 9'), findsOneWidget);
+      expect(identical(tester.element(find.text('POWER 9')), popup), isTrue);
     }
 
     // 850ms のアニメーションが終われば、繰り返さずに消えること。
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('9 CHAIN'), findsNothing);
+    expect(find.text('POWER 9'), findsNothing);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
@@ -225,18 +225,18 @@ void main() {
     expect(controller.score, 0);
   });
 
-  testWidgets('アプリが起動してスコアが表示される', (tester) async {
+  testWidgets('アプリが起動して階層と敵の数が表示される', (tester) async {
     await tester.pumpWidget(const ParityChainApp());
     await tester.pump();
 
     expect(find.text('SCORE'), findsOneWidget);
-    expect(find.text('STAGE'), findsOneWidget);
+    expect(find.text('DEPTH'), findsOneWidget);
     expect(find.byType(BoardView), findsOneWidget);
-    // 残り手数と残り目標。ステージ制の進行がそのまま出ていること。
-    expect(find.text('MOVES'), findsOneWidget);
-    expect(find.text('GOALS'), findsOneWidget);
-    // 奇数と偶数の比率。どちらの枚数も出ていること。
-    expect(find.text('ODD'), findsOneWidget);
-    expect(find.text('EVEN'), findsOneWidget);
+    // 残りターンと残りの敵。階層の進行がそのまま出ていること。
+    expect(find.text('TURNS'), findsOneWidget);
+    expect(find.text('FOES'), findsOneWidget);
+    // 熱と冷の比率。どちらの枚数も出ていること。
+    expect(find.text('HEAT'), findsOneWidget);
+    expect(find.text('FROST'), findsOneWidget);
   });
 }

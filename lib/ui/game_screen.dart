@@ -102,7 +102,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// ロゴタイプ。奇数=暖色、偶数=寒色というルールの色をそのまま使うので、
+/// ロゴタイプ。熱の相=暖色、冷の相=寒色というルールの色をそのまま使うので、
 /// 見出しがそのまま配色の説明になっている。
 class _TitleBar extends StatelessWidget {
   const _TitleBar();
@@ -116,7 +116,7 @@ class _TitleBar extends StatelessWidget {
           colors: [Palette.oddA, Palette.oddB, Palette.evenB, Palette.evenA],
         ).createShader(rect),
         child: Text(
-          'PARITY CHAIN',
+          'FROSTFIRE CHAIN',
           style: AppFont.number(
             19,
             color: Colors.white,
@@ -196,9 +196,9 @@ class _Header extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             _StatPanel(
-              label: 'STAGE',
+              label: 'DEPTH',
               value: Text(
-                '${controller.stage}',
+                'B${controller.stage}F',
                 style: AppFont.number(22, color: Palette.textMuted),
               ),
             ),
@@ -209,9 +209,9 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 残り手数、残り目標、奇数・偶数の比率。
-/// 偶奇バーは「長いチェインがまだ組めるか」の目安。長いチェインは必ず
-/// 偶数を消費するので、偶数が細ると大きな数字の目標が狙えなくなる。
+/// 残りターン、残りの敵、熱と冷の比率。
+/// 相のバーは「強い鎖をまだ編めるか」の目安。長い鎖は必ず冷の相を消費するので、
+/// 冷が細ると厚い守りを破れなくなる。
 class _StatusBar extends StatelessWidget {
   const _StatusBar({
     required this.oddCount,
@@ -229,7 +229,7 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = oddCount + evenCount;
     final evenRatio = total == 0 ? 0.0 : evenCount / total;
-    // チェインは必ず偶数を1枚以上使うので、危ないのは常に偶数側。
+    // 鎖は必ず冷の相を1枚以上使うので、危ないのは常に冷の側。
     final danger = evenRatio < 0.18;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
@@ -238,7 +238,7 @@ class _StatusBar extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _StatPanel(
-              label: 'MOVES',
+              label: 'TURNS',
               accent: movesLeft <= 2 ? Palette.danger : null,
               value: Text(
                 '$movesLeft',
@@ -250,7 +250,7 @@ class _StatusBar extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             _StatPanel(
-              label: 'GOALS',
+              label: 'FOES',
               accent: Palette.gold,
               value: Text(
                 '$remainingTargets',
@@ -270,7 +270,7 @@ class _StatusBar extends StatelessWidget {
                       Row(
                         children: [
                           Text(
-                            'ODD',
+                            'HEAT',
                             style: AppFont.label(10, color: Palette.oddA),
                           ),
                           const SizedBox(width: 6),
@@ -288,7 +288,7 @@ class _StatusBar extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'EVEN',
+                            'FROST',
                             style: AppFont.label(
                               10,
                               color: danger ? Palette.danger : Palette.evenA,
@@ -310,7 +310,7 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
-/// 奇数と偶数で1本のバーを分け合う。盤面は常に埋まっているので、
+/// 熱と冷で1本のバーを分け合う。盤面は常に埋まっているので、
 /// 片方が伸びれば必ずもう片方が縮む。どちらに傾いているかが一目で分かる。
 class _ParityBar extends StatelessWidget {
   const _ParityBar({required this.evenRatio, required this.danger});
@@ -330,7 +330,7 @@ class _ParityBar extends StatelessWidget {
           curve: Curves.easeOutCubic,
           builder: (context, even, _) => Stack(
             children: [
-              // 下地は奇数。偶数を右から重ねるので、残りが奇数の幅になる。
+              // 下地は熱の相。冷を右から重ねるので、残りが熱の幅になる。
               const Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -383,15 +383,15 @@ class _ParityBar extends StatelessWidget {
 }
 
 /// いま指を離すとどうなるかを一言で。
-/// 目標ブロックを巻き込んでいるときは、それが消えるまでの残り枚数を優先して出す。
+/// 敵を巻き込んでいるときは、その守りを破るまでの残りを優先して出す。
 String _pendingLabel(GameController controller) {
   if (controller.missingTiles > 0) {
-    return 'あと ${controller.missingTiles} 枚で成立';
+    return 'あと ${controller.missingTiles} 継げば鎖になる';
   }
   final toTarget = controller.tilesToNextTarget;
-  if (toTarget > 0) return 'あと $toTarget 枚で目標が消える';
+  if (toTarget > 0) return 'あと $toTarget 継げば守りを破れる';
   if (controller.pathIsValid) return '+${controller.pendingScore}';
-  return '何も消えない';
+  return '守りに弾かれる';
 }
 
 class _Footer extends StatelessWidget {
@@ -432,6 +432,8 @@ class _Footer extends StatelessWidget {
                     ? Row(
                         key: const ValueKey('tracing'),
                         children: [
+                          Text('威力', style: AppFont.label(10)),
+                          const SizedBox(width: 6),
                           Text(
                             '${controller.pathLength}',
                             style: AppFont.number(
@@ -439,18 +441,10 @@ class _Footer extends StatelessWidget {
                               color: valid ? Palette.gold : Palette.textMuted,
                             ),
                           ),
-                          const Text(
-                            ' 枚',
-                            style: TextStyle(
-                              color: Palette.textMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
                           if (controller.pendingClearedTargets > 0) ...[
                             const SizedBox(width: 12),
                             const Icon(
-                              Icons.adjust,
+                              Icons.shield,
                               size: 16,
                               color: Palette.gold,
                             ),
@@ -473,7 +467,7 @@ class _Footer extends StatelessWidget {
                         ],
                       )
                     : const Text(
-                        '奇数と偶数を交互になぞる',
+                        '熱と冷を交互に継いで鎖を編む',
                         key: ValueKey('hint'),
                         style: TextStyle(
                           color: Palette.textMuted,
@@ -567,14 +561,14 @@ class _GameOverOverlay extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'GAME OVER',
+                        '力尽きた',
                         style: AppFont.number(30, color: Palette.danger),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         controller.movesLeft <= 0
-                            ? '手数を使い切りました'
-                            : '繋げる手がなくなりました',
+                            ? 'ターンを使い切った'
+                            : '継げる相がなくなった',
                         style: const TextStyle(
                           color: Palette.textMuted,
                           fontSize: 13,
@@ -587,21 +581,21 @@ class _GameOverOverlay extends StatelessWidget {
                       Text('${controller.score}', style: AppFont.number(56)),
                       const SizedBox(height: 18),
                       _ResultRow(
-                        label: '到達ステージ',
-                        value: '${controller.stage}',
+                        label: '到達',
+                        value: 'B${controller.stage}F',
                       ),
                       const SizedBox(height: 8),
                       _ResultRow(
-                        label: '最長チェイン',
-                        value: '${controller.bestChain} 枚',
+                        label: '最大威力',
+                        value: '${controller.bestChain}',
                       ),
                       const SizedBox(height: 8),
                       _ResultRow(
-                        label: '残した目標',
-                        value: '${controller.remainingTargets} 個',
+                        label: '討ち漏らし',
+                        value: '${controller.remainingTargets} 体',
                       ),
                       const SizedBox(height: 26),
-                      _PrimaryButton(label: 'もう一度', onTap: onRestart),
+                      _PrimaryButton(label: 'やり直す', onTap: onRestart),
                     ],
                   ),
                 ),
@@ -614,7 +608,7 @@ class _GameOverOverlay extends StatelessWidget {
   }
 }
 
-/// ステージクリア。目標を全部消したときだけ出る。
+/// 階層の制圧。その階の敵を全部討ったときだけ出る。
 class _StageClearOverlay extends StatelessWidget {
   const _StageClearOverlay({required this.controller, required this.onNext});
 
@@ -639,12 +633,12 @@ class _StageClearOverlay extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'STAGE ${controller.stage} CLEAR',
+                        'B${controller.stage}F 制圧',
                         style: AppFont.number(26, color: Palette.gold),
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        '目標ブロックを全部消しました',
+                        'この階層の敵を討ち果たした',
                         style: TextStyle(
                           color: Palette.textMuted,
                           fontSize: 13,
@@ -657,17 +651,17 @@ class _StageClearOverlay extends StatelessWidget {
                       Text('${controller.score}', style: AppFont.number(52)),
                       const SizedBox(height: 18),
                       _ResultRow(
-                        label: '残した手数',
-                        value: '${controller.movesLeft} 手',
+                        label: '残ったターン',
+                        value: '${controller.movesLeft}',
                       ),
                       const SizedBox(height: 8),
                       _ResultRow(
-                        label: '最長チェイン',
-                        value: '${controller.bestChain} 枚',
+                        label: '最大威力',
+                        value: '${controller.bestChain}',
                       ),
                       const SizedBox(height: 26),
                       _PrimaryButton(
-                        label: '次のステージ',
+                        label: '次の階層へ',
                         onTap: onNext,
                       ),
                     ],

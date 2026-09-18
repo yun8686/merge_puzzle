@@ -855,12 +855,11 @@ class _TileWidgetState extends State<TileWidget>
               ),
             if (widget.candidate && !widget.selected)
               _CandidatePulse(size: size),
-            // 数字が書かれているのは目標ブロックだけ。通常ブロックは
-            // 偶奇の色しか持たない。
-            if (widget.tile.isTarget) _TargetFace(
-              requiredLength: widget.tile.requiredLength!,
+            // 数字が書かれているのは敵だけ。マナのマスは相の色しか持たない。
+            if (widget.tile.isTarget) _FoeFace(
+              ward: widget.tile.requiredLength!,
               size: size,
-              willClear: widget.willClear,
+              willBreak: widget.willClear,
             ),
           ],
         ),
@@ -939,55 +938,125 @@ class _CandidatePulseState extends State<_CandidatePulse>
   }
 }
 
-/// 目標ブロックの顔。書かれている数字は「消すのに必要なチェイン長」であって、
-/// このブロックの値ではない。通常ブロックと読み違えられないよう、輪で囲って
-/// 別物に見せる。なぞっている長さが足りていれば金色に光る。
-class _TargetFace extends StatelessWidget {
-  const _TargetFace({
-    required this.requiredLength,
+/// 敵を包む「守り」。書かれている数字は、破るのに要る鎖の威力。
+/// マナのマスと読み違えられないよう、六角の封印で囲って別物に見せる。
+/// いま編んでいる鎖の威力が足りていれば、封印が金色に灯る。
+class _FoeFace extends StatelessWidget {
+  const _FoeFace({
+    required this.ward,
     required this.size,
-    required this.willClear,
+    required this.willBreak,
   });
 
-  final int requiredLength;
+  final int ward;
   final double size;
-  final bool willClear;
+
+  /// いま指を離せばこの守りが破れるか。
+  final bool willBreak;
 
   @override
   Widget build(BuildContext context) {
-    final tint = willClear ? Palette.gold : Colors.white;
+    // 破れるときは金、そうでなければ守りの厚さの色。数字を読む前に
+    // 「硬そうか」が伝わる。
+    final tint = willBreak ? Palette.ward : Palette.wardColorFor(ward);
     return Center(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        width: size * 0.64,
-        height: size * 0.64,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: const Color(0x7307070F),
-          border: Border.all(color: tint, width: size * 0.055),
-          boxShadow: willClear
-              ? [
-                  BoxShadow(
-                    color: Palette.gold.withValues(alpha: 0.75),
-                    blurRadius: size * 0.36,
-                  ),
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(size * 0.07),
-            child: FittedBox(
-              child: Text(
-                '$requiredLength',
-                style: AppFont.number(size * 0.42, color: tint),
+      child: SizedBox(
+        width: size * 0.78,
+        height: size * 0.78,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _WardPainter(color: tint, lit: willBreak),
               ),
             ),
-          ),
+            Padding(
+              padding: EdgeInsets.all(size * 0.2),
+              child: FittedBox(
+                child: Text(
+                  '$ward',
+                  style: AppFont.number(size * 0.4, color: tint),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// 六角の封印。外郭を一枚、内側に30度ずらした環をもう一枚重ねて、
+/// 「閉じた結界」に見せる。破れる威力が乗っているときだけ外郭が滲む。
+class _WardPainter extends CustomPainter {
+  const _WardPainter({required this.color, required this.lit});
+
+  final Color color;
+  final bool lit;
+
+  Path _hex(Offset center, double radius, double rotation) {
+    final path = Path();
+    for (var i = 0; i < 6; i++) {
+      final a = rotation + i * pi / 3;
+      final p = Offset(
+        center.dx + cos(a) * radius,
+        center.dy + sin(a) * radius,
+      );
+      if (i == 0) {
+        path.moveTo(p.dx, p.dy);
+      } else {
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    return path..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final r = size.width / 2;
+    final outer = _hex(center, r * 0.94, -pi / 2);
+
+    // 中を暗く沈めて、下のマナの色から数字を浮かせる。
+    canvas.drawPath(
+      outer,
+      Paint()..color = const Color(0xA607070F),
+    );
+
+    if (lit) {
+      canvas.drawPath(
+        outer,
+        Paint()
+          ..color = color.withValues(alpha: 0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.3
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.32),
+      );
+    }
+
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.14
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    canvas.drawPath(
+      _hex(center, r * 0.6, 0),
+      Paint()
+        ..color = color.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = r * 0.07
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_WardPainter old) =>
+      old.color != color || old.lit != lit;
 }
 
 /// 消える瞬間のタイル。膨らんでから弾ける。
@@ -1173,7 +1242,7 @@ class _ScorePopupState extends State<_ScorePopup>
                     style: AppFont.number(28, color: const Color(0xFFFFF0B8)),
                   ),
                   Text(
-                    '${widget.length} CHAIN',
+                    'POWER ${widget.length}',
                     style: AppFont.label(12, color: Colors.white70),
                   ),
                 ],

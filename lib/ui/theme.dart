@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
-/// 奇数=暖色、偶数=寒色。この2色がゲームの中心情報なので、
-/// 背景は暗く沈めてタイルとエフェクトを目立たせる。
+/// 熱の相=暖色、冷の相=寒色。この2色がゲームの中心情報なので、
+/// 背景は暗く沈めてマナとエフェクトを目立たせる。
+///
+/// 内部では相を `isOdd` で持っている（true=熱、false=冷）。世界観の言い換えで
+/// あって、盤面ロジックは偶奇のまま。
 class Palette {
   static const background = Color(0xFF07070F);
 
   /// 盤面の後ろに敷く放射グラデの色。真っ黒だと平坦に見えるので、
   /// 中央だけわずかに持ち上げて奥行きを出す。
-  static const backgroundGlow = Color(0xFF1B1B3C);
+  /// 青紫に寄せて、地下の広間に篝火が一つ灯っているように見せる。
+  static const backgroundGlow = Color(0xFF1E1438);
 
   static const surface = Color(0xFF191926);
 
@@ -30,6 +34,20 @@ class Palette {
   static const textDim = Color(0xFF5A5A78);
   static const danger = Color(0xFFFF4E5E);
   static const gold = Color(0xFFFFD24E);
+
+  /// 敵を包む守りの色。金の封印として読ませる。
+  static const ward = gold;
+
+  /// 守りの厚さに応じた封印の色。守りの数字＝破るのに要る威力なので、
+  /// そのまま格付けになっている。数字を読む前に「硬そうか」が色で分かる。
+  static Color wardColorFor(int ward) {
+    if (ward >= 8) return const Color(0xFFFFE14E);
+    if (ward >= 7) return const Color(0xFFFFB03D);
+    if (ward >= 6) return const Color(0xFFFF9A6B);
+    if (ward >= 5) return const Color(0xFFBFA8FF);
+    if (ward >= 4) return const Color(0xFF8CC4FF);
+    return const Color(0xFF8CFFB0);
+  }
 
   static LinearGradient gradientFor(bool isOdd) => LinearGradient(
     begin: Alignment.topLeft,
@@ -92,7 +110,8 @@ BoxDecoration panelDecoration({
   ],
 );
 
-/// チェインの長さに応じた煽り文句。長いほど派手に。
+/// 鎖の長さに応じた呪文の位階。継ぎ目が多いほど衝撃が積み上がるので、
+/// 長いほど上位の名で呼ばれる。
 class ChainRank {
   const ChainRank(this.label, this.color);
 
@@ -100,11 +119,11 @@ class ChainRank {
   final Color color;
 
   static ChainRank? of(int length) {
-    if (length >= 12) return const ChainRank('UNREAL!!!', Color(0xFFFFE14E));
-    if (length >= 10) return const ChainRank('INCREDIBLE!!', Color(0xFFFFB03D));
-    if (length >= 8) return const ChainRank('AMAZING!!', Color(0xFFFF7A4E));
-    if (length >= 6) return const ChainRank('GREAT!', Color(0xFF6BE8FF));
-    if (length >= 5) return const ChainRank('NICE', Color(0xFF8CFFB0));
+    if (length >= 12) return const ChainRank('RAGNAROK!!!', Color(0xFFFFE14E));
+    if (length >= 10) return const ChainRank('CATACLYSM!!', Color(0xFFFFB03D));
+    if (length >= 8) return const ChainRank('SHATTER!!', Color(0xFFFF7A4E));
+    if (length >= 6) return const ChainRank('FRACTURE!', Color(0xFF6BE8FF));
+    if (length >= 5) return const ChainRank('SPARK', Color(0xFF8CFFB0));
     return null;
   }
 }

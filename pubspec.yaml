@@ -1,5 +1,5 @@
 name: parity_chain
-description: "奇数と偶数を交互になぞってつなぐ、チェインパズル。"
+description: "熱と冷を交互に継いで鎖を編み、敵の守りを破るパズル。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

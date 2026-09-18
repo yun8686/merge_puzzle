@@ -19,7 +19,7 @@ class ParityChainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '奇偶チェイン',
+      title: '氷炎の鎖',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
