@@ -161,5 +161,9 @@ void main() {
     expect(find.text('SCORE'), findsOneWidget);
     expect(find.text('BEST'), findsOneWidget);
     expect(find.byType(BoardView), findsOneWidget);
+    // 奇数と偶数の比率。どちらの枚数も出ていること。
+    expect(find.text('ODD'), findsOneWidget);
+    expect(find.text('EVEN'), findsOneWidget);
+    expect(find.text('TARGET'), findsOneWidget);
   });
 }

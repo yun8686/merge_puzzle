@@ -69,8 +69,8 @@ class _GameScreenState extends State<GameScreen> {
                         const _TitleBar(),
                         _Header(controller: _controller, best: _best),
                         _StatusBar(
+                          oddCount: board.oddCount,
                           evenCount: board.evenCount,
-                          evenRatio: board.evenCount / board.tileCount,
                           requiredTotal: board.requiredTotal,
                         ),
                         Expanded(
@@ -210,20 +210,23 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 成立に必要な合計値と、偶数の残量。どちらも「あと何手遊べるか」の目安。
+/// 成立に必要な合計値と、奇数・偶数の比率。どちらも「あと何手遊べるか」の目安。
 class _StatusBar extends StatelessWidget {
   const _StatusBar({
+    required this.oddCount,
     required this.evenCount,
-    required this.evenRatio,
     required this.requiredTotal,
   });
 
+  final int oddCount;
   final int evenCount;
-  final double evenRatio;
   final int requiredTotal;
 
   @override
   Widget build(BuildContext context) {
+    final total = oddCount + evenCount;
+    final evenRatio = total == 0 ? 0.0 : evenCount / total;
+    // チェインは必ず偶数を1枚以上使うので、危ないのは常に偶数側。
     final danger = evenRatio < 0.18;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
@@ -252,26 +255,34 @@ class _StatusBar extends StatelessWidget {
                       Row(
                         children: [
                           Text(
-                            'EVEN LEFT',
-                            style: AppFont.label(
-                              10,
-                              color: danger ? Palette.danger : Palette.textDim,
-                            ),
+                            'ODD',
+                            style: AppFont.label(10, color: Palette.oddA),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$oddCount',
+                            style: AppFont.number(13, color: Palette.oddA),
                           ),
                           const Spacer(),
                           Text(
                             '$evenCount',
                             style: AppFont.number(
                               13,
-                              color: danger
-                                  ? Palette.danger
-                                  : Palette.textMuted,
+                              color: danger ? Palette.danger : Palette.evenA,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'EVEN',
+                            style: AppFont.label(
+                              10,
+                              color: danger ? Palette.danger : Palette.evenA,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _Meter(ratio: evenRatio, danger: danger),
+                      _ParityBar(evenRatio: evenRatio, danger: danger),
                     ],
                   ),
                 ),
@@ -284,43 +295,67 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
-class _Meter extends StatelessWidget {
-  const _Meter({required this.ratio, required this.danger});
+/// 奇数と偶数で1本のバーを分け合う。盤面は常に埋まっているので、
+/// 片方が伸びれば必ずもう片方が縮む。どちらに傾いているかが一目で分かる。
+class _ParityBar extends StatelessWidget {
+  const _ParityBar({required this.evenRatio, required this.danger});
 
-  final double ratio;
+  final double evenRatio;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? Palette.danger : Palette.evenA;
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: SizedBox(
-        height: 9,
+        height: 10,
         child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: ratio.clamp(0.0, 1.0)),
+          tween: Tween(begin: 0.5, end: evenRatio.clamp(0.0, 1.0)),
           duration: const Duration(milliseconds: 350),
-          builder: (context, value, _) => Stack(
+          curve: Curves.easeOutCubic,
+          builder: (context, even, _) => Stack(
             children: [
+              // 下地は奇数。偶数を右から重ねるので、残りが奇数の幅になる。
               const Positioned.fill(
-                child: ColoredBox(color: Color(0xFF232338)),
-              ),
-              FractionallySizedBox(
-                widthFactor: value,
-                heightFactor: 1,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: danger
-                          ? const [Palette.danger, Color(0xFFFF8A4E)]
-                          : const [Palette.evenB, Palette.evenA],
+                      colors: [Palette.oddA, Palette.oddB],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.7),
-                        blurRadius: 10,
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FractionallySizedBox(
+                  widthFactor: even,
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: danger
+                            ? const [Palette.danger, Color(0xFFFF8A4E)]
+                            : const [Palette.evenB, Palette.evenA],
                       ),
-                    ],
+                    ),
+                  ),
+                ),
+              ),
+              // 境目を暗く落として、2色の切り替わりを立たせる。
+              Align(
+                alignment: Alignment(1 - even * 2, 0),
+                child: const SizedBox(
+                  width: 2,
+                  child: ColoredBox(color: Color(0xCC07070F)),
+                ),
+              ),
+              // 五分五分の位置。どちらに傾いているかの基準線。
+              Align(
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: 1,
+                  child: ColoredBox(
+                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                 ),
               ),
