@@ -1,4 +1,4 @@
-package yun.app.chain_puzzle
+package yun.app.chainpuzzle
 
 import io.flutter.embedding.android.FlutterActivity
 

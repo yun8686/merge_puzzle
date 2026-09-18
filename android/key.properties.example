@@ -1,6 +1,6 @@
 # android/key.properties のひな形。実ファイルは .gitignore 済みなので、
 # これをコピーして値を埋める。keystore 本体もリポジトリには入れないこと。
-storeFile=C:/Users/<ユーザー名>/keystores/chain_puzzle-upload.jks
+storeFile=C:/Users/<ユーザー名>/keystores/chainpuzzle-upload.jks
 storePassword=
 keyAlias=upload
 keyPassword=

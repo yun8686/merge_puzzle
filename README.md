@@ -80,7 +80,7 @@ flutter run
 
 ## モバイル向けビルド
 
-アプリ ID は Android / iOS とも `yun.app.chain_puzzle`。ホーム画面での表示名は「奇偶チェイン」。
+アプリ ID は Android / iOS とも `yun.app.chainpuzzle`。ホーム画面での表示名は「奇偶チェイン」。
 
 ### アイコン
 
@@ -100,7 +100,7 @@ Android のアダプティブアイコンは前景側にセーフゾーン（108
 デバッグ鍵の成果物は Play Store に提出できないので、配布前に鍵を用意する。
 
 ```bash
-keytool -genkey -v -keystore chain_puzzle-upload.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+keytool -genkey -v -keystore chainpuzzle-upload.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ```
 
 生成した `.jks` はリポジトリの外（例: `~/keystores/`）に置き、`android/key.properties.example` をコピーして
