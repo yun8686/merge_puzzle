@@ -9,6 +9,7 @@ import '../game/phase.dart';
 import '../game/progress.dart';
 import 'foe_art.dart';
 import 'game_screen.dart';
+import 'mage_art.dart';
 import 'theme.dart';
 
 /// 拠点。潜る前と潜ったあとに戻ってくる場所。
@@ -429,6 +430,9 @@ class _Sigil extends StatelessWidget {
   final double size;
   final bool owned;
 
+  /// 丸の中に姿を収める割合。1.0 にすると縁に触れる。
+  static const double _portraitScale = 0.72;
+
   @override
   Widget build(BuildContext context) {
     final tint = Palette.mageColor(mage.kind);
@@ -447,14 +451,17 @@ class _Sigil extends StatelessWidget {
           width: 1.5,
         ),
       ),
-      child: Text(
-        owned ? mage.sigil : '？',
-        style: TextStyle(
-          color: owned ? tint : Palette.textDim,
-          fontSize: size * 0.45,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      // 未所持は姿を伏せる。何が来るか分からないから引く意味がある。
+      child: owned
+          ? MagePortrait(kind: mage.kind, size: size * _portraitScale)
+          : Text(
+              '？',
+              style: TextStyle(
+                color: Palette.textDim,
+                fontSize: size * 0.45,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
     );
   }
 }

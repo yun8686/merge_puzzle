@@ -9,6 +9,7 @@ import '../game/party.dart';
 import '../game/phase.dart';
 import 'board_view.dart';
 import 'foe_art.dart';
+import 'mage_art.dart';
 import 'theme.dart';
 
 /// ダンジョン1回ぶんの結末。拠点に持ち帰って記録に書く。
@@ -1221,14 +1222,7 @@ class _MageChip extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: tint.withValues(alpha: 0.6)),
         ),
-        child: Text(
-          mage.sigil,
-          style: TextStyle(
-            color: tint,
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
+        child: MagePortrait(kind: mage.kind, size: 21),
       ),
     );
   }

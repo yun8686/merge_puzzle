@@ -45,9 +45,11 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
 | `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 偶奇バー / 一党 / 決着画面 |
 | `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
+| `lib/ui/mage_art.dart` | 魔導士の姿。**生成物**。`tools/mage/` から作るので手で直さない |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
-| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `board_view_test.dart` / `home_screen_test.dart` |
+| `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
@@ -62,6 +64,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 1. `MageKind` に1つ足す
 2. `Mage` に `static const` を1つ足し、`Ability(条件, 効き目)` を渡す
 3. `Mage.summonable` に並べる
+4. `tools/mage/shapes.py` に姿を足して `emit_dart.py` を走らせる
 
 説明文（`Mage.effect`）は組から作られるので書かない。数値を変えれば文も動く。
 

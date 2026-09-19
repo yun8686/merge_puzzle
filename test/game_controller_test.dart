@@ -844,9 +844,9 @@ void main() {
         Mage.roster.length,
       );
       expect(
-        Mage.roster.map((m) => m.sigil).toSet().length,
+        Mage.roster.map((m) => m.name).toSet().length,
         Mage.roster.length,
-        reason: '一党の並びは一文字で見分ける',
+        reason: '名前で見分ける',
       );
       for (final kind in MageKind.values) {
         expect(Mage.of(kind).kind, kind);

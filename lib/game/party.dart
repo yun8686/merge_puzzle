@@ -235,7 +235,7 @@ enum MageKind {
 /// 冷から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
-  const Mage._(this.kind, this.phase, this.name, this.sigil, [this.ability]);
+  const Mage._(this.kind, this.phase, this.name, [this.ability]);
 
   final MageKind kind;
 
@@ -245,9 +245,6 @@ class Mage {
   final Phase phase;
 
   final String name;
-
-  /// 一党の並びに出す一文字。
-  final String sigil;
 
   /// この魔導士の能力。持たない者は null。
   ///
@@ -265,61 +262,52 @@ class Mage {
     MageKind.squireHeat,
     Phase.heat,
     '熱の従者',
-    '熱',
   );
   static const squireCold = Mage._(
     MageKind.squireCold,
     Phase.cold,
     '冷の従者',
-    '冷',
   );
   static const squireBolt = Mage._(
     MageKind.squireBolt,
     Phase.bolt,
     '雷の従者',
-    '雷',
   );
 
   static const ember = Mage._(
     MageKind.ember,
     Phase.heat,
     '焔の魔導士',
-    '焔',
     Ability(SamePhase(emberSame), PowerUp(1)),
   );
   static const blaze = Mage._(
     MageKind.blaze,
     Phase.heat,
     '烈火の魔導士',
-    '烈',
     Ability(SamePhase(blazeSame), PowerUp(2)),
   );
   static const gale = Mage._(
     MageKind.gale,
     Phase.heat,
     '風の魔導士',
-    '風',
     Ability(ChainLength(galeChain), TurnBack(1)),
   );
   static const rime = Mage._(
     MageKind.rime,
     Phase.cold,
     '氷雨の魔導士',
-    '氷',
     Ability(SamePhase(rimeSame), Mend(1)),
   );
   static const frost = Mage._(
     MageKind.frost,
     Phase.cold,
     '霜の魔導士',
-    '霜',
     Ability(StartsWith(), PowerUp(1)),
   );
   static const storm = Mage._(
     MageKind.storm,
     Phase.bolt,
     '雷の魔導士',
-    '電',
     Ability(
       Every([DistinctPhases(stormPhases), ChainLength(stormChain)]),
       Strike(1),
@@ -329,7 +317,6 @@ class Mage {
     MageKind.aegis,
     Phase.bolt,
     '盾の魔導士',
-    '盾',
     Ability(Always(), Guard()),
   );
 

@@ -10,6 +10,7 @@ import 'package:parity_chain/main.dart';
 import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/foe_art.dart';
 import 'package:parity_chain/ui/game_screen.dart';
+import 'package:parity_chain/ui/mage_art.dart';
 
 /// 盤面を奇数・偶数の市松模様で塗りつぶす。どの方向にも繋がる状態。
 ///
@@ -42,6 +43,11 @@ const twoPhases = [Mage.squireHeat, Mage.squireCold];
 /// 相の呼び名とぶつかるので、印と相の数を別々に読みたいときはこちら。
 /// 焔が居るぶん、熱を3枚以上継いだ鎖には威力が1乗る。
 const emberPair = [Mage.ember, Mage.rime];
+
+/// 一党の帯に並ぶ魔導士の姿。印の文字ではなく絵になったので、型で探す。
+Finder portraitOf(MageKind kind) => find.byWidgetPredicate(
+  (w) => w is MagePortrait && w.kind == kind,
+);
 
 /// 3相の一党。雷は3色の盤面でしか落ちないので、その確認はこちらで。
 const threePhases = [Mage.squireHeat, Mage.squireCold, Mage.squireBolt];
@@ -289,10 +295,11 @@ void main() {
     expect(find.text(Phase.heat.label), findsOneWidget);
     expect(find.text(Phase.cold.label), findsOneWidget);
     expect(find.text(Phase.bolt.label), findsNothing, reason: '連れていない相');
-    // 階層をまたいで残る一党。連れてきた顔ぶれがそのまま出る。
+    // 階層をまたいで残る一党。連れてきた顔ぶれが姿で並ぶ。
     expect(find.text('PARTY'), findsOneWidget);
-    expect(find.text(Mage.ember.sigil), findsOneWidget);
-    expect(find.text(Mage.rime.sigil), findsOneWidget);
+    expect(portraitOf(MageKind.ember), findsOneWidget);
+    expect(portraitOf(MageKind.rime), findsOneWidget);
+    expect(portraitOf(MageKind.storm), findsNothing, reason: '連れていない');
   });
 
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
