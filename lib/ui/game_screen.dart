@@ -863,7 +863,7 @@ class _FoeLineup extends StatelessWidget {
             runSpacing: 10,
             children: [
               for (final ward in order)
-                _FoeChip(ward: ward, count: counts[ward]!, felled: felled),
+                FoeChip(ward: ward, count: counts[ward]!, felled: felled),
             ],
           ),
         ),
@@ -872,8 +872,11 @@ class _FoeLineup extends StatelessWidget {
   }
 }
 
-class _FoeChip extends StatelessWidget {
-  const _FoeChip({
+/// 決着画面に並ぶ敵1種ぶんの札。盤面の敵マスにも同じ姿が出るので、
+/// テストがどちらの姿を数えているか区別できるよう公開してある。
+class FoeChip extends StatelessWidget {
+  const FoeChip({
+    super.key,
     required this.ward,
     required this.count,
     required this.felled,

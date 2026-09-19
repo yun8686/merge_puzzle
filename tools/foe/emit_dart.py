@@ -47,9 +47,9 @@ import 'theme.dart';
 // 形を変えるときは shapes.py を直し、tools/foe/preview.py で確かめてから
 // tools/foe/emit_dart.py を走らせる。
 //
-// 盤面での敵は六角の封印と数字で、そこに姿を描き込む余地は無い（マスは実機で
-// 40〜50px しかなく、守りの数字と体力の粒で既に埋まっている）。姿は盤面の外、
-// 決着画面でだけ見せる。
+// 姿は盤面の敵マス（封印の中）と、決着画面の両方に出る。盤面のマスは実機で
+// 40〜50px しかないので、封印の中に姿を入れる代わりに守りの数字を隅の小さな
+// チップに移してある。数字と姿が場所を取り合わないようにするため。
 
 /// 描画の層。[fill] を塗り、[hole] でくり抜き、[glow] を上に載せる。
 ///
@@ -98,7 +98,7 @@ _FoeArt _artFor(int ward) => _byWard[ward.clamp(Board.minWard, Board.maxWard)]!;
 /// 守り [ward] の敵の呼び名。
 String foeNameFor(int ward) => _artFor(ward).name;
 
-/// 敵の姿を1体描く。色は [Palette.wardColorFor] から取るので、
+/// 敵の姿を1体描く。既定の色は [Palette.wardColorFor] なので、
 /// 盤面に出ている封印の色と必ず揃う。
 class FoePortrait extends StatelessWidget {
   const FoePortrait({
@@ -106,6 +106,7 @@ class FoePortrait extends StatelessWidget {
     required this.ward,
     required this.size,
     this.faded = false,
+    this.tint,
   });
 
   final int ward;
@@ -113,6 +114,10 @@ class FoePortrait extends StatelessWidget {
 
   /// 討ち取った敵。沈めて「もう居ない」ことを見せる。
   final bool faded;
+
+  /// 色の上書き。盤面では、いま討てる敵の封印が金に灯るので、
+  /// 姿も同じ色に乗せて封印と一体に見せる。省くと守りの厚さの色。
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +127,7 @@ class FoePortrait extends StatelessWidget {
       child: CustomPaint(
         painter: _FoePainter(
           art: _artFor(ward),
-          tint: Palette.wardColorFor(ward),
+          tint: tint ?? Palette.wardColorFor(ward),
           faded: faded,
         ),
       ),

@@ -284,7 +284,14 @@ void main() {
     // 5体ぶんの姿と呼び名が出ること。溢れれば RenderFlex が例外を投げるので、
     // 実機を見られなくても並びが収まっているかはここで分かる。
     expect(find.text('討ち漏らした'), findsOneWidget);
-    expect(find.byType(FoePortrait), findsNWidgets(wards.length));
+    // 盤面の敵マスにも姿が出るので、札の中だけを数える。
+    expect(
+      find.descendant(
+        of: find.byType(FoeChip),
+        matching: find.byType(FoePortrait),
+      ),
+      findsNWidgets(wards.length),
+    );
     for (final ward in wards) {
       expect(find.text(foeNameFor(ward)), findsOneWidget, reason: '守り$ward');
     }
@@ -326,7 +333,13 @@ void main() {
     // 討ち果たした敵の姿と呼び名。守り3は小鬼。
     expect(find.text('討ち果たした'), findsOneWidget);
     expect(find.text(foeNameFor(Board.minWard)), findsOneWidget);
-    expect(find.byType(FoePortrait), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(FoeChip),
+        matching: find.byType(FoePortrait),
+      ),
+      findsOneWidget,
+    );
 
     await tester.ensureVisible(find.text('同行'));
     await tester.pump();
@@ -337,5 +350,35 @@ void main() {
     expect(controller.party.members.length, 2);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
+  testWidgets('盤面の敵マスに、姿と守りの数字が出る', (tester) async {
+    final controller = newController(1);
+    paintCheckerboard(controller.board);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 400,
+              child: BoardView(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // 敵は隅の1体だけ。姿が封印の中に入り、守りの数字は別に読める。
+    expect(
+      find.descendant(
+        of: find.byType(BoardView),
+        matching: find.byType(FoePortrait),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('${Board.maxWard}'), findsOneWidget);
   });
 }

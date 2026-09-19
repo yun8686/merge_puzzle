@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../game/board.dart';
 import '../game/game_controller.dart';
+import 'foe_art.dart';
 import 'particles.dart';
 import 'theme.dart';
 
@@ -960,9 +961,14 @@ class _CandidatePulseState extends State<_CandidatePulse>
   }
 }
 
-/// 敵を包む「守り」。書かれている数字は、傷をつけるのに要る鎖の威力。
-/// マナのマスと読み違えられないよう、六角の封印で囲って別物に見せる。
-/// いま編んでいる鎖で討ち取れるなら、封印が金色に灯る。
+/// 敵を包む「守り」。封印の中には敵の姿が入り、書かれている数字は、
+/// 傷をつけるのに要る鎖の威力。マナのマスと読み違えられないよう、
+/// 六角の封印で囲って別物に見せる。
+/// いま編んでいる鎖で討ち取れるなら、封印も姿も金色に灯る。
+///
+/// 姿と数字は同じ場所を取り合うので、姿を封印いっぱいに入れる代わりに
+/// 数字は左上の小さなチップに移してある。数字は鎖の長さを決める唯一の値で、
+/// 姿より先に読めないといけないので、暗いチップに載せて必ず浮かせる。
 ///
 /// 体力が 2 以上の敵だけ、封印の下に体力の粒が並ぶ。1 の敵には出さない。
 /// 「守りを上回れば一撃」という読み方をそのまま残すため。
@@ -993,7 +999,7 @@ class _FoeFace extends StatelessWidget {
     // 「硬そうか」が伝わる。
     final tint = willFall ? Palette.ward : Palette.wardColorFor(ward);
     // 粒を並べる敵は、その分だけ封印を小さくして場所を空ける。
-    final sealSize = maxHp > 1 ? size * 0.62 : size * 0.78;
+    final sealSize = maxHp > 1 ? size * 0.64 : size * 0.8;
     final seal = SizedBox(
       width: sealSize,
       height: sealSize,
@@ -1005,40 +1011,77 @@ class _FoeFace extends StatelessWidget {
               painter: _WardPainter(color: tint, lit: willFall),
             ),
           ),
-          Padding(
-            // 封印の内側に取る余白。封印の大きさに比例させて、
-            // 粒が出ても数字と環の間隔が変わらないようにする。
-            padding: EdgeInsets.all(sealSize * 0.26),
-            child: FittedBox(
-              child: Text(
-                '$ward',
-                style: AppFont.number(size * 0.4, color: tint),
-              ),
-            ),
-          ),
+          // 姿は封印の内側に収める。はみ出すと隣のマスと繋がって見える。
+          FoePortrait(ward: ward, size: sealSize * 0.68, tint: tint),
         ],
       ),
     );
 
-    if (maxHp <= 1) return Center(child: seal);
-
-    // 粒のぶんだけ封印を持ち上げる。下端に寄ると窮屈に見える。
     return Stack(
       alignment: Alignment.center,
       children: [
-        Align(alignment: const Alignment(0, -0.42), child: seal),
+        // 粒のぶんだけ封印を持ち上げる。下端に寄ると窮屈に見える。
         Align(
-          alignment: const Alignment(0, 0.88),
-          child: _HpPips(
-            hp: hp,
-            maxHp: maxHp,
-            size: size,
-            // 傷がつく威力が乗っているときは粒も灯して、
-            // 「討てないが削れる」状態をその場で見せる。
-            color: willHurt ? Palette.ward : tint,
-          ),
+          alignment: maxHp > 1 ? const Alignment(0, -0.28) : Alignment.center,
+          child: seal,
         ),
+        Positioned(
+          left: size * 0.025,
+          top: size * 0.025,
+          child: _WardChip(ward: ward, size: size, color: tint),
+        ),
+        if (maxHp > 1)
+          Align(
+            alignment: const Alignment(0, 0.88),
+            child: _HpPips(
+              hp: hp,
+              maxHp: maxHp,
+              size: size,
+              // 傷がつく威力が乗っているときは粒も灯して、
+              // 「討てないが削れる」状態をその場で見せる。
+              color: willHurt ? Palette.ward : tint,
+            ),
+          ),
       ],
+    );
+  }
+}
+
+/// 守りの数字を載せる小さなチップ。姿に場所を譲って隅へ寄ったぶん、
+/// 暗く塗った丸に載せて、下のマナの色から必ず浮くようにする。
+class _WardChip extends StatelessWidget {
+  const _WardChip({
+    required this.ward,
+    required this.size,
+    required this.color,
+  });
+
+  final int ward;
+
+  /// マスの一辺。チップの大きさはここから比例で決める。
+  final double size;
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = size * 0.32;
+    return Container(
+      width: d,
+      height: d,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xE607070F),
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: size * 0.024),
+      ),
+      child: Padding(
+        // 枠の内側に取る余白。狭くすると数字が枠に貼り付いて読みにくい。
+        padding: EdgeInsets.all(d * 0.06),
+        child: FittedBox(
+          child: Text('$ward', style: AppFont.number(d, color: color)),
+        ),
+      ),
     );
   }
 }
@@ -1089,8 +1132,8 @@ class _HpPips extends StatelessWidget {
   }
 }
 
-/// 六角の封印。外郭を一枚、内側に30度ずらした環をもう一枚重ねて、
-/// 「閉じた結界」に見せる。破れる威力が乗っているときだけ外郭が滲む。
+/// 六角の封印。中を暗く沈めた外郭を一枚だけ引く。内側は敵の姿が埋めるので、
+/// 環を重ねると姿と線がぶつかる。破れる威力が乗っているときだけ外郭が滲む。
 class _WardPainter extends CustomPainter {
   const _WardPainter({required this.color, required this.lit});
 
@@ -1143,15 +1186,6 @@ class _WardPainter extends CustomPainter {
         ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = r * 0.14
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    canvas.drawPath(
-      _hex(center, r * 0.6, 0),
-      Paint()
-        ..color = color.withValues(alpha: 0.4)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = r * 0.07
         ..strokeJoin = StrokeJoin.round,
     );
   }
