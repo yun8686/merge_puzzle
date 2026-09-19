@@ -6,11 +6,17 @@ import 'package:parity_chain/game/progress.dart';
 import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/home_screen.dart';
 
-/// 拠点は縦に長く、テストの画面には収まらない。押す前に送り込む。
+/// 拠点は面によっては縦に長い。押す前に送り込む。
 Future<void> tapAt(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+/// 下のタブで面を切り替える。
+Future<void> goTab(WidgetTester tester, String label) async {
+  await tester.tap(find.text(label));
   await tester.pumpAndSettle();
 }
 
@@ -30,24 +36,31 @@ Future<MemoryProgressStore> openBase(
 }
 
 void main() {
-  testWidgets('拠点に魔晶・一党・ダンジョンが並ぶ', (tester) async {
+  testWidgets('拠点は三つの面に分かれ、開くとダンジョンが出る', (tester) async {
     await openBase(tester);
 
+    // 上の帯と下のタブは、どの面でも見えている。
     expect(find.text('魔晶'), findsOneWidget);
-    expect(find.text('一党'), findsOneWidget);
-    expect(find.text('ダンジョン'), findsOneWidget);
+    for (final tab in ['ダンジョン', '一党', 'ガチャ']) {
+      expect(find.text(tab), findsOneWidget, reason: tab);
+    }
 
-    // 名簿は全員ぶん並ぶが、持っていない魔導士は伏せてある。
-    expect(find.text(Mage.ember.name), findsOneWidget);
-    expect(find.text(Mage.storm.name), findsNothing);
-    expect(
-      find.text('まだ見ぬ魔導士'),
-      findsNWidgets(Mage.roster.length - 1),
-    );
-
+    // 開いた面はダンジョン。
     for (final dungeon in Dungeons.all) {
       expect(find.text(dungeon.name), findsOneWidget);
     }
+    // 連れていく顔ぶれは、挑む前にここから見える。
+    expect(find.text('連れていく'), findsOneWidget);
+  });
+
+  testWidgets('一党の面に名簿が並び、持っていない魔導士は伏せてある', (tester) async {
+    await openBase(tester);
+    await goTab(tester, '一党');
+
+    expect(find.text(Mage.ember.name), findsOneWidget);
+    expect(find.text(Mage.storm.name), findsNothing);
+    expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 1));
+    expect(find.text('名簿'), findsOneWidget);
   });
 
   testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {
@@ -82,10 +95,12 @@ void main() {
   group('ガチャ', () {
     testWidgets('魔晶が足りなければ引けない', (tester) async {
       await openBase(tester, progress: Progress(shards: 1));
+      await goTab(tester, 'ガチャ');
       expect(find.text('魔晶が足りない'), findsOneWidget);
 
       await tapAt(tester, find.text('魔晶が足りない'));
-      expect(find.text('まだ見ぬ魔導士'), findsNWidgets(Mage.roster.length - 1));
+      await goTab(tester, '一党');
+      expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 1));
     });
 
     testWidgets('引くと魔導士が増えて、記録に残る', (tester) async {
@@ -93,17 +108,20 @@ void main() {
         tester,
         progress: Progress(shards: Progress.gachaCost),
       );
+      await goTab(tester, 'ガチャ');
 
-      await tapAt(tester, find.text('魔導士を招く'));
+      await tapAt(tester, find.text('招く　魔晶 ${Progress.gachaCost}'));
 
-      // 伏せられた行が1つ減る。
-      expect(find.text('まだ見ぬ魔導士'), findsNWidgets(Mage.roster.length - 2));
-      // 魔晶は払われている。
-      expect(find.text('0'), findsWidgets);
+      // 引いた相手がその場に出る。
+      expect(find.text('直前の招き'), findsOneWidget);
 
       final saved = await store.load();
       expect(saved.owned.length, 2);
       expect(saved.shards, 0);
+
+      // 名簿の伏せ札が1つ減っている。
+      await goTab(tester, '一党');
+      expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 2));
     });
 
     testWidgets('全員揃えば引けなくなる', (tester) async {
@@ -114,8 +132,11 @@ void main() {
           shards: 999,
         ),
       );
+      await goTab(tester, 'ガチャ');
       expect(find.text('全員揃った'), findsOneWidget);
-      expect(find.text('まだ見ぬ魔導士'), findsNothing);
+
+      await goTab(tester, '一党');
+      expect(find.text('未所持'), findsNothing);
     });
   });
 
@@ -128,6 +149,7 @@ void main() {
           party: [MageKind.ember],
         ),
       );
+      await goTab(tester, '一党');
       expect(find.text('1 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, find.text(Mage.storm.name));
@@ -140,23 +162,30 @@ void main() {
     });
 
     testWidgets('枠が埋まっていれば入らない', (tester) async {
-      final owned = {
-        MageKind.ember,
-        MageKind.rime,
-        MageKind.storm,
-        MageKind.gale,
-      };
       await openBase(
         tester,
         progress: Progress(
-          owned: owned,
+          owned: {
+            MageKind.ember,
+            MageKind.rime,
+            MageKind.storm,
+            MageKind.gale,
+          },
           party: [MageKind.ember, MageKind.rime, MageKind.storm],
         ),
       );
+      await goTab(tester, '一党');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, find.text(Mage.gale.name));
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
+    });
+
+    testWidgets('空いた枠は空きとして見える', (tester) async {
+      await openBase(tester);
+      await goTab(tester, '一党');
+      // 焔ひとりなので、3枠のうち2つが空き。
+      expect(find.text('空き'), findsNWidgets(Progress.partySlots - 1));
     });
   });
 }

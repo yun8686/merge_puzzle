@@ -46,6 +46,7 @@ class Mage {
   /// 一党の並びに出す一文字。
   final String sigil;
 
+
   /// 能力の説明。画面にそのまま出す。
   final String effect;
 

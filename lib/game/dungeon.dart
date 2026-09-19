@@ -24,6 +24,15 @@ class Dungeon {
 
   /// [floor] は1から数える。範囲外は端に丸める。
   FloorSpec floorAt(int floor) => floors[(floor - 1).clamp(0, depth - 1)];
+
+  /// 最下層でいちばん守りの厚い敵。ダンジョンの顔として札に出す。
+  int get bossWard {
+    var ward = 0;
+    for (final foe in floors.last.foes) {
+      if (foe.ward > ward) ward = foe.ward;
+    }
+    return ward;
+  }
 }
 
 /// 階層1つぶん。

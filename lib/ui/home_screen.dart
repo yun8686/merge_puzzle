@@ -6,6 +6,7 @@ import '../game/dungeon.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
 import '../game/progress.dart';
+import 'foe_art.dart';
 import 'game_screen.dart';
 import 'theme.dart';
 
@@ -23,9 +24,13 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// 拠点の三つの面。下の帯で行き来する。
+enum _Tab { dungeons, party, gacha }
+
 class _HomeScreenState extends State<HomeScreen> {
   Progress? _progress;
   final Random _rng = Random();
+  _Tab _tab = _Tab.dungeons;
 
   /// 直前の引きの結果。引いた直後だけ出す。
   Mage? _drawn;
@@ -137,8 +142,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _Base(
                     progress: progress,
+                    tab: _tab,
                     drawn: _drawn,
                     spoils: _spoils,
+                    onTab: (tab) => setState(() => _tab = tab),
                     onRoll: _roll,
                     onToggle: _toggle,
                     onDive: _dive,
@@ -150,100 +157,228 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+
+/// 拠点の骨組み。上に帯、下にタブ、その間が面ごとの中身。
+///
+/// 縦に全部並べていたのをやめ、面を三つに割った。並べると「いま何ができるか」が
+/// 埋もれるうえ、下にあるダンジョンまで毎回スクロールすることになる。
 class _Base extends StatelessWidget {
   const _Base({
     required this.progress,
+    required this.tab,
     required this.drawn,
     required this.spoils,
+    required this.onTab,
     required this.onRoll,
     required this.onToggle,
     required this.onDive,
   });
 
   final Progress progress;
+  final _Tab tab;
   final Mage? drawn;
   final String? spoils;
+  final void Function(_Tab) onTab;
   final VoidCallback onRoll;
   final void Function(MageKind) onToggle;
   final void Function(Dungeon) onDive;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _Logo(),
-          const SizedBox(height: 18),
-          if (spoils != null) ...[
-            _Notice(text: spoils!, tint: Palette.gold),
-            const SizedBox(height: 12),
-          ],
-          _ShardBar(progress: progress, onRoll: onRoll),
-          if (drawn != null) ...[
-            const SizedBox(height: 10),
-            _Notice(
-              text: '${drawn!.name} が加わった\n${drawn!.effect}',
-              tint: Palette.mageColor(drawn!.kind),
+    return Column(
+      children: [
+        _StatusStrip(progress: progress),
+        Expanded(
+          child: switch (tab) {
+            _Tab.dungeons => _DungeonTab(
+              progress: progress,
+              spoils: spoils,
+              onDive: onDive,
+              onParty: () => onTab(_Tab.party),
             ),
-          ],
-          const SizedBox(height: 22),
-          _SectionLabel(
-            label: '一党',
-            trailing: '${progress.party.length} / ${Progress.partySlots}',
-          ),
-          const SizedBox(height: 10),
-          for (final mage in Mage.roster)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _MageRow(
-                mage: mage,
-                owned: progress.owned.contains(mage.kind),
-                inParty: progress.party.contains(mage.kind),
-                full: progress.party.length >= Progress.partySlots,
-                onTap: () => onToggle(mage.kind),
+            _Tab.party => _PartyTab(progress: progress, onToggle: onToggle),
+            _Tab.gacha => _GachaTab(
+              progress: progress,
+              drawn: drawn,
+              onRoll: onRoll,
+            ),
+          },
+        ),
+        _TabBar(current: tab, onTab: onTab),
+      ],
+    );
+  }
+}
+
+/// 上の帯。どの面に居ても、名乗りと魔晶だけは常に見えている。
+class _StatusStrip extends StatelessWidget {
+  const _StatusStrip({required this.progress});
+
+  final Progress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Palette.surface, Palette.boardBg],
+        ),
+        border: Border(bottom: BorderSide(color: Palette.panelBorder)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        child: Row(
+          children: [
+            ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
+                colors: [
+                  Palette.oddA,
+                  Palette.oddB,
+                  Palette.evenB,
+                  Palette.evenA,
+                ],
+              ).createShader(rect),
+              child: Text(
+                'FROSTFIRE CHAIN',
+                style: AppFont.number(
+                  13,
+                  color: Colors.white,
+                ).copyWith(letterSpacing: 3),
               ),
             ),
-          const SizedBox(height: 22),
-          const _SectionLabel(label: 'ダンジョン'),
-          const SizedBox(height: 10),
-          for (var i = 0; i < Dungeons.all.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _DungeonCard(
-                dungeon: Dungeons.all[i],
-                cleared: progress.hasCleared(Dungeons.all[i].id),
-                // 前の1本を踏破すると開く。いきなり竜の巣に入って
-                // 何も分からないまま全滅する、という入り方を塞ぐため。
-                locked:
-                    i > 0 && !progress.hasCleared(Dungeons.all[i - 1].id),
-                needs: i > 0 ? Dungeons.all[i - 1].name : null,
-                onTap: () => onDive(Dungeons.all[i]),
+            const Spacer(),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Palette.boardBg,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Palette.gold.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 5, 12, 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('魔晶', style: AppFont.label(9, color: Palette.textDim)),
+                    const SizedBox(width: 7),
+                    Text(
+                      '${progress.shards}',
+                      style: AppFont.number(15, color: Palette.gold),
+                    ),
+                  ],
+                ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Logo extends StatelessWidget {
-  const _Logo();
+/// 下のタブ。面は三つしかないので、並べて全部見せる。
+class _TabBar extends StatelessWidget {
+  const _TabBar({required this.current, required this.onTab});
+
+  final _Tab current;
+  final void Function(_Tab) onTab;
+
+  static const _items = <(_Tab, IconData, String)>[
+    (_Tab.dungeons, Icons.terrain, 'ダンジョン'),
+    (_Tab.party, Icons.groups, '一党'),
+    (_Tab.gacha, Icons.auto_awesome, 'ガチャ'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return ShaderMask(
-      shaderCallback: (rect) => const LinearGradient(
-        colors: [Palette.oddA, Palette.oddB, Palette.evenB, Palette.evenA],
-      ).createShader(rect),
-      child: Text(
-        'FROSTFIRE CHAIN',
-        textAlign: TextAlign.center,
-        style: AppFont.number(
-          20,
-          color: Colors.white,
-        ).copyWith(letterSpacing: 5),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Palette.surface, Palette.background],
+        ),
+        border: Border(top: BorderSide(color: Palette.panelBorder)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            for (final (tab, icon, label) in _items)
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => onTab(tab),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: tab != current
+                            ? null
+                            : LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Palette.evenA.withValues(alpha: 0.16),
+                                  Colors.transparent,
+                                ],
+                              ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 9, 0, 11),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 22,
+                              color: tab == current
+                                  ? Palette.evenA
+                                  : Palette.textDim,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              label,
+                              style: AppFont.label(
+                                10,
+                                color: tab == current
+                                    ? Palette.evenA
+                                    : Palette.textDim,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label, this.trailing});
+
+  final String label;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Text(label, style: AppFont.label(11, color: Palette.textMuted)),
+          const Spacer(),
+          if (trailing != null)
+            Text(trailing!, style: AppFont.number(13, color: Palette.textDim)),
+        ],
       ),
     );
   }
@@ -281,222 +416,105 @@ class _Notice extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label, this.trailing});
+/// 魔導士の印。丸の中に一文字。編成の枠でも名簿でも同じ顔を使う。
+class _Sigil extends StatelessWidget {
+  const _Sigil({
+    required this.mage,
+    required this.size,
+    this.owned = true,
+  });
 
-  final String label;
-  final String? trailing;
+  final Mage mage;
+  final double size;
+  final bool owned;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final tint = Palette.mageColor(mage.kind);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color.alphaBlend(
+          tint.withValues(alpha: 0.16),
+          Palette.background,
+        ),
+        border: Border.all(
+          color: owned ? tint : Palette.panelBorder,
+          width: 1.5,
+        ),
+      ),
+      child: Text(
+        owned ? mage.sigil : '？',
+        style: TextStyle(
+          color: owned ? tint : Palette.textDim,
+          fontSize: size * 0.45,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// ダンジョンの面。挑む先を選ぶところ。
+class _DungeonTab extends StatelessWidget {
+  const _DungeonTab({
+    required this.progress,
+    required this.spoils,
+    required this.onDive,
+    required this.onParty,
+  });
+
+  final Progress progress;
+  final String? spoils;
+  final void Function(Dungeon) onDive;
+
+  /// 一党の帯を押したとき。編成の面に送る。
+  final VoidCallback onParty;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
       children: [
-        Text(label, style: AppFont.label(11, color: Palette.textMuted)),
-        const Spacer(),
-        if (trailing != null)
-          Text(trailing!, style: AppFont.number(13, color: Palette.textDim)),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (spoils != null) ...[
+                  _Notice(text: spoils!, tint: Palette.gold),
+                  const SizedBox(height: 14),
+                ],
+                for (var i = 0; i < Dungeons.all.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _DungeonCard(
+                      dungeon: Dungeons.all[i],
+                      cleared: progress.hasCleared(Dungeons.all[i].id),
+                      // 前の1本を踏破すると開く。いきなり竜の巣に入って
+                      // 何も分からないまま全滅する入り方を塞ぐため。
+                      locked:
+                          i > 0 &&
+                          !progress.hasCleared(Dungeons.all[i - 1].id),
+                      needs: i > 0 ? Dungeons.all[i - 1].name : null,
+                      onTap: () => onDive(Dungeons.all[i]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // 挑む前に「誰を連れていくか」が見えていないと、選び直しに戻る羽目になる。
+        _PartyStrip(progress: progress, onTap: onParty),
       ],
     );
   }
 }
 
-/// 魔晶と、ガチャを引くボタン。
-class _ShardBar extends StatelessWidget {
-  const _ShardBar({required this.progress, required this.onRoll});
-
-  final Progress progress;
-  final VoidCallback onRoll;
-
-  @override
-  Widget build(BuildContext context) {
-    final all = progress.unowned.isEmpty;
-    final poor = !all && progress.shards < Progress.gachaCost;
-    return DecoratedBox(
-      decoration: panelDecoration(radius: 16),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-        child: Row(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('魔晶', style: AppFont.label(10, color: Palette.gold)),
-                const SizedBox(height: 6),
-                Text(
-                  '${progress.shards}',
-                  style: AppFont.number(26, color: Palette.gold),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Opacity(
-              opacity: progress.canRoll ? 1 : 0.45,
-              child: DecoratedBox(
-                decoration: panelDecoration(
-                  color: Color.alphaBlend(
-                    Palette.gold.withValues(alpha: 0.14),
-                    Palette.surface,
-                  ),
-                  border: Palette.gold.withValues(alpha: 0.55),
-                  radius: 14,
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: progress.canRoll ? onRoll : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 12,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            all
-                                ? '全員揃った'
-                                : poor
-                                ? '魔晶が足りない'
-                                : '魔導士を招く',
-                            style: const TextStyle(
-                              color: Palette.gold,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (!all) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              '魔晶 ${Progress.gachaCost}',
-                              style: AppFont.label(
-                                9,
-                                color: Palette.textDim,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 魔導士1人ぶんの行。持っていれば押して編成に入れ替えられる。
-class _MageRow extends StatelessWidget {
-  const _MageRow({
-    required this.mage,
-    required this.owned,
-    required this.inParty,
-    required this.full,
-    required this.onTap,
-  });
-
-  final Mage mage;
-  final bool owned;
-  final bool inParty;
-
-  /// 枠が埋まっているか。埋まっていて外にいる人は押しても入らない。
-  final bool full;
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = Palette.mageColor(mage.kind);
-    final dim = !owned || (!inParty && full);
-    return Opacity(
-      opacity: dim ? 0.4 : 1,
-      child: DecoratedBox(
-        decoration: panelDecoration(
-          color: inParty
-              ? Color.alphaBlend(tint.withValues(alpha: 0.12), Palette.surface)
-              : Palette.panel,
-          border: inParty ? tint.withValues(alpha: 0.6) : Palette.panelBorder,
-          radius: 14,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: owned ? onTap : null,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color.alphaBlend(
-                        tint.withValues(alpha: 0.18),
-                        Palette.background,
-                      ),
-                      border: Border.all(
-                        color: tint.withValues(alpha: 0.7),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Text(
-                      owned ? mage.sigil : '？',
-                      style: TextStyle(
-                        color: tint,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          owned ? mage.name : 'まだ見ぬ魔導士',
-                          style: const TextStyle(
-                            color: Palette.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          owned ? mage.effect : '魔晶で招く',
-                          style: const TextStyle(
-                            color: Palette.textMuted,
-                            fontSize: 12,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (inParty) ...[
-                    const SizedBox(width: 8),
-                    Text('同行', style: AppFont.label(9, color: tint)),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// ダンジョン1本ぶんの札。
+/// ダンジョン1本ぶんの札。最下層の主を薄く敷いて、顔として見せる。
 class _DungeonCard extends StatelessWidget {
   const _DungeonCard({
     required this.dungeon,
@@ -519,51 +537,505 @@ class _DungeonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tint = cleared ? Palette.gold : Palette.evenA;
     return Opacity(
-      opacity: locked ? 0.4 : 1,
+      opacity: locked ? 0.45 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: locked
+                ? Palette.panelBorder
+                : tint.withValues(alpha: 0.45),
+          ),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Palette.surface, Palette.backgroundGlow],
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: locked ? null : onTap,
+              child: Stack(
+                children: [
+                  // 主の姿。札の右に大きく、沈めて敷く。
+                  Positioned(
+                    right: -8,
+                    top: -10,
+                    child: Opacity(
+                      opacity: 0.35,
+                      child: FoePortrait(ward: dungeon.bossWard, size: 104),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                dungeon.name,
+                                style: const TextStyle(
+                                  color: Palette.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                locked
+                                    ? '$needs を踏破すると開く'
+                                    : '全 ${dungeon.depth} 階層　主は守り ${dungeon.bossWard}',
+                                style: const TextStyle(
+                                  color: Palette.textMuted,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                              const SizedBox(height: 9),
+                              _FloorPips(
+                                depth: dungeon.depth,
+                                lit: cleared,
+                                tint: tint,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        if (locked)
+                          const Icon(
+                            Icons.lock,
+                            size: 20,
+                            color: Palette.textDim,
+                          )
+                        else if (cleared)
+                          Text(
+                            '踏破',
+                            style: AppFont.label(10, color: Palette.gold),
+                          )
+                        else
+                          const Icon(
+                            Icons.chevron_right,
+                            size: 26,
+                            color: Palette.evenA,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 階層の数だけ並ぶ目盛り。踏破すると全部灯る。
+class _FloorPips extends StatelessWidget {
+  const _FloorPips({
+    required this.depth,
+    required this.lit,
+    required this.tint,
+  });
+
+  final int depth;
+  final bool lit;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < depth; i++) ...[
+          if (i > 0) const SizedBox(width: 3),
+          Container(
+            width: 16,
+            height: 4,
+            decoration: BoxDecoration(
+              color: lit ? tint : Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 連れていく顔ぶれの帯。押すと編成の面に移る。
+class _PartyStrip extends StatelessWidget {
+  const _PartyStrip({required this.progress, required this.onTap});
+
+  final Progress progress;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Palette.boardBg,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 14, 12),
+          child: Row(
+            children: [
+              Text('連れていく', style: AppFont.label(10)),
+              const SizedBox(width: 12),
+              for (final mage in progress.partyMages) ...[
+                _Sigil(mage: mage, size: 30),
+                const SizedBox(width: 7),
+              ],
+              const Spacer(),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: Palette.textDim,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 一党の面。上に連れていく枠、下に名簿。
+class _PartyTab extends StatelessWidget {
+  const _PartyTab({required this.progress, required this.onToggle});
+
+  final Progress progress;
+  final void Function(MageKind) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final party = progress.partyMages;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionLabel(
+            label: '連れていく',
+            trailing: '${progress.party.length} / ${Progress.partySlots}',
+          ),
+          Row(
+            children: [
+              for (var i = 0; i < Progress.partySlots; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: _PartySlot(
+                    mage: i < party.length ? party[i] : null,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 22),
+          const _SectionLabel(label: '名簿'),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.92,
+            children: [
+              for (final mage in Mage.roster)
+                _MageCard(
+                  mage: mage,
+                  owned: progress.owned.contains(mage.kind),
+                  inParty: progress.party.contains(mage.kind),
+                  full: progress.party.length >= Progress.partySlots,
+                  onTap: () => onToggle(mage.kind),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 連れていく枠1つ。空いていれば破線の丸だけ置く。
+class _PartySlot extends StatelessWidget {
+  const _PartySlot({required this.mage});
+
+  final Mage? mage;
+
+  @override
+  Widget build(BuildContext context) {
+    final mage = this.mage;
+    final tint = mage == null
+        ? Palette.panelBorder
+        : Palette.mageColor(mage.kind);
+    return AspectRatio(
+      aspectRatio: 0.88,
       child: DecoratedBox(
         decoration: panelDecoration(
-          color: Palette.panel,
-          border: locked ? Palette.panelBorder : tint.withValues(alpha: 0.45),
-          radius: 16,
+          color: mage == null
+              ? Palette.panel
+              : Color.alphaBlend(
+                  tint.withValues(alpha: 0.10),
+                  Palette.surface,
+                ),
+          border: mage == null
+              ? Palette.panelBorder
+              : tint.withValues(alpha: 0.55),
+          radius: 14,
+        ),
+        child: Center(
+          child: mage == null
+              ? Text(
+                  '空き',
+                  style: AppFont.label(9, color: Palette.textDim),
+                )
+              : _Sigil(mage: mage, size: 46),
+        ),
+      ),
+    );
+  }
+}
+
+/// 名簿の1枚。押すと編成に入れ替わる。
+class _MageCard extends StatelessWidget {
+  const _MageCard({
+    required this.mage,
+    required this.owned,
+    required this.inParty,
+    required this.full,
+    required this.onTap,
+  });
+
+  final Mage mage;
+  final bool owned;
+  final bool inParty;
+
+  /// 枠が埋まっているか。埋まっていて外にいる人は押しても入らない。
+  final bool full;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = Palette.mageColor(mage.kind);
+    final dim = !owned || (!inParty && full);
+    return Opacity(
+      opacity: dim ? 0.42 : 1,
+      child: DecoratedBox(
+        decoration: panelDecoration(
+          color: inParty
+              ? Color.alphaBlend(tint.withValues(alpha: 0.12), Palette.surface)
+              : Palette.panel,
+          border: inParty ? tint : Palette.panelBorder,
+          radius: 14,
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: locked ? null : onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          dungeon.name,
-                          style: const TextStyle(
-                            color: Palette.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
+            borderRadius: BorderRadius.circular(14),
+            onTap: owned ? onTap : null,
+            child: Stack(
+              children: [
+                if (inParty)
+                  Positioned(
+                    top: 5,
+                    right: 6,
+                    child: Text(
+                      '同行',
+                      style: AppFont.label(8, color: tint),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _Sigil(mage: mage, size: 38, owned: owned),
+                      const SizedBox(height: 7),
+                      Text(
+                        owned ? mage.name : '未所持',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: owned
+                              ? Palette.textPrimary
+                              : Palette.textDim,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(height: 5),
+                      ),
+                      if (owned) ...[
+                        const SizedBox(height: 3),
                         Text(
-                          locked
-                              ? '$needs を踏破すると開く'
-                              : '全 ${dungeon.depth} 階層',
+                          mage.effect,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Palette.textMuted,
-                            fontSize: 12,
+                            fontSize: 9,
+                            height: 1.25,
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ガチャの面。
+class _GachaTab extends StatelessWidget {
+  const _GachaTab({
+    required this.progress,
+    required this.drawn,
+    required this.onRoll,
+  });
+
+  final Progress progress;
+  final Mage? drawn;
+  final VoidCallback onRoll;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = progress.unowned.length;
+    final all = left == 0;
+    final poor = !all && progress.shards < Progress.gachaCost;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Palette.gold.withValues(alpha: 0.5)),
+              gradient: RadialGradient(
+                center: const Alignment(0, -1),
+                radius: 1.1,
+                colors: [
+                  Palette.gold.withValues(alpha: 0.18),
+                  Palette.panel,
+                ],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: Column(
+                children: [
+                  Text(
+                    '魔導士を招く',
+                    style: AppFont.number(20, color: Palette.gold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    all
+                        ? '名簿は全員揃っている'
+                        : '魔晶 ${Progress.gachaCost} で、まだ見ぬ魔導士がひとり加わる\n残り $left 人',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Palette.textMuted,
+                      fontSize: 12,
+                      height: 1.6,
                     ),
                   ),
-                  if (cleared)
-                    Text('踏破', style: AppFont.label(10, color: Palette.gold)),
+                  const SizedBox(height: 20),
+                  _GachaButton(
+                    label: all
+                        ? '全員揃った'
+                        : poor
+                        ? '魔晶が足りない'
+                        : '招く　魔晶 ${Progress.gachaCost}',
+                    enabled: progress.canRoll,
+                    onTap: onRoll,
+                  ),
                 ],
+              ),
+            ),
+          ),
+          if (drawn != null) ...[
+            const SizedBox(height: 20),
+            const _SectionLabel(label: '直前の招き'),
+            _Notice(
+              text: '${drawn!.name} が加わった\n${drawn!.effect}',
+              tint: Palette.mageColor(drawn!.kind),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 招くボタン。厚みを付けて、拠点でいちばん押したくなる形にしてある。
+class _GachaButton extends StatelessWidget {
+  const _GachaButton({
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: enabled
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFFFE79A), Palette.gold, Color(0xFFE8A800)],
+                stops: [0, 0.45, 1],
+              )
+            : null,
+        color: enabled ? null : Palette.surface,
+        border: enabled
+            ? null
+            : Border.all(color: Palette.panelBorder),
+        boxShadow: enabled
+            ? [
+                const BoxShadow(
+                  color: Color(0xFF8A6400),
+                  offset: Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: Palette.gold.withValues(alpha: 0.28),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: enabled ? const Color(0xFF1A1405) : Palette.textDim,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
