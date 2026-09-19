@@ -725,18 +725,10 @@ class _PartyTab extends StatelessWidget {
             label: '連れていく',
             trailing: '${progress.party.length} / ${Progress.partySlots}',
           ),
-          Row(
-            children: [
-              for (var i = 0; i < Progress.partySlots; i++) ...[
-                if (i > 0) const SizedBox(width: 10),
-                Expanded(
-                  child: _PartySlot(
-                    mage: i < party.length ? party[i] : null,
-                  ),
-                ),
-              ],
-            ],
-          ),
+          for (var i = 0; i < Progress.partySlots; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _PartySlot(mage: i < party.length ? party[i] : null),
+          ],
           const SizedBox(height: 12),
           _PhaseNote(phases: progress.partyPhases),
           const SizedBox(height: 22),
@@ -751,6 +743,7 @@ class _PartyTab extends StatelessWidget {
             children: [
               for (final mage in Mage.roster)
                 _MageCard(
+                  key: rosterCardKey(mage.kind),
                   mage: mage,
                   owned: progress.owned.contains(mage.kind),
                   inParty: progress.party.contains(mage.kind),
@@ -789,23 +782,9 @@ class _PhaseNote extends StatelessWidget {
             Text('盤面の相', style: AppFont.label(9)),
             const SizedBox(width: 12),
             for (final phase in phases) ...[
-              Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: Palette.gradientFor(phase),
-                ),
-                child: Text(
-                  phase.label,
-                  style: const TextStyle(
-                    color: Palette.background,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _PhaseDot(phase: phase),
               ),
             ],
             const Spacer(),
@@ -827,7 +806,12 @@ class _PhaseNote extends StatelessWidget {
   }
 }
 
-/// 連れていく枠1つ。空いていれば破線の丸だけ置く。
+/// 連れていく枠1つ。**印だけでは誰なのか読めない**ので、名前と能力と相を
+/// 一緒に並べる。名簿の札を見に行かなくても、いまの編成が何をする一党なのかが
+/// ここだけで分かるようにする。
+///
+/// 横に3つ並べると1枠あたりが狭く、名前も能力も入らない。縦に3本の帯にして、
+/// 幅を能力の説明に使う。
 class _PartySlot extends StatelessWidget {
   const _PartySlot({required this.mage});
 
@@ -836,40 +820,134 @@ class _PartySlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mage = this.mage;
-    final tint = mage == null
-        ? Palette.panelBorder
-        : Palette.mageColor(mage.kind);
-    return AspectRatio(
-      aspectRatio: 0.88,
-      child: DecoratedBox(
-        decoration: panelDecoration(
-          color: mage == null
-              ? Palette.panel
-              : Color.alphaBlend(
-                  tint.withValues(alpha: 0.10),
-                  Palette.surface,
+    if (mage == null) {
+      return DecoratedBox(
+        decoration: panelDecoration(radius: 14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(11, 10, 14, 11),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Palette.panelBorder, width: 1.5),
                 ),
-          border: mage == null
-              ? Palette.panelBorder
-              : tint.withValues(alpha: 0.55),
-          radius: 14,
+                // ラベルの字間（2.2）が効くと丸の中で左に寄るので、
+                // ここだけ素の字で置く。
+                child: const Text(
+                  '＋',
+                  style: TextStyle(
+                    color: Palette.textDim,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 11),
+              Text('空き', style: AppFont.label(11, color: Palette.textDim)),
+              const Spacer(),
+              Text(
+                '名簿から選ぶ',
+                style: AppFont.label(9, color: Palette.textDim),
+              ),
+            ],
+          ),
         ),
-        child: Center(
-          child: mage == null
-              ? Text(
-                  '空き',
-                  style: AppFont.label(9, color: Palette.textDim),
-                )
-              : _Sigil(mage: mage, size: 46),
+      );
+    }
+    final tint = Palette.mageColor(mage.kind);
+    return DecoratedBox(
+      decoration: panelDecoration(
+        color: Color.alphaBlend(tint.withValues(alpha: 0.10), Palette.surface),
+        border: tint.withValues(alpha: 0.55),
+        radius: 14,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(11, 10, 12, 11),
+        child: Row(
+          children: [
+            _Sigil(mage: mage, size: 38),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    mage.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Palette.textPrimary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    mage.effect,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Palette.textMuted,
+                      fontSize: 9.5,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _PhaseDot(phase: mage.phase),
+          ],
         ),
       ),
     );
   }
 }
 
+/// 相ひとつを表す丸。編成の枠と「盤面の相」の帯で同じものを使う。
+class _PhaseDot extends StatelessWidget {
+  const _PhaseDot({required this.phase, this.size = 22});
+
+  final Phase phase;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: Palette.gradientFor(phase),
+      ),
+      child: Text(
+        phase.label,
+        style: TextStyle(
+          color: Palette.background,
+          fontSize: size * 0.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// 名簿の札を指す鍵。
+///
+/// 連れていく枠にも魔導士の名前が出るので、名前だけで探すと2枚に当たる。
+/// テストが「名簿の方」を指すためにここを使う。
+ValueKey<String> rosterCardKey(MageKind kind) => ValueKey('roster-${kind.name}');
+
 /// 名簿の1枚。押すと編成に入れ替わる。
 class _MageCard extends StatelessWidget {
   const _MageCard({
+    super.key,
     required this.mage,
     required this.owned,
     required this.inParty,

@@ -14,6 +14,14 @@ Future<void> tapAt(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+/// 名簿の札。連れていく枠にも同じ名前が出るので、名前で探すと2枚に当たる。
+/// 名簿を指したいところはこちらを使う。
+Finder rosterCard(Mage mage) => find.byKey(rosterCardKey(mage.kind));
+
+/// 名簿の札の中の文字。
+Finder rosterText(Mage mage, String text) =>
+    find.descendant(of: rosterCard(mage), matching: find.text(text));
+
 /// 下のタブで面を切り替える。
 Future<void> goTab(WidgetTester tester, String label) async {
   await tester.tap(find.text(label));
@@ -59,11 +67,28 @@ void main() {
 
     // 始まりは従者3人だけ。招ける7人は伏せてある。
     for (final squire in Mage.squires) {
-      expect(find.text(squire.name), findsOneWidget, reason: squire.name);
+      expect(rosterText(squire, squire.name), findsOneWidget, reason: squire.name);
     }
     expect(find.text(Mage.storm.name), findsNothing);
     expect(find.text('未所持'), findsNWidgets(Mage.summonable.length));
     expect(find.text('名簿'), findsOneWidget);
+  });
+
+  testWidgets('連れていく枠には、印だけでなく名前と能力が出る', (tester) async {
+    await openBase(
+      tester,
+      progress: Progress(
+        owned: {MageKind.ember},
+        party: [MageKind.ember, MageKind.squireCold],
+      ),
+    );
+    await goTab(tester, '一党');
+
+    // 枠と名簿で1枚ずつ。枠の中だけでも誰なのかが読める。
+    expect(find.text(Mage.ember.name), findsNWidgets(2));
+    expect(find.text(Mage.ember.effect), findsNWidgets(2));
+    // 3枠目は空いたまま。
+    expect(find.text('空き'), findsOneWidget);
   });
 
   testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {
@@ -153,11 +178,11 @@ void main() {
       await goTab(tester, '一党');
       expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
 
-      await tapAt(tester, find.text(Mage.storm.name));
+      await tapAt(tester, rosterCard(Mage.storm));
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
       expect((await store.load()).party, contains(MageKind.storm));
 
-      await tapAt(tester, find.text(Mage.storm.name));
+      await tapAt(tester, rosterCard(Mage.storm));
       expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
       expect((await store.load()).party, isNot(contains(MageKind.storm)));
     });
@@ -177,7 +202,7 @@ void main() {
       await goTab(tester, '一党');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
-      await tapAt(tester, find.text(Mage.gale.name));
+      await tapAt(tester, rosterCard(Mage.gale));
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
     });
 
@@ -193,7 +218,7 @@ void main() {
       await goTab(tester, '一党');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
-      await tapAt(tester, find.text(Mage.squireBolt.name));
+      await tapAt(tester, rosterCard(Mage.squireBolt));
       expect(
         find.text('3 / ${Progress.partySlots}'),
         findsOneWidget,
