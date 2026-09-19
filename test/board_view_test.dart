@@ -432,4 +432,47 @@ void main() {
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
+
+  testWidgets('制圧の画面は、最後の敵を討ってから少し待って出る', (tester) async {
+    final controller = newController(5);
+    // 威力3で討てる敵を1体だけ置く。1手で制圧できる。
+    var id = 0;
+    for (var r = 0; r < controller.board.rows; r++) {
+      for (var c = 0; c < controller.board.cols; c++) {
+        controller.board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+      }
+    }
+    final target = controller.board.grid[0][1]!;
+    controller.board.grid[0][1] = Tile(
+      id: target.id,
+      isOdd: target.isOdd,
+      ward: Board.minWard,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+
+    // 目の前で討ち果たす。
+    controller.beginPath(const Cell(0, 0));
+    controller.extendPath(const Cell(0, 1));
+    controller.extendPath(const Cell(0, 2));
+    controller.commitPath();
+    controller.settle();
+    await tester.pump();
+
+    // 局面は制圧に移っているが、まだ盤面を覆わない。
+    expect(controller.phase, GamePhase.stageCleared);
+    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text('祝福を1つ選ぶ'), findsOneWidget);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
 }

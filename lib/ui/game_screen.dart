@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -25,17 +26,53 @@ class _GameScreenState extends State<GameScreen> {
   /// 差し込まれたものは差し込んだ側が畳む。
   bool _ownsController = false;
 
+  /// 最後の敵を討ってから、制圧の画面で盤面を覆うまでの間。
+  /// 0 だと討った手応えが残らないうちに画面が覆われて、
+  /// 自分が何をして勝ったのかが見えないまま次の選択を迫られる。
+  static const Duration _clearPause = Duration(milliseconds: 300);
+
+  /// 制圧したが、まだ間を取っている最中か。
+  bool _holdingClear = false;
+  Timer? _pause;
+  late GamePhase _lastPhase;
+
   @override
   void initState() {
     super.initState();
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? GameController();
+    // 差し込まれた局面から始まったときは間を取らない。
+    // 間を取るのは、目の前で討ち果たしたときだけ。
+    _lastPhase = _controller.phase;
+    _controller.addListener(_onPhaseChanged);
   }
 
   @override
   void dispose() {
+    _pause?.cancel();
+    _controller.removeListener(_onPhaseChanged);
     if (_ownsController) _controller.dispose();
     super.dispose();
+  }
+
+  void _onPhaseChanged() {
+    final phase = _controller.phase;
+    if (phase == _lastPhase) return;
+    final wasPlaying = _lastPhase == GamePhase.playing;
+    _lastPhase = phase;
+
+    // ここは notifyListeners の中なので setState は呼ばない。
+    // 画面は AnimatedBuilder が同じ通知で描き直す。
+    _pause?.cancel();
+    if (phase != GamePhase.stageCleared || !wasPlaying) {
+      _holdingClear = false;
+      return;
+    }
+    _holdingClear = true;
+    _pause = Timer(_clearPause, () {
+      if (!mounted) return;
+      setState(() => _holdingClear = false);
+    });
   }
 
   void _restart() => _controller.restart();
@@ -97,7 +134,8 @@ class _GameScreenState extends State<GameScreen> {
                         _Footer(controller: _controller, onRestart: _restart),
                       ],
                     ),
-                    if (_controller.phase == GamePhase.stageCleared)
+                    if (_controller.phase == GamePhase.stageCleared &&
+                        !_holdingClear)
                       _StageClearOverlay(
                         controller: _controller,
                         onChoose: _nextStage,
