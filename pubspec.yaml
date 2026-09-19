@@ -35,6 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # 所持している魔導士・踏破したダンジョン・魔晶の保存。
+  # web では localStorage、端末では OS の設定領域に書かれる。
+  shared_preferences: ^2.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

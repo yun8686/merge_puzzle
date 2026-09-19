@@ -449,14 +449,14 @@ void main() {
       expect(controller.board.remainingFoes, 1);
     });
 
-    test('未所持の魔導士は加入順に返る', () {
+    test('未所持の魔導士は名簿の順に返る', () {
       // 道中では増えないが、この並びはガチャが未所持を数えるのに使う。
       final party = Party.initial();
-      expect(party.nextRecruit, Mage.rime);
-      party.members.add(Mage.rime);
-      expect(party.nextRecruit, Mage.storm);
-      party.members.add(Mage.storm);
-      expect(party.nextRecruit, isNull);
+      for (final mage in Mage.roster.skip(1)) {
+        expect(party.nextRecruit, mage);
+        party.members.add(mage);
+      }
+      expect(party.nextRecruit, isNull, reason: '全員揃えば返らない');
     });
 
     test('加護は最大体力を増やす', () {
@@ -651,5 +651,141 @@ void main() {
     controller.settle();
     expect(controller.phase, GamePhase.floorLost);
     expect(controller.lastBacklash, 8);
+  });
+
+  group('増えた魔導士', () {
+    GameController withRoster(List<Mage> roster) => GameController(
+      createBoard: () => Board(rng: Random(3)),
+      roster: roster,
+    );
+
+    test('霜は冷から継ぎ始めた鎖にだけ乗る', () {
+      final controller = withRoster(const [Mage.frost]);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5));
+
+      // (0,0) は熱。熱から始めたので乗らない。
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      expect(controller.power, 3);
+      controller.cancelPath();
+
+      // (0,1) は冷。冷から始めたので +1。
+      trace(controller, const [Cell(0, 1), Cell(0, 2), Cell(0, 3)]);
+      expect(controller.power, 4);
+    });
+
+    test('烈火は熱5枚から乗り、焔と重なる', () {
+      // 9枚で熱が5枚になる並び。
+      const path = [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+        Cell(1, 4),
+        Cell(1, 3),
+      ];
+
+      final alone = withRoster(const [Mage.blaze]);
+      paintCheckerboard(alone.board, foe: const Cell(7, 5));
+      trace(alone, path);
+      expect(alone.power, 9 + 2);
+
+      final both = withRoster(const [Mage.ember, Mage.blaze]);
+      paintCheckerboard(both.board, foe: const Cell(7, 5));
+      trace(both, path);
+      expect(both.power, 9 + 1 + 2, reason: '焔の +1 と重なって +3');
+    });
+
+    test('烈火は熱が4枚では乗らない', () {
+      final controller = withRoster(const [Mage.blaze]);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5));
+      // 7枚で熱は4枚。
+      trace(controller, const [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+      ]);
+      expect(controller.power, 7);
+    });
+
+    test('風は7枚以上の鎖でターンを返す', () {
+      // 盤面は1手ごとに崩れるので、長さの違いは別の盤面で測る。
+      int movesAfter(int length) {
+        final controller = withRoster(const [Mage.gale]);
+        paintCheckerboard(controller.board, foe: const Cell(7, 5));
+        controller.movesLeft = 5;
+        const path = [
+          Cell(0, 0),
+          Cell(0, 1),
+          Cell(0, 2),
+          Cell(0, 3),
+          Cell(0, 4),
+          Cell(0, 5),
+          Cell(1, 5),
+        ];
+        trace(controller, path.take(length).toList());
+        expect(controller.pathLength, length);
+        controller.commitPath();
+        return controller.movesLeft;
+      }
+
+      expect(movesAfter(6), 4, reason: '6枚では返らない');
+      expect(movesAfter(7), 5, reason: '7枚なら使った1手が戻る');
+    });
+
+    test('風が居なければターンは返らない', () {
+      final controller = withRoster(const [Mage.ember]);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5));
+      controller.movesLeft = 5;
+      trace(controller, const [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+      ]);
+      controller.commitPath();
+      expect(controller.movesLeft, 4);
+    });
+
+    test('盾は階層を落としたときの痛手を半分にする', () {
+      final controller = withRoster(const [Mage.aegis]);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 7);
+      controller.movesLeft = 1;
+      final hpBefore = controller.party.hp;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.phase, GamePhase.floorLost);
+      // 守り7の敵を討ち漏らした。半分にして切り上げで4。
+      expect(controller.lastBacklash, 4);
+      expect(controller.party.hp, hpBefore - 4);
+    });
+
+    test('名簿は7人で、全員に別の色がある', () {
+      expect(Mage.roster.length, 7);
+      expect(
+        Mage.roster.map((m) => m.kind).toSet().length,
+        Mage.roster.length,
+      );
+      expect(
+        Mage.roster.map((m) => m.sigil).toSet().length,
+        Mage.roster.length,
+        reason: '一党の並びは一文字で見分ける',
+      );
+      for (final kind in MageKind.values) {
+        expect(Mage.of(kind).kind, kind);
+      }
+    });
   });
 }

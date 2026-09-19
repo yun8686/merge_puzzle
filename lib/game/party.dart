@@ -11,6 +11,7 @@ class ChainTally {
     required this.length,
     required this.heat,
     required this.frost,
+    required this.startedHeat,
   });
 
   /// 継いだ枚数。
@@ -21,9 +22,14 @@ class ChainTally {
 
   /// そのうち冷の相（偶数）の枚数。
   final int frost;
+
+  /// 熱の相から継ぎ始めたか。交互ルールのせいで、長さが同じでも開始相だけで
+  /// 熱と冷の枚数が1枚ずれる。**開始相そのものを条件にする魔導士**が居るので、
+  /// 枚数とは別に持っておく。
+  final bool startedHeat;
 }
 
-enum MageKind { ember, rime, storm }
+enum MageKind { ember, rime, storm, frost, gale, aegis, blaze }
 
 /// 一党に加わる魔導士。能力は「鎖の戦果への反応」として書く。
 ///
@@ -61,9 +67,44 @@ class Mage {
     '雷',
     '8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ',
   );
+  static const frost = Mage._(
+    MageKind.frost,
+    '霜の魔導士',
+    '霜',
+    '冷から継ぎ始めた鎖は威力 +1',
+  );
+  static const gale = Mage._(
+    MageKind.gale,
+    '風の魔導士',
+    '風',
+    '7枚以上継いだ鎖はターンを 1 返す',
+  );
+  static const aegis = Mage._(
+    MageKind.aegis,
+    '盾の魔導士',
+    '盾',
+    '階層を落としたときの痛手が半分になる',
+  );
+  static const blaze = Mage._(
+    MageKind.blaze,
+    '烈火の魔導士',
+    '烈',
+    '熱を5枚以上継いだ鎖は威力 +2',
+  );
 
-  /// 加入する順番。制圧の祝福で1人ずつ増える。
-  static const List<Mage> roster = [ember, rime, storm];
+  /// 名簿。ガチャはこの中から未所持を引く。
+  static const List<Mage> roster = [
+    ember,
+    rime,
+    storm,
+    frost,
+    gale,
+    aegis,
+    blaze,
+  ];
+
+  /// [kind] の魔導士。名簿に無い種類は無いので、必ず見つかる。
+  static Mage of(MageKind kind) => roster.firstWhere((m) => m.kind == kind);
 }
 
 /// 熱の相を何枚継げば焔が応えるか。
@@ -71,6 +112,14 @@ const int emberHeat = 3;
 
 /// 冷の相を何枚継げば氷雨が応えるか。
 const int rimeFrost = 3;
+
+/// 烈火が応える熱の枚数。焔の上に重ねて乗る。
+const int blazeHeat = 5;
+
+/// 風がターンを返す枚数。ここを下げると、長い鎖を編めるうちは
+/// ターンが減らなくなって階層の制限が意味を失う。冷の相を3枚食う
+/// 7枚に置いてあるのは、枯渇そのものが歯止めになるため。
+const int galeChain = 7;
 
 /// 雷が落ちる枚数。ここだけ威力ではなく**継いだ枚数**で見る。
 ///
@@ -136,9 +185,26 @@ class Party {
 
   bool get isDown => hp <= 0;
 
-  /// 焔の威力補正。
-  int powerBonusFor(ChainTally tally) =>
-      has(MageKind.ember) && tally.heat >= emberHeat ? 1 : 0;
+  /// 威力補正。重ねて乗る。
+  ///
+  /// 焔（熱3枚以上）と烈火（熱5枚以上）は同時に乗るので、熱を5枚継げば +3。
+  /// 霜は開始相だけを見るので、熱に寄せる編み方とは噛み合わない。
+  /// 「熱を長く継ぐ」か「冷から始める」かで、育て方が割れるようにしてある。
+  int powerBonusFor(ChainTally tally) {
+    var bonus = 0;
+    if (has(MageKind.ember) && tally.heat >= emberHeat) bonus += 1;
+    if (has(MageKind.blaze) && tally.heat >= blazeHeat) bonus += 2;
+    if (has(MageKind.frost) && !tally.startedHeat) bonus += 1;
+    return bonus;
+  }
+
+  /// 風が返すターン。
+  int turnGainFor(ChainTally tally) =>
+      has(MageKind.gale) && tally.length >= galeChain ? 1 : 0;
+
+  /// 階層を落としたときに実際に受ける痛手。盾が居れば半分（切り上げ）。
+  int backlashFor(int threat) =>
+      has(MageKind.aegis) ? (threat + 1) ~/ 2 : threat;
 
   /// 氷雨の回復量。
   int healFor(ChainTally tally) =>

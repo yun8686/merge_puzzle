@@ -41,12 +41,21 @@ class Palette {
   /// ぶつからない緑に置いて「盤面の外の資源」だと分かるようにする。
   static const life = Color(0xFF6BE8A0);
 
+  /// 盾の魔導士の色。相を持たず、攻めにも関わらないので、盤面の2色から
+  /// いちばん遠い藤色に置く。
+  static const steel = Color(0xFFBFA8FF);
+
   /// 魔導士の色。能力が見ている相をそのまま色にしてある。
-  /// 雷だけは相を持たないので金。
+  /// 熱に応える焔と烈火は暖色、冷に応える氷雨と霜は寒色。
+  /// 雷は相を持たないので金、風は盤面の外の資源なので体力と同じ緑。
   static Color mageColor(MageKind kind) => switch (kind) {
     MageKind.ember => oddA,
+    MageKind.blaze => oddB,
     MageKind.rime => evenA,
+    MageKind.frost => evenB,
     MageKind.storm => gold,
+    MageKind.gale => life,
+    MageKind.aegis => steel,
   };
 
   /// 敵を包む守りの色。金の封印として読ませる。

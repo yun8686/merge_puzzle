@@ -157,7 +157,13 @@ class GameController extends ChangeNotifier {
         frost++;
       }
     }
-    return ChainTally(length: path.length, heat: heat, frost: frost);
+    return ChainTally(
+      length: path.length,
+      heat: heat,
+      frost: frost,
+      // 空のときの値は使われない。威力の表示は鎖が成立してからしか出ない。
+      startedHeat: path.isEmpty || (board.tileAt(path.first)?.isOdd ?? true),
+    );
   }
 
   /// いまの鎖に乗っている魔導士の威力補正。
@@ -290,7 +296,8 @@ class GameController extends ChangeNotifier {
     }
 
     score += result.gained;
-    movesLeft--;
+    // 風が居れば長い鎖でターンが戻る。使った1手より戻りが多くなることは無い。
+    movesLeft += party.turnGainFor(tally) - 1;
     if (score > best) best = score;
     if (result.power > bestChain) bestChain = result.power;
 
@@ -312,7 +319,8 @@ class GameController extends ChangeNotifier {
       phase = isLastFloor ? GamePhase.dungeonCleared : GamePhase.stageCleared;
     } else if (movesLeft <= 0 || !board.hasAnyChain()) {
       // 討ち漏らした敵の反撃。守りが厚い敵を残すほど高くつく。
-      lastBacklash = board.foeThreat;
+      // 盾が居れば半分に減る。
+      lastBacklash = party.backlashFor(board.foeThreat);
       party.takeDamage(lastBacklash);
       phase = party.isDown ? GamePhase.defeated : GamePhase.floorLost;
     }
