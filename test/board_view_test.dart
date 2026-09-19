@@ -247,6 +247,52 @@ void main() {
     expect(find.text(Mage.ember.sigil), findsOneWidget);
   });
 
+  testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
+    final controller = newController(7);
+    var id = 0;
+    for (var r = 0; r < controller.board.rows; r++) {
+      for (var c = 0; c < controller.board.cols; c++) {
+        controller.board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+      }
+    }
+    // 守りを散らして最下段に並べる。重力で動かないので位置が読める。
+    const wards = [3, 4, 5, 6, 8];
+    for (var i = 0; i < wards.length; i++) {
+      final base = controller.board.grid[7][i]!;
+      controller.board.grid[7][i] = Tile(
+        id: base.id,
+        isOdd: base.isOdd,
+        ward: wards[i],
+      );
+    }
+
+    controller.movesLeft = 1;
+    controller.beginPath(const Cell(0, 0));
+    controller.extendPath(const Cell(0, 1));
+    controller.extendPath(const Cell(0, 2));
+    controller.commitPath();
+    controller.settle();
+    expect(controller.phase, GamePhase.floorLost);
+    // 反撃は守りの合計。
+    expect(controller.lastBacklash, 26);
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    // 5体ぶんの姿と呼び名が出ること。溢れれば RenderFlex が例外を投げるので、
+    // 実機を見られなくても並びが収まっているかはここで分かる。
+    expect(find.text('討ち漏らした'), findsOneWidget);
+    expect(find.byType(FoePortrait), findsNWidgets(wards.length));
+    for (final ward in wards) {
+      expect(find.text(foeNameFor(ward)), findsOneWidget, reason: '守り$ward');
+    }
+    expect(find.text('-26'), findsOneWidget);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
   testWidgets('階層を制圧すると祝福を選ばされ、選ぶと次の階層に進む', (tester) async {
     final controller = newController(5);
     // 威力3で討てる敵を1体だけ置く。1手で制圧できる。
