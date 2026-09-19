@@ -350,13 +350,13 @@ void main() {
       expect(party.hp, Party.startingHp);
     });
 
-    test('雷は威力8以上の鎖で階層の敵すべてを削る', () {
+    test('雷は8枚継いだ鎖で階層の敵すべてを削る', () {
       final controller = newController();
       controller.party.members.add(Mage.storm);
       // 守り8の敵を、鎖から離れた隅に置く。
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
-      // 上段6枚＋下段2枚で8枚。焔の補正も乗るので威力は9。
+      // 上段6枚＋下段2枚で8枚。
       trace(controller, const [
         Cell(0, 0),
         Cell(0, 1),
@@ -367,7 +367,7 @@ void main() {
         Cell(1, 5),
         Cell(1, 4),
       ]);
-      expect(controller.power, greaterThanOrEqualTo(8));
+      expect(controller.pathLength, stormChain);
 
       final result = controller.commitPath();
       // 鎖は敵に触れていないのに、雷で落ちている。
@@ -402,6 +402,31 @@ void main() {
       expect(result!.bolt, isEmpty);
       expect(result.boltCells, [const Cell(7, 5)]);
       expect(controller.board.tileAt(const Cell(7, 5))!.hp, 1);
+    });
+
+    test('焔の補正で威力8に届いても、7枚では雷は落ちない', () {
+      final controller = newController();
+      controller.party.members.add(Mage.storm);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5));
+
+      // 7枚。熱が4枚あるので焔の補正が乗り、威力は8になる。
+      trace(controller, const [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+      ]);
+      expect(controller.pathLength, stormChain - 1);
+      expect(controller.power, stormChain);
+
+      // 威力は届いているが、見ているのは枚数なので落ちない。
+      final result = controller.commitPath();
+      expect(result!.bolt, isEmpty);
+      expect(result.boltCells, isEmpty);
+      expect(controller.board.remainingFoes, 1);
     });
 
     test('雷が居なければ追撃は起きない', () {

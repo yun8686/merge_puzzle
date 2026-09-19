@@ -1566,18 +1566,20 @@ class _PopTileState extends State<_PopTile>
             ),
           ],
         ),
+        // 弾けている間も、敵はマスに居たときと同じ姿のまま。数字だけ残すと
+        // 「敵が消えて数字が残った」ように見えて、討ち取った相手が分からない。
+        // 姿ごと膨らんで消えるので、エフェクトが終わって初めて敵が居なくなる。
         child: widget.ward == null
             ? null
-            : Center(
-                child: Padding(
-                  padding: EdgeInsets.all(size * 0.18),
-                  child: FittedBox(
-                    child: Text(
-                      '${widget.ward}',
-                      style: AppFont.number(size * 0.56, color: Colors.white),
-                    ),
-                  ),
-                ),
+            : _FoeFace(
+                ward: widget.ward!,
+                hp: 1,
+                maxHp: 1,
+                size: size,
+                // 討たれた瞬間なので金。討てる威力が乗ったときと同じ色で、
+                // 指を離す直前の見た目からそのまま繋がる。
+                willFall: true,
+                willHurt: false,
               ),
       ),
     );

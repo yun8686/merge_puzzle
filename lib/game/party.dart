@@ -59,7 +59,7 @@ class Mage {
     MageKind.storm,
     '雷の魔導士',
     '雷',
-    '威力 8 以上の鎖は階層の敵すべてに 1 ダメージ',
+    '8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ',
   );
 
   /// 加入する順番。制圧の祝福で1人ずつ増える。
@@ -72,8 +72,12 @@ const int emberHeat = 3;
 /// 冷の相を何枚継げば氷雨が応えるか。
 const int rimeFrost = 3;
 
-/// 雷が落ちる威力。呪文の位階の SHATTER と同じ位置に置いてある。
-const int stormPower = 8;
+/// 雷が落ちる枚数。ここだけ威力ではなく**継いだ枚数**で見る。
+///
+/// 焔の補正が乗ると 7 枚でも威力 8 になるが、それでは落とさない。
+/// 「8枚つなぐ」は盤面を見ながら数えられるのに対し、「威力 8」は補正が
+/// 乗るかどうかを頭の中で足さないと分からず、狙って出せない。
+const int stormChain = 8;
 
 /// 階層を制圧したときに選ぶ祝福。
 enum Blessing { heal, vigor, companion }
@@ -136,8 +140,8 @@ class Party {
   int healFor(ChainTally tally) =>
       has(MageKind.rime) && tally.frost >= rimeFrost ? 1 : 0;
 
-  /// 雷が落ちるか。
-  bool boltFor(int power) => has(MageKind.storm) && power >= stormPower;
+  /// 雷が落ちるか。見るのは威力ではなく継いだ枚数。
+  bool boltFor(int length) => has(MageKind.storm) && length >= stormChain;
 
   /// 実際に戻った体力を返す（満タンなら 0）。
   int heal(int amount) {

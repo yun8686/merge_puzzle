@@ -406,7 +406,7 @@ void main() {
     Offset centerOf(int row, int col) =>
         origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
 
-    // 上段6枚＋下段3枚で9枚。焔の補正も乗るので威力は10で、雷が落ちる。
+    // 上段6枚＋下段3枚で9枚。8枚以上なので雷が落ちる。
     final gesture = await tester.startGesture(centerOf(0, 0));
     await tester.pump();
     for (var col = 1; col < 6; col++) {
