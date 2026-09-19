@@ -11,6 +11,7 @@ import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/foe_art.dart';
 import 'package:parity_chain/ui/game_screen.dart';
 import 'package:parity_chain/ui/mage_art.dart';
+import 'package:parity_chain/ui/theme.dart';
 
 /// 盤面を奇数・偶数の市松模様で塗りつぶす。どの方向にも繋がる状態。
 ///
@@ -43,6 +44,11 @@ const twoPhases = [Mage.squireHeat, Mage.squireCold];
 /// 相の呼び名とぶつかるので、印と相の数を別々に読みたいときはこちら。
 /// 焔が居るぶん、熱を3枚以上継いだ鎖には威力が1乗る。
 const emberPair = [Mage.ember, Mage.rime];
+
+/// 盤面の相の見本。漢字ではなくマスと同じ色なので、型で探す。
+Finder swatchOf(Phase phase) => find.byWidgetPredicate(
+  (w) => w is PhaseSwatch && w.phase == phase,
+);
 
 /// 一党の帯に並ぶ魔導士の姿。印の文字ではなく絵になったので、型で探す。
 Finder portraitOf(MageKind kind) => find.byWidgetPredicate(
@@ -291,10 +297,11 @@ void main() {
     // 残りターンと残りの敵。階層の進行がそのまま出ていること。
     expect(find.text('TURNS'), findsOneWidget);
     expect(find.text('FOES'), findsOneWidget);
-    // 盤面に敷かれた相の比率。連れてきた相のぶんだけ出ていること。
-    expect(find.text(Phase.heat.label), findsOneWidget);
-    expect(find.text(Phase.cold.label), findsOneWidget);
-    expect(find.text(Phase.bolt.label), findsNothing, reason: '連れていない相');
+    // 盤面に敷かれた相の比率。呼び名ではなくマスと同じ色で出ていること。
+    expect(swatchOf(Phase.heat), findsOneWidget);
+    expect(swatchOf(Phase.cold), findsOneWidget);
+    expect(swatchOf(Phase.bolt), findsNothing, reason: '連れていない相');
+    expect(find.text(Phase.heat.label), findsNothing, reason: '漢字は出さない');
     // 階層をまたいで残る一党。連れてきた顔ぶれが姿で並ぶ。
     expect(find.text('PARTY'), findsOneWidget);
     expect(portraitOf(MageKind.ember), findsOneWidget);

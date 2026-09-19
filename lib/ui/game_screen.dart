@@ -430,7 +430,9 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
-/// 相1つぶんの呼び名と枚数。
+/// 相1つぶんの色と枚数。
+///
+/// 呼び名は出さない。盤面で数えるのは色なので、同じ色のマスを小さく置く。
 class _PhaseCount extends StatelessWidget {
   const _PhaseCount({
     required this.phase,
@@ -448,8 +450,8 @@ class _PhaseCount extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(phase.label, style: AppFont.label(10, color: tint)),
-        const SizedBox(width: 5),
+        PhaseSwatch(phase: phase, size: 13),
+        const SizedBox(width: 6),
         Text('$count', style: AppFont.number(13, color: tint)),
       ],
     );

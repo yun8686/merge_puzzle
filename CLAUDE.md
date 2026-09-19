@@ -43,7 +43,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択。記録を持つのはここだけ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
-| `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 偶奇バー / 一党 / 決着画面 |
+| `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 相の割合 / 一党 / 決着画面 |
 | `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
 | `lib/ui/mage_art.dart` | 魔導士の姿。**生成物**。`tools/mage/` から作るので手で直さない |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |

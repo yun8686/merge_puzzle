@@ -791,7 +791,7 @@ class _PhaseNote extends StatelessWidget {
             for (final phase in phases) ...[
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: _PhaseDot(phase: phase),
+                child: PhaseSwatch(phase: phase, size: 20),
               ),
             ],
             const Spacer(),
@@ -908,39 +908,8 @@ class _PartySlot extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _PhaseDot(phase: mage.phase),
+            PhaseSwatch(phase: mage.phase, size: 20),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 相ひとつを表す丸。編成の枠と「盤面の相」の帯で同じものを使う。
-class _PhaseDot extends StatelessWidget {
-  const _PhaseDot({required this.phase});
-
-  final Phase phase;
-
-  /// 丸の直径。2箇所とも同じ大きさで出すので、引数にはしない。
-  static const double size = 22;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: Palette.gradientFor(phase),
-      ),
-      child: Text(
-        phase.label,
-        style: const TextStyle(
-          color: Palette.background,
-          fontSize: size * 0.5,
-          fontWeight: FontWeight.w800,
         ),
       ),
     );

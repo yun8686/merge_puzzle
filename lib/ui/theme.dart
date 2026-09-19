@@ -132,6 +132,35 @@ class AppFont {
       );
 }
 
+/// 盤面のマス1枚ぶんの見本。**相を漢字ではなく色で示す。**
+///
+/// 「熱」「冷」「雷」と書いても、盤面で探すのは結局その色のマスなので、
+/// 呼び名を挟まずに同じ色を出す。角の丸みもグラデーションも
+/// `board_view.dart` のマスと揃えてあるので、盤面のどれを指しているのかが
+/// 説明なしに伝わる。
+///
+/// 盤面の相の割合（`game_screen.dart`）と編成の枠（`home_screen.dart`）の
+/// 両方から使う。
+class PhaseSwatch extends StatelessWidget {
+  const PhaseSwatch({super.key, required this.phase, this.size = 14});
+
+  final Phase phase;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: Palette.gradientFor(phase),
+        // 盤面のマスと同じ丸み（board_view.dart の size * 0.28）。
+        borderRadius: BorderRadius.circular(size * 0.28),
+      ),
+    );
+  }
+}
+
 /// 1段浮かせたパネルの装飾。ヘッダーやフッターで使い回す。
 BoxDecoration panelDecoration({
   Color color = Palette.panel,
