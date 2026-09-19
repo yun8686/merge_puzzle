@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'ui/game_screen.dart';
+import 'game/prefs_store.dart';
+import 'ui/home_screen.dart';
 import 'ui/theme.dart';
 
 void main() {
@@ -30,7 +31,7 @@ class ParityChainApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const GameScreen(),
+      home: const HomeScreen(store: PrefsProgressStore()),
     );
   }
 }

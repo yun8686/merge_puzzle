@@ -10,12 +10,34 @@ import 'board_view.dart';
 import 'foe_art.dart';
 import 'theme.dart';
 
+/// ダンジョン1回ぶんの結末。拠点に持ち帰って記録に書く。
+class DungeonOutcome {
+  const DungeonOutcome({
+    required this.dungeonId,
+    required this.cleared,
+    required this.floor,
+  });
+
+  final String dungeonId;
+
+  /// 踏破したか。false なら全滅。
+  final bool cleared;
+
+  /// 全滅したときに到達していた階層。踏破なら最下層。
+  final int floor;
+}
+
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.controller});
+  const GameScreen({super.key, this.controller, this.onFinished});
 
   /// 差し込むと、画面が自前で作る代わりにこれを使う。
   /// 決着画面のように、特定の局面から始めたいテスト用。
   final GameController? controller;
+
+  /// 踏破・全滅したときに呼ぶ。魔晶を足して保存するのは拠点の仕事で、
+  /// この画面は「終わった」と伝えるだけ。渡されていなければ、この画面の中で
+  /// 次のダンジョンへ進む／やり直す（拠点を持たない古い呼び出し方）。
+  final void Function(DungeonOutcome outcome)? onFinished;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -80,11 +102,31 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() => _controller.restart();
 
+  /// 拠点を持っているか。持っていれば、決着したら呼び出し側に返す。
+  bool get _reportsHome => widget.onFinished != null;
+
+  void _finish({required bool cleared}) {
+    widget.onFinished?.call(
+      DungeonOutcome(
+        dungeonId: _controller.dungeon.id,
+        cleared: cleared,
+        floor: _controller.floor,
+      ),
+    );
+  }
+
   /// 踏破したので次のダンジョンへ。最後まで行っていたら1本目に戻る。
+  /// 拠点があるときはそちらに返すので、ここには来ない。
   void _nextDungeon() {
+    if (_reportsHome) {
+      _finish(cleared: true);
+      return;
+    }
     final next = Dungeons.after(_controller.dungeon) ?? Dungeons.all.first;
     _controller.enterDungeon(next);
   }
+
+  void _leaveDefeated() => _finish(cleared: false);
 
   void _nextFloor(Blessing blessing) => _controller.nextFloor(blessing);
 
@@ -154,6 +196,7 @@ class _GameScreenState extends State<GameScreen> {
                       _DungeonClearOverlay(
                         controller: _controller,
                         onNext: _nextDungeon,
+                        toHome: _reportsHome,
                       ),
                     if (_controller.phase == GamePhase.floorLost)
                       _FloorLostOverlay(
@@ -164,6 +207,7 @@ class _GameScreenState extends State<GameScreen> {
                       _DefeatOverlay(
                         controller: _controller,
                         onRestart: _restart,
+                        onLeave: _reportsHome ? _leaveDefeated : null,
                       ),
                   ],
                 );
@@ -743,10 +787,18 @@ class _FloorLostOverlay extends StatelessWidget {
 
 /// 一党が倒れた。ここだけが本当の終わり。
 class _DefeatOverlay extends StatelessWidget {
-  const _DefeatOverlay({required this.controller, required this.onRestart});
+  const _DefeatOverlay({
+    required this.controller,
+    required this.onRestart,
+    this.onLeave,
+  });
 
   final GameController controller;
   final VoidCallback onRestart;
+
+  /// 拠点があるときだけ。魔晶が入るのはこちらを押したときで、
+  /// その場でやり直す限り、失敗ぶんの魔晶は溜まらない。
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -779,6 +831,10 @@ class _DefeatOverlay extends StatelessWidget {
         ),
         const SizedBox(height: 26),
         _PrimaryButton(label: '1階層目からやり直す', onTap: onRestart),
+        if (onLeave != null) ...[
+          const SizedBox(height: 10),
+          _PlainButton(label: '拠点へ戻る', onTap: onLeave!),
+        ],
       ],
     );
   }
@@ -840,10 +896,17 @@ class _StageClearOverlay extends StatelessWidget {
 /// ここでは祝福を選ばせない。持ち越す先が無いのと、踏破の瞬間に選択を挟むと
 /// 「終わった」という区切りがぼやけるため。
 class _DungeonClearOverlay extends StatelessWidget {
-  const _DungeonClearOverlay({required this.controller, required this.onNext});
+  const _DungeonClearOverlay({
+    required this.controller,
+    required this.onNext,
+    this.toHome = false,
+  });
 
   final GameController controller;
   final VoidCallback onNext;
+
+  /// 拠点に戻る形か。戻る先があるなら、次のダンジョンは拠点で選ばせる。
+  final bool toHome;
 
   @override
   Widget build(BuildContext context) {
@@ -878,7 +941,11 @@ class _DungeonClearOverlay extends StatelessWidget {
         ),
         const SizedBox(height: 26),
         _PrimaryButton(
-          label: next == null ? '最初のダンジョンへ' : '${next.name} へ',
+          label: toHome
+              ? '拠点へ戻る'
+              : next == null
+              ? '最初のダンジョンへ'
+              : '${next.name} へ',
           onTap: onNext,
         ),
       ],
@@ -1209,6 +1276,39 @@ class _ResultRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(value, style: AppFont.number(16, color: Palette.textMuted)),
       ],
+    );
+  }
+}
+
+/// 主でない方の選択肢。枠だけのボタン。
+class _PlainButton extends StatelessWidget {
+  const _PlainButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Palette.textMuted,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

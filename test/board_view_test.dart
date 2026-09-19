@@ -229,8 +229,18 @@ void main() {
     expect(controller.score, 0);
   });
 
-  testWidgets('アプリが起動して階層と敵の数が表示される', (tester) async {
+  testWidgets('アプリが起動する', (tester) async {
+    // 拠点が出る。保存が使えない環境でも落ちないこと（テストには
+    // shared_preferences のプラグインが居ないので、毎回この経路を通る）。
     await tester.pumpWidget(const ParityChainApp());
+    await tester.pumpAndSettle();
+    expect(find.text('ダンジョン'), findsOneWidget);
+  });
+
+  testWidgets('盤面の画面に階層と敵の数が表示される', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: newController(1))),
+    );
     await tester.pump();
 
     expect(find.text('SCORE'), findsOneWidget);
