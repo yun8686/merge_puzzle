@@ -21,7 +21,7 @@ void main() {
       expect(Mage.gale.effect, '7枚以上継いだ鎖はターンを 1 返す');
       expect(Mage.rime.effect, '冷を3枚以上継いだ鎖で体力を 1 戻す');
       expect(Mage.frost.effect, '冷から継ぎ始めた鎖は威力 +1');
-      expect(Mage.storm.effect, '8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
+      expect(Mage.storm.effect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
       expect(Mage.aegis.effect, '階層を落としたときの痛手が半分になる');
     });
 
@@ -77,6 +77,52 @@ void main() {
     test('常に効く条件は空の鎖でも通る', () {
       expect(const Always().met(Phase.bolt, ChainTally.none), isTrue);
     });
+
+    test('含んでいる相の種類数', () {
+      const trigger = DistinctPhases(3);
+      expect(
+        trigger.met(
+          Phase.bolt,
+          tally(length: 9, counts: {Phase.heat: 3, Phase.cold: 3, Phase.bolt: 3}),
+        ),
+        isTrue,
+      );
+      // 2色の盤面ではどう編んでも3色にならない。
+      expect(
+        trigger.met(
+          Phase.bolt,
+          tally(length: 12, counts: {Phase.heat: 6, Phase.cold: 6}),
+        ),
+        isFalse,
+      );
+      // 0枚の相は数えない。
+      expect(
+        trigger.met(
+          Phase.bolt,
+          tally(length: 9, counts: {Phase.heat: 5, Phase.cold: 4, Phase.bolt: 0}),
+        ),
+        isFalse,
+      );
+    });
+
+    test('重ねた条件は全部そろって初めて通る', () {
+      const trigger = Every([DistinctPhases(3), ChainLength(8)]);
+      const threeColors = {Phase.heat: 3, Phase.cold: 3, Phase.bolt: 2};
+      expect(trigger.met(Phase.bolt, tally(length: 8, counts: threeColors)), isTrue);
+      expect(
+        trigger.met(Phase.bolt, tally(length: 7, counts: threeColors)),
+        isFalse,
+        reason: '枚数が足りない',
+      );
+      expect(
+        trigger.met(
+          Phase.bolt,
+          tally(length: 12, counts: {Phase.heat: 6, Phase.cold: 6}),
+        ),
+        isFalse,
+        reason: '色が足りない',
+      );
+    });
   });
 
   group('効き目の集計', () {
@@ -111,7 +157,12 @@ void main() {
         0,
       );
       expect(party.turnGainFor(tally(length: 9)), 0);
-      expect(party.boltFor(tally(length: 9)), 0);
+      expect(
+        party.boltFor(
+          tally(length: 9, counts: {Phase.heat: 3, Phase.cold: 3, Phase.bolt: 3}),
+        ),
+        0,
+      );
       expect(party.healFor(tally(length: 9, counts: {Phase.cold: 5})), 0);
     });
 
@@ -120,8 +171,20 @@ void main() {
       expect(party.turnGainFor(tally(length: galeChain)), 1);
       expect(party.turnGainFor(tally(length: galeChain - 1)), 0);
       expect(party.healFor(tally(length: 6, counts: {Phase.cold: rimeSame})), 1);
-      expect(party.boltFor(tally(length: stormChain)), 1);
-      expect(party.boltFor(tally(length: stormChain - 1)), 0, reason: '枚数で見る');
+      const threeColors = {Phase.heat: 3, Phase.cold: 3, Phase.bolt: 2};
+      expect(party.boltFor(tally(length: stormChain, counts: threeColors)), 1);
+      expect(
+        party.boltFor(tally(length: stormChain - 1, counts: threeColors)),
+        0,
+        reason: '枚数で見る',
+      );
+      expect(
+        party.boltFor(
+          tally(length: 12, counts: {Phase.heat: 6, Phase.cold: 6}),
+        ),
+        0,
+        reason: '2色の盤面では落ちない',
+      );
     });
 
     test('盾は鎖と関係なく効く', () {

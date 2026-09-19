@@ -43,6 +43,27 @@ const twoPhases = [Mage.squireHeat, Mage.squireCold];
 /// 焔が居るぶん、熱を3枚以上継いだ鎖には威力が1乗る。
 const emberPair = [Mage.ember, Mage.rime];
 
+/// 3相の一党。雷は3色の盤面でしか落ちないので、その確認はこちらで。
+const threePhases = [Mage.squireHeat, Mage.squireCold, Mage.squireBolt];
+
+/// 盤面を3相の斜め縞に塗る。相は (r + c) を 3 で割った余りで決まるので、
+/// 右・下へ1歩ずつ進むかぎり「直前2枚と違う」を満たし続ける。隅には
+/// 届かない守りの敵を置く（市松のときと同じ理由）。
+void paintPrism(Board board) {
+  var id = 0;
+  for (var r = 0; r < board.rows; r++) {
+    for (var c = 0; c < board.cols; c++) {
+      board.grid[r][c] = Tile(id: id++, phase: Phase.values[(r + c) % 3]);
+    }
+  }
+  final corner = board.grid[board.rows - 1][board.cols - 1]!;
+  board.grid[board.rows - 1][board.cols - 1] = Tile(
+    id: corner.id,
+    phase: corner.phase,
+    ward: Board.maxWard,
+  );
+}
+
 void main() {
   testWidgets('なぞるとチェインが成立して点が入る', (tester) async {
     final controller = newController(1);
@@ -416,8 +437,8 @@ void main() {
 
 
   testWidgets('雷が落ちる鎖でも、演出は最後まで走りきる', (tester) async {
-    final controller = newController(3);
-    paintCheckerboard(controller.board);
+    final controller = GameController(rng: Random(3), roster: threePhases);
+    paintPrism(controller.board);
     controller.party.members.add(Mage.storm);
 
     await tester.pumpWidget(
@@ -438,17 +459,20 @@ void main() {
     Offset centerOf(int row, int col) =>
         origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
 
-    // 上段6枚＋下段3枚で9枚。8枚以上なので雷が落ちる。
+    // 上段を右へ6枚、そこから下へ3枚で9枚。3色の盤面で8枚以上なので
+    // 雷が落ちる。折り返すと相が戻って繋がらないので、曲がったら下へ降りる。
     final gesture = await tester.startGesture(centerOf(0, 0));
     await tester.pump();
     for (var col = 1; col < 6; col++) {
       await gesture.moveTo(centerOf(0, col));
       await tester.pump();
     }
-    for (var col = 5; col >= 3; col--) {
-      await gesture.moveTo(centerOf(1, col));
+    for (var row = 1; row <= 3; row++) {
+      await gesture.moveTo(centerOf(row, 5));
       await tester.pump();
     }
+    expect(controller.path.length, 9);
+
     await gesture.up();
     await tester.pump();
 

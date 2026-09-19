@@ -46,7 +46,9 @@ sealed class Trigger {
 
   bool met(Phase phase, ChainTally tally);
 
-  /// 説明文の前半。[Boon.describe] と繋げて1文になる。
+  /// 「〜な」まで。[Ability.describe] が「鎖」を足して1文にする。
+  /// 条件を重ねたとき（[Every]）に前から順に繋がるよう、ここでは
+  /// 「鎖」を書かない。
   String describe(Phase phase);
 }
 
@@ -60,7 +62,7 @@ final class SamePhase extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.countOf(phase) >= need;
 
   @override
-  String describe(Phase phase) => '${phase.label}を$need枚以上継いだ鎖';
+  String describe(Phase phase) => '${phase.label}を$need枚以上継いだ';
 }
 
 /// [need] 枚以上継いだ鎖。相は問わない。
@@ -73,7 +75,7 @@ final class ChainLength extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.length >= need;
 
   @override
-  String describe(Phase phase) => '$need枚以上継いだ鎖';
+  String describe(Phase phase) => '$need枚以上継いだ';
 }
 
 /// 自分の相から継ぎ始めた鎖。枚数を寄せる編み方とは噛み合わない。
@@ -84,7 +86,40 @@ final class StartsWith extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.startPhase == phase;
 
   @override
-  String describe(Phase phase) => '${phase.label}から継ぎ始めた鎖';
+  String describe(Phase phase) => '${phase.label}から継ぎ始めた';
+}
+
+/// [need] 種類以上の相を含む鎖。
+///
+/// 継ぎ方の決まり（N 枚ぶんの窓に同じ相は二度出ない）のせいで、これは
+/// **盤面が何色か**とほぼ同じ意味になる。3色の盤面では長さ3以上の鎖は
+/// 必ず3色を含み、2色の盤面ではどう編んでも3色にはならない。つまり
+/// `DistinctPhases(3)` は「3色で編成したときだけ効く」と読める。
+final class DistinctPhases extends Trigger {
+  const DistinctPhases(this.need);
+
+  final int need;
+
+  @override
+  bool met(Phase phase, ChainTally tally) =>
+      tally.counts.values.where((n) => n > 0).length >= need;
+
+  @override
+  String describe(Phase phase) => '$need色を含む';
+}
+
+/// 並べた条件を全部満たした鎖。説明文は前から順に繋げる。
+final class Every extends Trigger {
+  const Every(this.all);
+
+  final List<Trigger> all;
+
+  @override
+  bool met(Phase phase, ChainTally tally) =>
+      all.every((t) => t.met(phase, tally));
+
+  @override
+  String describe(Phase phase) => all.map((t) => t.describe(phase)).join();
 }
 
 /// 鎖を見ない。連れているだけで効く。
@@ -170,7 +205,13 @@ class Ability {
 
   bool firesOn(Phase phase, ChainTally tally) => when.met(phase, tally);
 
-  String describe(Phase phase) => '${when.describe(phase)}${then.describe()}';
+  /// 「〜な鎖は威力 +1」のように、条件と効き目を繋いだ1文。
+  /// [Always] のように鎖を見ない条件は空文字を返すので、「鎖」も付けない。
+  String describe(Phase phase) {
+    final clause = when.describe(phase);
+    final boon = then.describe();
+    return clause.isEmpty ? boon : '$clause鎖$boon';
+  }
 }
 
 enum MageKind {
@@ -279,7 +320,10 @@ class Mage {
     Phase.bolt,
     '雷の魔導士',
     '電',
-    Ability(ChainLength(stormChain), Strike(1)),
+    Ability(
+      Every([DistinctPhases(stormPhases), ChainLength(stormChain)]),
+      Strike(1),
+    ),
   );
   static const aegis = Mage._(
     MageKind.aegis,
@@ -330,6 +374,14 @@ const int galeChain = 7;
 /// 「8枚つなぐ」は盤面を見ながら数えられるのに対し、「威力 8」は補正が
 /// 乗るかどうかを頭の中で足さないと分からず、狙って出せない。
 const int stormChain = 8;
+
+/// 雷が要る相の数。**3色で編成したときにしか落ちない。**
+///
+/// 3色の盤面は継ぎ先が薄くなるぶん鎖が短くなる（最長の中央値 9・8枚以上
+/// 77%。2色なら 11・89%。README 第7段階）。それまで3色にする理由がどこにも
+/// 無かったので、いちばん派手な能力をここに結んだ。雷は「3色にしてでも
+/// 8枚編む」ための報酬で、2色の編成に入れても一度も落ちない。
+const int stormPhases = 3;
 
 /// 階層を制圧したときに選ぶ祝福。
 ///

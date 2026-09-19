@@ -70,6 +70,8 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `SamePhase(n)` | 自分の相を n 枚以上継いだ |
 | `ChainLength(n)` | n 枚以上継いだ（相は問わない） |
 | `StartsWith()` | 自分の相から継ぎ始めた |
+| `DistinctPhases(n)` | n 種類以上の相を含む（＝盤面が n 色）|
+| `Every([...])` | 並べた条件を全部満たす |
 | `Always()` | 鎖を見ない。連れているだけで効く |
 
 | 効き目 | 集計先 |

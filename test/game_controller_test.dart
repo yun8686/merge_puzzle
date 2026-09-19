@@ -44,6 +44,45 @@ const emberPair = [Mage.ember, Mage.rime];
 GameController emberController([int seed = 3]) =>
     GameController(rng: Random(seed), roster: emberPair);
 
+/// 3相の一党。雷のように3色の盤面を要る能力は、これで確かめる。
+const threePhases = [Mage.squireHeat, Mage.squireCold, Mage.squireBolt];
+
+GameController prismController([int seed = 3]) =>
+    GameController(rng: Random(seed), roster: threePhases);
+
+/// 盤面を3相の斜め縞に塗る。相は (r + c) を 3 で割った余りで決まる。
+///
+/// 3相の決まりは「直前2枚と違う」なので、市松では繋がらない。この縞なら
+/// 右・下へ1歩ずつ進むかぎり相が 熱→冷→雷→熱… と回り、条件を満たし続ける。
+/// 折り返し（右に進んでから左に戻る）は余りが 0 に戻って繋がらないので、
+/// 曲がるときは下へ降りること。
+void paintPrism(Board board, {Cell? foe, int ward = 8, int hp = 1}) {
+  var id = 0;
+  for (var r = 0; r < board.rows; r++) {
+    for (var c = 0; c < board.cols; c++) {
+      final isHere = foe != null && foe.row == r && foe.col == c;
+      board.grid[r][c] = Tile(
+        id: id++,
+        phase: Phase.values[(r + c) % 3],
+        ward: isHere ? ward : null,
+        hp: isHere ? hp : 1,
+      );
+    }
+  }
+}
+
+/// 3相の盤面で8枚継ぐ道。上段を右へ6枚、そこから下へ2枚。
+const boltPath = [
+  Cell(0, 0),
+  Cell(0, 1),
+  Cell(0, 2),
+  Cell(0, 3),
+  Cell(0, 4),
+  Cell(0, 5),
+  Cell(1, 5),
+  Cell(2, 5),
+];
+
 /// なぞって離す。
 void trace(GameController controller, List<Cell> path) {
   controller.beginPath(path.first);
@@ -364,23 +403,13 @@ void main() {
       expect(party.hp, Party.startingHp);
     });
 
-    test('雷は8枚継いだ鎖で階層の敵すべてを削る', () {
-      final controller = newController();
+    test('雷は3色の盤面で8枚継いだ鎖で階層の敵すべてを削る', () {
+      final controller = prismController();
       controller.party.members.add(Mage.storm);
       // 守り8の敵を、鎖から離れた隅に置く。
-      paintCheckerboard(controller.board, foe: const Cell(7, 5));
+      paintPrism(controller.board, foe: const Cell(7, 5));
 
-      // 上段6枚＋下段2枚で8枚。
-      trace(controller, const [
-        Cell(0, 0),
-        Cell(0, 1),
-        Cell(0, 2),
-        Cell(0, 3),
-        Cell(0, 4),
-        Cell(0, 5),
-        Cell(1, 5),
-        Cell(1, 4),
-      ]);
+      trace(controller, boltPath);
       expect(controller.pathLength, stormChain);
 
       final result = controller.commitPath();
@@ -394,21 +423,12 @@ void main() {
     });
 
     test('討ち取れなかった敵にも雷は落ちたことになる', () {
-      final controller = newController();
+      final controller = prismController();
       controller.party.members.add(Mage.storm);
       // 体力2の敵。雷の1ダメージでは討てず、傷ついて残る。
-      paintCheckerboard(controller.board, foe: const Cell(7, 5), hp: 2);
+      paintPrism(controller.board, foe: const Cell(7, 5), hp: 2);
 
-      trace(controller, const [
-        Cell(0, 0),
-        Cell(0, 1),
-        Cell(0, 2),
-        Cell(0, 3),
-        Cell(0, 4),
-        Cell(0, 5),
-        Cell(1, 5),
-        Cell(1, 4),
-      ]);
+      trace(controller, boltPath);
       final result = controller.commitPath();
 
       // 討ててはいないので bolt は空。それでも当たってはいるので、
@@ -419,11 +439,33 @@ void main() {
     });
 
     test('焔の補正で威力8に届いても、7枚では雷は落ちない', () {
-      final controller = emberController();
+      // 3色の盤面。雷の相の条件は満たしているので、枚数だけが争点になる。
+      final controller = GameController(
+        rng: Random(3),
+        roster: const [Mage.ember, Mage.squireCold, Mage.squireBolt],
+      );
+      controller.party.members.add(Mage.storm);
+      paintPrism(controller.board, foe: const Cell(7, 5));
+
+      // 7枚。熱が3枚あるので焔の補正が乗り、威力は8になる。
+      trace(controller, boltPath.take(stormChain - 1).toList());
+      expect(controller.pathLength, stormChain - 1);
+      expect(controller.power, stormChain);
+
+      // 威力は届いているが、見ているのは枚数なので落ちない。
+      final result = controller.commitPath();
+      expect(result!.bolt, isEmpty);
+      expect(result.boltCells, isEmpty);
+      expect(controller.board.remainingFoes, 1);
+    });
+
+    test('2色の盤面では、何枚継いでも雷は落ちない', () {
+      // 3色にしてでも8枚編む、というのが雷を入れる理由。2色の編成では
+      // 連れていても一度も落ちない。
+      final controller = newController();
       controller.party.members.add(Mage.storm);
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
-      // 7枚。熱が4枚あるので焔の補正が乗り、威力は8になる。
       trace(controller, const [
         Cell(0, 0),
         Cell(0, 1),
@@ -432,11 +474,11 @@ void main() {
         Cell(0, 4),
         Cell(0, 5),
         Cell(1, 5),
+        Cell(1, 4),
+        Cell(1, 3),
       ]);
-      expect(controller.pathLength, stormChain - 1);
-      expect(controller.power, stormChain);
+      expect(controller.pathLength, greaterThanOrEqualTo(stormChain));
 
-      // 威力は届いているが、見ているのは枚数なので落ちない。
       final result = controller.commitPath();
       expect(result!.bolt, isEmpty);
       expect(result.boltCells, isEmpty);
