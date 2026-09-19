@@ -69,16 +69,23 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 結局は人が見ないと良し悪しが決まらない。
 
 頼まれたときだけ開く。そのときのために、分かっていることを残しておく。
+**以下はどれもこの実行環境や Flutter の仕様の話で、アプリの不具合ではない。**
 
 - 実行環境のネットワークポリシーが `yun8686.github.io` を遮断していることがある
   （CONNECT に 403）。その場合は回避策を探さず、確認できない旨を報告すること。
-- 通っていても Playwright の Chromium はプロキシの CA を読まないので、公開ページに
-  直接は繋がらない（`ERR_CERT_AUTHORITY_INVALID`）。`curl` でビルド成果物を手元に
-  落として `http-server` で配ると、TLS を切らずに開ける。アセットは `assets/` の下に
-  もう一段 `assets/` が付く（`assets/assets/fonts/...`）。
-- `flutter_service_worker.js` は「更新あり」でページを勝手に再読み込みして進行を
-  巻き戻すので、確認中は握り潰すこと。日本語は CanvasKit が gstatic から取りに行くので、
-  遮断されている環境では手元の IPA ゴシックを返してやる。
+- 通っていても Playwright の Chromium は**エージェント用プロキシの CA を読まない**ので、
+  公開ページに直接は繋がらない（`ERR_CERT_AUTHORITY_INVALID`）。TLS の検証を切るのでは
+  なく、`curl` でビルド成果物を手元に落として `http-server` で配れば開ける。利用者の
+  ブラウザには関係しない話なので、アプリ側で直すものは何も無い。
+- 手元に落とすとき、アセットは `assets/` の下にもう一段 `assets/` が付く
+  （`assets/assets/fonts/...`）。`pubspec.yaml` で `assets/fonts/...` と宣言したキーが
+  web のアセットバンドル直下にそのまま置かれるためで、これも Flutter の仕様。
+- 日本語は CanvasKit が gstatic から取りに行くので、遮断されている環境では
+  `page.route` で手元の IPA ゴシックを返してやる。
+- **Service Worker はページを勝手に再読み込みしない。** `flutter.js` のローダーは登録して
+  有効化を待つだけで `location.reload` を持たない（45秒観察して document の読み込みは
+  1回、ページに置いた目印も残ることを確認済み）。握り潰す必要は無い。
+  古い版がキャッシュから出ることはあるが、それは別の話で README に書いてある。
 - CanvasKit 描画なので `page.screenshot()` は1枚2秒以上かかり、数百 ms の演出には
   間に合わない。Playwright の `recordVideo` で録画して、ffmpeg でフレームを抜くこと。
 
