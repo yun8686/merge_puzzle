@@ -5,6 +5,7 @@ import 'package:parity_chain/game/board.dart';
 import 'package:parity_chain/game/dungeon.dart';
 import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
+import 'package:parity_chain/game/phase.dart';
 
 /// 盤面を奇数・偶数の市松に塗り直す。どの方向にも繋がる状態になる。
 /// [foe] を指定すると、そのマスだけ敵にする。
@@ -20,7 +21,7 @@ void paintCheckerboard(
       final isHere = foe != null && foe.row == r && foe.col == c;
       board.grid[r][c] = Tile(
         id: id++,
-        isOdd: (r + c).isEven,
+        phase: (r + c).isEven ? Phase.heat : Phase.cold,
         ward: isHere ? ward : null,
         hp: isHere ? hp : 1,
       );
@@ -29,7 +30,12 @@ void paintCheckerboard(
 }
 
 GameController newController([int seed = 3]) =>
-    GameController(createBoard: () => Board(rng: Random(seed)));
+    GameController(rng: Random(seed), roster: twoPhases);
+
+/// 熱と冷の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
+/// 相を入れる前の盤面と規則も手触りも変わらない。市松の盤面を
+/// 決め打ちで置くテストは、この2相を前提にしている。
+const twoPhases = [Mage.squireHeat, Mage.squireCold];
 
 /// なぞって離す。
 void trace(GameController controller, List<Cell> path) {
@@ -523,7 +529,7 @@ void main() {
       for (final dungeon in Dungeons.all) {
         for (var floor = 1; floor <= dungeon.depth; floor++) {
           final controller = GameController(
-            createBoard: () => Board(rng: Random(floor)),
+            rng: Random(floor),
             dungeon: dungeon,
             startFloor: floor,
           );
@@ -558,7 +564,8 @@ void main() {
 
     test('最下層を制圧すると踏破になる', () {
       final controller = GameController(
-        createBoard: () => Board(rng: Random(2)),
+        rng: Random(2),
+        roster: twoPhases,
         startFloor: Dungeons.all.first.depth,
       );
       expect(controller.isLastFloor, isTrue);
@@ -586,7 +593,8 @@ void main() {
     test('最下層では次の階層に進めない', () {
       final dungeon = Dungeons.all.first;
       final controller = GameController(
-        createBoard: () => Board(rng: Random(2)),
+        rng: Random(2),
+        roster: twoPhases,
         startFloor: dungeon.depth,
       );
       controller.nextFloor(Blessing.vigor);
@@ -610,7 +618,7 @@ void main() {
 
     test('連れていく顔ぶれは入り直しても保たれる', () {
       final controller = GameController(
-        createBoard: () => Board(rng: Random(4)),
+        rng: Random(4),
         roster: const [Mage.ember, Mage.storm],
       );
       expect(controller.party.members, [Mage.ember, Mage.storm]);
@@ -638,11 +646,11 @@ void main() {
     var id = 0;
     for (var r = 0; r < board.rows; r++) {
       for (var c = 0; c < board.cols; c++) {
-        board.grid[r][c] = Tile(id: id++, isOdd: true);
+        board.grid[r][c] = Tile(id: id++, phase: Phase.heat);
       }
     }
     // 敵を1体残しておく（制圧扱いにならないように）。
-    board.grid[7][5] = Tile(id: id++, isOdd: true, ward: 8);
+    board.grid[7][5] = Tile(id: id++, phase: Phase.heat, ward: 8);
 
     expect(board.hasAnyChain(), isFalse);
 
@@ -654,10 +662,19 @@ void main() {
   });
 
   group('増えた魔導士', () {
-    GameController withRoster(List<Mage> roster) => GameController(
-      createBoard: () => Board(rng: Random(3)),
-      roster: roster,
-    );
+    /// 測りたい魔導士だけを連れた一党。
+    ///
+    /// 相が1つだけの編成は組めないので、足りなければ違う相の従者を足して
+    /// 2相にする。従者は能力を持たないので、測りたい補正には影響しない。
+    /// 2相なら決まりは「直前1枚と違う」＝交互で、市松の盤面がそのまま使える。
+    GameController withRoster(List<Mage> roster) {
+      final phases = roster.map((m) => m.phase).toSet();
+      final list = [...roster];
+      if (phases.length < 2) {
+        list.add(Mage.squires.firstWhere((m) => !phases.contains(m.phase)));
+      }
+      return GameController(rng: Random(3), roster: list);
+    }
 
     test('霜は冷から継ぎ始めた鎖にだけ乗る', () {
       final controller = withRoster(const [Mage.frost]);
@@ -772,8 +789,15 @@ void main() {
       expect(controller.party.hp, hpBefore - 4);
     });
 
-    test('名簿は7人で、全員に別の色がある', () {
-      expect(Mage.roster.length, 7);
+    test('名簿は従者3人と招ける7人で、印は全員ちがう', () {
+      expect(Mage.squires.length, 3);
+      expect(Mage.summonable.length, 7);
+      expect(Mage.roster.length, 10);
+      // 従者は相を1つずつ、重ならないように持つ。
+      expect(
+        Mage.squires.map((m) => m.phase).toSet().length,
+        Phase.values.length,
+      );
       expect(
         Mage.roster.map((m) => m.kind).toSet().length,
         Mage.roster.length,

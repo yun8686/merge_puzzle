@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/dungeon.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
+import '../game/phase.dart';
 import '../game/progress.dart';
 import 'foe_art.dart';
 import 'game_screen.dart';
@@ -736,6 +737,8 @@ class _PartyTab extends StatelessWidget {
               ],
             ],
           ),
+          const SizedBox(height: 12),
+          _PhaseNote(phases: progress.partyPhases),
           const SizedBox(height: 22),
           const _SectionLabel(label: '名簿'),
           GridView.count(
@@ -751,12 +754,74 @@ class _PartyTab extends StatelessWidget {
                   mage: mage,
                   owned: progress.owned.contains(mage.kind),
                   inParty: progress.party.contains(mage.kind),
-                  full: progress.party.length >= Progress.partySlots,
+                  // 押しても動かない札は沈める。枠が埋まっていて入れない人と、
+                  // 外すと盤面が1色になってしまう人。
+                  stuck: progress.party.contains(mage.kind)
+                      ? !progress.canDrop(mage.kind)
+                      : progress.party.length >= Progress.partySlots,
                   onTap: () => onToggle(mage.kind),
                 ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 盤面に敷かれる相。編成がそのまま盤面の色になることを、ここで見せる。
+///
+/// **相は2種類以上でなければならない。** 同じ相は続けて継げないので、
+/// 1色の盤面では鎖が1枚も編めない。だから最後の1相は外せない。
+class _PhaseNote extends StatelessWidget {
+  const _PhaseNote({required this.phases});
+
+  final List<Phase> phases;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
+        child: Row(
+          children: [
+            Text('盤面の相', style: AppFont.label(9)),
+            const SizedBox(width: 12),
+            for (final phase in phases) ...[
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: Palette.gradientFor(phase),
+                ),
+                child: Text(
+                  phase.label,
+                  style: const TextStyle(
+                    color: Palette.background,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+            const Spacer(),
+            Text(
+              phases.length < Progress.minPhases
+                  ? '相が足りない'
+                  : '${phases.length} 色',
+              style: AppFont.number(
+                12,
+                color: phases.length < Progress.minPhases
+                    ? Palette.danger
+                    : Palette.textDim,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -808,7 +873,7 @@ class _MageCard extends StatelessWidget {
     required this.mage,
     required this.owned,
     required this.inParty,
-    required this.full,
+    required this.stuck,
     required this.onTap,
   });
 
@@ -816,15 +881,15 @@ class _MageCard extends StatelessWidget {
   final bool owned;
   final bool inParty;
 
-  /// 枠が埋まっているか。埋まっていて外にいる人は押しても入らない。
-  final bool full;
+  /// 押しても編成が動かないか。
+  final bool stuck;
 
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final tint = Palette.mageColor(mage.kind);
-    final dim = !owned || (!inParty && full);
+    final dim = !owned || stuck;
     return Opacity(
       opacity: dim ? 0.42 : 1,
       child: DecoratedBox(

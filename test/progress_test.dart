@@ -2,13 +2,16 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/party.dart';
+import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/game/progress.dart';
 
 void main() {
-  test('始まりは焔ひとりで、魔晶は無い', () {
+  test('始まりは相を1つずつ持つ従者3人で、魔晶は無い', () {
     final progress = Progress();
-    expect(progress.owned, {MageKind.ember});
-    expect(progress.party, [MageKind.ember]);
+    expect(progress.owned, {for (final m in Mage.squires) m.kind});
+    expect(progress.party, [for (final m in Mage.squires) m.kind]);
+    expect(progress.partyPhases, Phase.values);
+    expect(progress.partyIsValid, isTrue);
     expect(progress.shards, 0);
     expect(progress.canRoll, isFalse);
   });
@@ -31,8 +34,12 @@ void main() {
   test('壊れた保存は捨てて、まっさらな記録になる', () {
     for (final raw in [null, '', 'not json', '[1,2,3]', '{"owned":5}']) {
       final progress = Progress.decode(raw);
-      expect(progress.owned, {MageKind.ember}, reason: raw ?? 'null');
-      expect(progress.party, [MageKind.ember]);
+      expect(
+        progress.owned,
+        containsAll([for (final m in Mage.squires) m.kind]),
+        reason: raw ?? 'null',
+      );
+      expect(progress.partyIsValid, isTrue);
       expect(progress.shards, 0);
     }
   });
@@ -41,17 +48,29 @@ void main() {
     final progress = Progress.decode(
       '{"owned":["ember"],"party":["storm","ember","ember"],"shards":-5}',
     );
-    expect(progress.party, [MageKind.ember], reason: '所持していない storm は落ちる');
+    expect(progress.party, contains(MageKind.ember));
+    expect(progress.party, isNot(contains(MageKind.storm)), reason: '未所持');
+    expect(progress.party.toSet().length, progress.party.length, reason: '重複しない');
     expect(progress.shards, 0, reason: '負の魔晶は 0 に丸める');
+  });
+
+  test('相が1種類しか無い編成は、読むときに直される', () {
+    // 熱の魔導士だけを並べた記録。このままでは鎖が1枚も編めない。
+    final progress = Progress.decode(
+      '{"owned":["ember","blaze"],"party":["ember","blaze"]}',
+    );
+    expect(progress.partyIsValid, isTrue);
+    expect(progress.partyPhases.length, greaterThanOrEqualTo(2));
   });
 
   test('知らない名前が入っていても落ちない', () {
     final progress = Progress.decode(
       '{"owned":["ember","ghost"],"cleared":["nowhere",7],"party":["ghost"]}',
     );
-    expect(progress.owned, {MageKind.ember});
+    expect(progress.owned, contains(MageKind.ember));
+    expect(progress.owned, containsAll([for (final m in Mage.squires) m.kind]));
     expect(progress.cleared, {'nowhere'});
-    expect(progress.party, [MageKind.ember]);
+    expect(progress.partyIsValid, isTrue);
   });
 
   group('魔晶', () {
@@ -89,11 +108,9 @@ void main() {
       final mage = progress.roll(Random(1));
 
       expect(mage, isNotNull);
-      expect(mage!.kind, isNot(MageKind.ember), reason: '未所持からしか出ない');
-      expect(progress.owned, contains(mage.kind));
+      expect(Mage.summonable, contains(mage), reason: '従者は引かれない');
+      expect(progress.owned, contains(mage!.kind));
       expect(progress.shards, 0);
-      // 枠が空いていればそのまま編成に入る。
-      expect(progress.party, contains(mage.kind));
     });
 
     test('全員揃えば引けなくなる', () {
@@ -114,17 +131,15 @@ void main() {
         progress.roll(rng);
       }
       expect(progress.owned.length, Mage.roster.length);
+      expect(progress.unowned, isEmpty);
     });
 
     test('枠が埋まっていれば、引いた魔導士は編成に入らない', () {
+      // 始まりの編成で既に3枠とも埋まっている。
       final progress = Progress(shards: Progress.gachaCost * 10);
-      final rng = Random(3);
-      while (progress.party.length < Progress.partySlots && progress.canRoll) {
-        progress.roll(rng);
-      }
       expect(progress.party.length, Progress.partySlots);
 
-      final mage = progress.roll(rng);
+      final mage = progress.roll(Random(3));
       expect(mage, isNotNull);
       expect(progress.party.length, Progress.partySlots);
       expect(progress.party, isNot(contains(mage!.kind)));
@@ -132,12 +147,8 @@ void main() {
   });
 
   group('編成', () {
-    test('枠のぶんまで入れられ、溢れたら入らない', () {
-      final progress = Progress(
-        owned: {for (final m in Mage.roster) m.kind},
-      );
-      progress.toggleParty(MageKind.rime);
-      progress.toggleParty(MageKind.storm);
+    test('枠が埋まっていれば入らない', () {
+      final progress = Progress(owned: {for (final m in Mage.roster) m.kind});
       expect(progress.party.length, Progress.partySlots);
 
       progress.toggleParty(MageKind.gale);
@@ -147,23 +158,43 @@ void main() {
 
     test('入っている人をもう一度押すと外れる', () {
       final progress = Progress(
-        owned: {MageKind.ember, MageKind.rime},
-        party: [MageKind.ember, MageKind.rime],
+        owned: {MageKind.ember, MageKind.rime, MageKind.storm},
+        party: [MageKind.ember, MageKind.rime, MageKind.storm],
       );
+      // 熱・冷・雷。冷を外しても熱と雷が残るので外せる。
       progress.toggleParty(MageKind.rime);
-      expect(progress.party, [MageKind.ember]);
+      expect(progress.party, [MageKind.ember, MageKind.storm]);
+    });
+
+    test('外すと1色になる人は外せない', () {
+      final progress = Progress(
+        owned: {MageKind.ember, MageKind.blaze, MageKind.storm},
+        party: [MageKind.ember, MageKind.blaze, MageKind.storm],
+      );
+      // 焔と烈火はどちらも熱。雷を外すと熱だけになるので、外せない。
+      expect(progress.canDrop(MageKind.storm), isFalse);
+      progress.toggleParty(MageKind.storm);
+      expect(progress.party, contains(MageKind.storm));
+
+      // 熱が2人居るので、片方は外してよい。
+      expect(progress.canDrop(MageKind.blaze), isTrue);
+      progress.toggleParty(MageKind.blaze);
+      expect(progress.party, [MageKind.ember, MageKind.storm]);
     });
 
     test('最後の1人は外せない', () {
-      final progress = Progress();
+      final progress = Progress(
+        owned: {MageKind.ember, MageKind.storm},
+        party: [MageKind.ember],
+      );
       progress.toggleParty(MageKind.ember);
       expect(progress.party, [MageKind.ember]);
     });
 
     test('持っていない魔導士は編成に入らない', () {
-      final progress = Progress();
+      final progress = Progress(party: [MageKind.squireHeat]);
       progress.toggleParty(MageKind.storm);
-      expect(progress.party, [MageKind.ember]);
+      expect(progress.party, [MageKind.squireHeat]);
     });
 
     test('編成から一党の顔ぶれが出る', () {
@@ -172,13 +203,14 @@ void main() {
         party: [MageKind.storm, MageKind.ember],
       );
       expect(progress.partyMages, [Mage.storm, Mage.ember]);
+      expect(progress.partyPhases, [Phase.bolt, Phase.heat]);
     });
   });
 
   test('手元の箱は書いたものをそのまま読み直す', () async {
     final store = MemoryProgressStore();
     final progress = await store.load();
-    expect(progress.owned, {MageKind.ember});
+    expect(progress.owned, {for (final m in Mage.squires) m.kind});
 
     progress.shards = 42;
     progress.owned.add(MageKind.aegis);
@@ -186,6 +218,6 @@ void main() {
 
     final back = await store.load();
     expect(back.shards, 42);
-    expect(back.owned, {MageKind.ember, MageKind.aegis});
+    expect(back.owned, contains(MageKind.aegis));
   });
 }

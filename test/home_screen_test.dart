@@ -57,9 +57,12 @@ void main() {
     await openBase(tester);
     await goTab(tester, '一党');
 
-    expect(find.text(Mage.ember.name), findsOneWidget);
+    // 始まりは従者3人だけ。招ける7人は伏せてある。
+    for (final squire in Mage.squires) {
+      expect(find.text(squire.name), findsOneWidget, reason: squire.name);
+    }
     expect(find.text(Mage.storm.name), findsNothing);
-    expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 1));
+    expect(find.text('未所持'), findsNWidgets(Mage.summonable.length));
     expect(find.text('名簿'), findsOneWidget);
   });
 
@@ -100,7 +103,7 @@ void main() {
 
       await tapAt(tester, find.text('魔晶が足りない'));
       await goTab(tester, '一党');
-      expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 1));
+      expect(find.text('未所持'), findsNWidgets(Mage.summonable.length));
     });
 
     testWidgets('引くと魔導士が増えて、記録に残る', (tester) async {
@@ -116,12 +119,12 @@ void main() {
       expect(find.text('直前の招き'), findsOneWidget);
 
       final saved = await store.load();
-      expect(saved.owned.length, 2);
+      expect(saved.owned.length, Mage.squires.length + 1);
       expect(saved.shards, 0);
 
       // 名簿の伏せ札が1つ減っている。
       await goTab(tester, '一党');
-      expect(find.text('未所持'), findsNWidgets(Mage.roster.length - 2));
+      expect(find.text('未所持'), findsNWidgets(Mage.summonable.length - 1));
     });
 
     testWidgets('全員揃えば引けなくなる', (tester) async {
@@ -145,47 +148,50 @@ void main() {
       final store = await openBase(
         tester,
         progress: Progress(
-          owned: {MageKind.ember, MageKind.storm},
-          party: [MageKind.ember],
+          owned: {MageKind.storm},
+          party: [MageKind.squireHeat, MageKind.squireCold],
         ),
       );
       await goTab(tester, '一党');
-      expect(find.text('1 / ${Progress.partySlots}'), findsOneWidget);
+      expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
+
+      await tapAt(tester, find.text(Mage.storm.name));
+      expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
+      expect((await store.load()).party, contains(MageKind.storm));
 
       await tapAt(tester, find.text(Mage.storm.name));
       expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
-      expect((await store.load()).party, [MageKind.ember, MageKind.storm]);
-
-      await tapAt(tester, find.text(Mage.storm.name));
-      expect(find.text('1 / ${Progress.partySlots}'), findsOneWidget);
-      expect((await store.load()).party, [MageKind.ember]);
+      expect((await store.load()).party, isNot(contains(MageKind.storm)));
     });
 
     testWidgets('枠が埋まっていれば入らない', (tester) async {
-      await openBase(
-        tester,
-        progress: Progress(
-          owned: {
-            MageKind.ember,
-            MageKind.rime,
-            MageKind.storm,
-            MageKind.gale,
-          },
-          party: [MageKind.ember, MageKind.rime, MageKind.storm],
-        ),
-      );
+      await openBase(tester, progress: Progress(owned: {MageKind.gale}));
       await goTab(tester, '一党');
+      // 始まりの編成で既に3枠とも埋まっている。
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, find.text(Mage.gale.name));
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
     });
 
-    testWidgets('空いた枠は空きとして見える', (tester) async {
-      await openBase(tester);
+    testWidgets('外すと1色になる人は外せない', (tester) async {
+      await openBase(
+        tester,
+        progress: Progress(
+          owned: {MageKind.ember, MageKind.blaze},
+          // 焔と烈火はどちらも熱。雷の従者が抜けると1色になる。
+          party: [MageKind.ember, MageKind.blaze, MageKind.squireBolt],
+        ),
+      );
       await goTab(tester, '一党');
-      // 焔ひとりなので、3枠のうち2つが空き。
-      expect(find.text('空き'), findsNWidgets(Progress.partySlots - 1));
+      expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
+
+      await tapAt(tester, find.text(Mage.squireBolt.name));
+      expect(
+        find.text('3 / ${Progress.partySlots}'),
+        findsOneWidget,
+        reason: '1色になるので外せない',
+      );
     });
   });
 }

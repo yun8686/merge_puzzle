@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'party.dart';
+import 'phase.dart';
 
 /// ダンジョンをまたいで残る記録。所持している魔導士・踏破したダンジョン・
 /// 魔晶・いまの編成。**これが唯一の永続状態**で、盤面も一党も持ち越さない。
@@ -14,9 +15,13 @@ class Progress {
     Set<String>? cleared,
     List<MageKind>? party,
     this.shards = 0,
-  }) : owned = owned ?? <MageKind>{MageKind.ember},
+  }) : // 従者は常に居る。ここが欠けると編成が組めなくなる。
+       owned = <MageKind>{
+         ...?owned,
+         for (final m in Mage.squires) m.kind,
+       },
        cleared = cleared ?? <String>{},
-       party = party ?? <MageKind>[MageKind.ember];
+       party = party ?? <MageKind>[for (final m in Mage.squires) m.kind];
 
   /// 連れていける人数。ガチャで増えても、同時に出せるのはここまで。
   static const int partySlots = 3;
@@ -30,7 +35,7 @@ class Progress {
   /// 2回目以降の踏破。周回しても増えはするが、初回ほどではない。
   static const int repeatClearReward = 3;
 
-  /// 所持している魔導士。始まりは焔ひとり。
+  /// 所持している魔導士。始まりは相を1つずつ持つ従者3人。
   final Set<MageKind> owned;
 
   /// 踏破したダンジョンの id。
@@ -43,8 +48,9 @@ class Progress {
   int shards;
 
   /// まだ持っていない魔導士。ガチャはここから引く。
+  /// 従者は最初から居るので、引く対象は [Mage.summonable] だけ。
   List<Mage> get unowned =>
-      [for (final m in Mage.roster) if (!owned.contains(m.kind)) m];
+      [for (final m in Mage.summonable) if (!owned.contains(m.kind)) m];
 
   /// 引ける状態か。値段が足りていて、まだ引く相手が居ること。
   bool get canRoll => shards >= gachaCost && unowned.isNotEmpty;
@@ -93,12 +99,45 @@ class Progress {
     return mage;
   }
 
+  /// 連れていく相。盤面に敷かれる色。
+  List<Phase> get partyPhases {
+    final seen = <Phase>[];
+    for (final mage in partyMages) {
+      if (!seen.contains(mage.phase)) seen.add(mage.phase);
+    }
+    return seen;
+  }
+
+  /// 編成として成り立っているか。
+  ///
+  /// **相が1種類だけの編成は組めない。** 同じ相は続けて継げないので、
+  /// 1色の盤面では鎖が1枚も編めず、ダンジョンに入った瞬間に手詰まりになる。
+  /// 枠の数や人数ではなく、ここだけが編成の縛り。
+  static const int minPhases = 2;
+
+  bool get partyIsValid => partyPhases.length >= minPhases;
+
+  /// [kind] を編成から外せるか。外した結果が1色になるなら外せない。
+  bool canDrop(MageKind kind) {
+    if (!party.contains(kind)) return false;
+    final rest = [
+      for (final k in party)
+        if (k != kind) k,
+    ];
+    if (rest.isEmpty) return false;
+    final seen = <Phase>{};
+    for (final k in rest) {
+      seen.add(Mage.of(k).phase);
+    }
+    return seen.length >= minPhases;
+  }
+
   /// 編成に入れる／外す。入っていれば外し、入っていなければ入れる。
-  /// 枠が埋まっているときは何もしない。最後の1人は外せない。
+  /// 枠が埋まっているとき、外すと1色になってしまうときは何もしない。
   void toggleParty(MageKind kind) {
     if (!owned.contains(kind)) return;
     if (party.contains(kind)) {
-      if (party.length <= 1) return;
+      if (!canDrop(kind)) return;
       party.remove(kind);
       return;
     }
@@ -115,7 +154,8 @@ class Progress {
 
   static Progress fromJson(Map<String, Object?> json) {
     final owned = _kinds(json['owned']).toSet();
-    if (owned.isEmpty) owned.add(MageKind.ember);
+    // 従者は常に居る。ここを空にすると編成が組めなくなる。
+    owned.addAll([for (final m in Mage.squires) m.kind]);
     // 持っていない魔導士と重複は落とす。保存が古くても編成が壊れないように。
     final party = <MageKind>[];
     for (final kind in _kinds(json['party'])) {
@@ -123,7 +163,7 @@ class Progress {
       if (party.length >= partySlots) break;
       party.add(kind);
     }
-    if (party.isEmpty) party.add(owned.first);
+    _repair(party, owned);
     return Progress(
       owned: owned,
       cleared: {
@@ -136,6 +176,32 @@ class Progress {
         _ => 0,
       },
     );
+  }
+
+  /// 読んだ編成を、成り立つ形に直す。
+  ///
+  /// 相が1種類しか無い記録（相を入れる前に保存されたもの、手で書き換えた
+  /// もの）でも拠点が開けるように、足りない相を所持している中から補う。
+  /// 補えなければ従者を足す。従者は必ず持っているので、必ず直る。
+  static void _repair(List<MageKind> party, Set<MageKind> owned) {
+    Set<Phase> phasesOf(List<MageKind> ks) => {
+      for (final k in ks) Mage.of(k).phase,
+    };
+    if (party.isNotEmpty && phasesOf(party).length >= minPhases) return;
+    for (final mage in [...Mage.squires, ...Mage.summonable]) {
+      if (party.length >= partySlots) break;
+      if (phasesOf(party).length >= minPhases && party.isNotEmpty) break;
+      if (!owned.contains(mage.kind) || party.contains(mage.kind)) continue;
+      if (party.isNotEmpty && phasesOf(party).contains(mage.phase)) continue;
+      party.add(mage.kind);
+    }
+    // それでも足りなければ、従者で埋める（従者は常に所持している扱い）。
+    for (final mage in Mage.squires) {
+      if (phasesOf(party).length >= minPhases) break;
+      if (party.contains(mage.kind)) continue;
+      owned.add(mage.kind);
+      party.add(mage.kind);
+    }
   }
 
   /// 保存の値は何が入っているか分からない。並びでなければ空として扱う。

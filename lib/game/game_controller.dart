@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import 'board.dart';
 import 'dungeon.dart';
+import 'phase.dart';
 import 'party.dart';
 
 /// 階層の決着。
@@ -21,18 +24,20 @@ enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 /// （制圧のたびの祝福）。誰を連れていくかは編成の側の判断に閉じている。
 class GameController extends ChangeNotifier {
   GameController({
-    Board Function()? createBoard,
+    Random? rng,
     Dungeon? dungeon,
     List<Mage>? roster,
     int startFloor = 1,
-  }) : _createBoard = createBoard ?? Board.new {
+  }) : _rng = rng ?? Random() {
     this.dungeon = dungeon ?? Dungeons.all.first;
-    _roster = List.of(roster ?? const <Mage>[Mage.ember]);
+    _roster = List.of(roster ?? Mage.squires);
     party = _freshParty();
     _startFloor(startFloor);
   }
 
-  final Board Function() _createBoard;
+  /// 盤面を作る乱数。階層ごとに作り直すが、種は持ち越すので
+  /// 同じ種を渡せば通しで同じ並びになる。
+  final Random _rng;
 
   late Board board;
 
@@ -91,7 +96,12 @@ class GameController extends ChangeNotifier {
 
   void _startFloor(int n) {
     floor = n.clamp(1, dungeon.depth);
-    board = _createBoard();
+    // 盤面に敷く相も比率も、連れてきた顔ぶれで決まる。
+    board = Board(
+      phases: party.phases,
+      weights: party.phaseWeights,
+      rng: _rng,
+    );
     board.buildStage(foes: dungeon.floorAt(floor).foes);
     movesLeft = dungeon.floorAt(floor).moveLimit;
     path.clear();
@@ -146,23 +156,16 @@ class GameController extends ChangeNotifier {
 
   /// なぞり中の鎖の戦果。魔導士に渡す。
   ChainTally get _tally {
-    var heat = 0;
-    var frost = 0;
+    final counts = <Phase, int>{};
     for (final c in path) {
       final t = board.tileAt(c);
       if (t == null) continue;
-      if (t.isOdd) {
-        heat++;
-      } else {
-        frost++;
-      }
+      counts[t.phase] = (counts[t.phase] ?? 0) + 1;
     }
     return ChainTally(
       length: path.length,
-      heat: heat,
-      frost: frost,
-      // 空のときの値は使われない。威力の表示は鎖が成立してからしか出ない。
-      startedHeat: path.isEmpty || (board.tileAt(path.first)?.isOdd ?? true),
+      counts: counts,
+      startPhase: path.isEmpty ? null : board.tileAt(path.first)?.phase,
     );
   }
 
@@ -227,7 +230,7 @@ class GameController extends ChangeNotifier {
   bool isCandidate(Cell c) {
     if (path.isEmpty || !acceptsInput) return false;
     if (path.contains(c)) return false;
-    return board.canExtend(path.last, c);
+    return board.canExtendPath(path, c);
   }
 
   void beginPath(Cell c) {
@@ -250,7 +253,7 @@ class GameController extends ChangeNotifier {
       return true;
     }
     if (path.contains(c)) return false;
-    if (!board.canExtend(path.last, c)) return false;
+    if (!board.canExtendPath(path, c)) return false;
     path.add(c);
     notifyListeners();
     return true;

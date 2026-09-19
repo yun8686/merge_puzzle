@@ -2,17 +2,23 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
+import 'package:parity_chain/game/phase.dart';
 
 /// 決め打ちの盤面を作る。
 ///
-///  - `'o'` / `'e'` … 奇数 / 偶数のマナ（数字は書かれていない）
+///  - `'o'` / `'e'` / `'b'` … 熱 / 冷 / 雷のマナ（数字は書かれていない）
 ///  - `'o5'` / `'e3'` … その守りを持つ敵。体力は 1
 ///  - `'o5:2'` … 守り 5・体力 2 の敵
 ///  - `'.'` … 空マス
 Board boardOf(List<List<String>> spec) {
+  // 記号に 'b' が出てくる盤面だけ、雷の相も入っているものとして組む。
+  final hasBolt = spec.any((row) => row.any((s) => s.startsWith('b')));
   final board = Board(
     rows: spec.length,
     cols: spec.first.length,
+    phases: hasBolt
+        ? const [Phase.heat, Phase.cold, Phase.bolt]
+        : const [Phase.heat, Phase.cold],
     rng: Random(1),
   );
   var id = 0;
@@ -27,7 +33,11 @@ Board boardOf(List<List<String>> spec) {
       final ward = parts.first.isEmpty ? null : int.parse(parts.first);
       board.grid[r][c] = Tile(
         id: id++,
-        isOdd: s[0] == 'o',
+        phase: switch (s[0]) {
+          'o' => Phase.heat,
+          'b' => Phase.bolt,
+          _ => Phase.cold,
+        },
         ward: ward,
         hp: parts.length > 1 ? int.parse(parts[1]) : 1,
       );
@@ -36,12 +46,19 @@ Board boardOf(List<List<String>> spec) {
   return board;
 }
 
-/// 盤面の偶奇を 'o' / 'e' / '.' で書き出す。重力の確認用。
+/// 盤面の相を 'o' / 'e' / 'b' / '.' で書き出す。重力の確認用。
 List<List<String>> dump(Board b) => [
   for (var r = 0; r < b.rows; r++)
     [
       for (var c = 0; c < b.cols; c++)
-        b.grid[r][c] == null ? '.' : (b.grid[r][c]!.isOdd ? 'o' : 'e'),
+        if (b.grid[r][c] == null)
+          '.'
+        else
+          switch (b.grid[r][c]!.phase) {
+            Phase.heat => 'o',
+            Phase.cold => 'e',
+            Phase.bolt => 'b',
+          },
     ],
 ];
 
@@ -53,20 +70,26 @@ void main() {
       ['o', 'e', 'o'],
     ]);
 
-    test('偶奇が交互で隣接していれば成立する', () {
+    test('相が交互で隣接していれば成立する', () {
       expect(
         board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]),
         isTrue,
       );
     });
 
-    test('同じ偶奇が隣り合っていても繋げない', () {
+    test('同じ相が隣り合っていても繋げない', () {
       final same = boardOf([
         ['o', 'o', 'e'],
         ['e', 'e', 'o'],
       ]);
-      expect(same.canExtend(const Cell(0, 0), const Cell(0, 1)), isFalse);
-      expect(same.canExtend(const Cell(1, 0), const Cell(1, 1)), isFalse);
+      expect(
+        same.canExtendPath(const [Cell(0, 0)], const Cell(0, 1)),
+        isFalse,
+      );
+      expect(
+        same.canExtendPath(const [Cell(1, 0)], const Cell(1, 1)),
+        isFalse,
+      );
       expect(
         same.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
         isFalse,
@@ -133,7 +156,7 @@ void main() {
     });
 
     test('守りを1上回るごとに1ダメージ', () {
-      final tile = Tile(id: 0, isOdd: true, ward: 5, hp: 3);
+      final tile = Tile(id: 0, phase: Phase.heat, ward: 5, hp: 3);
       expect(tile.damageFrom(4), 0);
       expect(tile.damageFrom(5), 1);
       expect(tile.damageFrom(7), 3);
@@ -209,7 +232,7 @@ void main() {
 
     test('体力1の敵は、体力を持たなかった頃と同じ挙動になる', () {
       for (var ward = Board.minWard; ward <= Board.maxWard; ward++) {
-        final tile = Tile(id: 0, isOdd: true, ward: ward);
+        final tile = Tile(id: 0, phase: Phase.heat, ward: ward);
         for (var power = 1; power <= 12; power++) {
           expect(
             tile.damageFrom(power) >= tile.hp,
@@ -298,7 +321,7 @@ void main() {
       expect(board.findPathThrough(const Cell(1, 1), 100), isEmpty);
     });
 
-    test('偶奇が一色の盤面では手が無い', () {
+    test('相が一色の盤面では手が無い', () {
       final stuck = boardOf([
         ['o', 'o', 'o'],
         ['o', 'o', 'o'],

@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'phase.dart';
+
 /// 盤面上の座標。row=0 が最上段。
 class Cell {
   const Cell(this.row, this.col);
@@ -29,14 +31,15 @@ class Cell {
 class Tile {
   const Tile({
     required this.id,
-    required this.isOdd,
+    required this.phase,
     this.ward,
     this.hp = 1,
     int? maxHp,
   }) : maxHp = maxHp ?? hp;
 
   final int id;
-  final bool isOdd;
+  /// このマスの相。同じ相は近くに二度継げない。
+  final Phase phase;
 
   /// 敵なら守り。マナのマスは null。
   final int? ward;
@@ -64,7 +67,7 @@ class Tile {
 
   /// ダメージを受けて残った姿。id を引き継ぐので演出は同じブロックとして追う。
   Tile hurt(int damage) =>
-      Tile(id: id, isOdd: isOdd, ward: ward, hp: hp - damage, maxHp: maxHp);
+      Tile(id: id, phase: phase, ward: ward, hp: hp - damage, maxHp: maxHp);
 }
 
 /// 階層に置く敵1体ぶんの指定。ダンジョンの階層を手で書くのに使う。
@@ -82,11 +85,12 @@ class FoeSpec {
 /// 鎖の外で討ち取られた敵。いまは雷の魔導士の追撃だけがこれを作る。
 /// 演出に要る情報しか持たない。
 class FoeFall {
-  const FoeFall({required this.cell, required this.ward, required this.isOdd});
+  const FoeFall({required this.cell, required this.ward, required this.phase});
 
   final Cell cell;
   final int ward;
-  final bool isOdd;
+  /// このマスの相。同じ相は近くに二度継げない。
+  final Phase phase;
 }
 
 /// なぞって消したときの結果。演出側はこれを見てエフェクトを出す。
@@ -96,7 +100,7 @@ class ClearResult {
     required this.cleared,
     required this.wards,
     required this.damages,
-    required this.isOdds,
+    required this.phases,
     required this.power,
     required this.felled,
     required this.gained,
@@ -119,8 +123,8 @@ class ClearResult {
   /// 0 なら弾かれている。
   final List<int> damages;
 
-  /// [cells] と同じ並びの偶奇。演出の色に使う。
-  final List<bool> isOdds;
+  /// [cells] と同じ並びの相。演出の色に使う。
+  final List<Phase> phases;
 
   /// この鎖の威力。枚数に魔導士の補正を足したもの。
   final int power;
@@ -151,7 +155,7 @@ class ClearResult {
     cleared: cleared,
     wards: wards,
     damages: damages,
-    isOdds: isOdds,
+    phases: phases,
     power: power,
     felled: felled + fallen.length,
     gained: gained,
@@ -163,12 +167,15 @@ class ClearResult {
 
 /// 盤面ロジック。UI から独立していてテスト可能。
 ///
-/// 世界観では熱の相 / 冷の相、敵、守り、威力と呼んでいるが、実装は偶奇のまま。
-/// ここは相の呼び名を持たず、[Tile.isOdd] と数だけで話す。
+/// 盤面に出る相は [phases] で決まる。編成に含まれる相だけが敷かれるので、
+/// 誰を連れていくかがそのまま盤面の色数になる。ここは相の意味を持たず、
+/// [Phase] の値と数だけで話す。
 ///
 /// ルール:
 ///  - 上下左右に隣接するブロックを辿ってパスを作る
-///  - 連続する2枚は必ず偶奇が交互になっていること
+///  - **[phases] の数ぶんの窓の中に、同じ相が二度現れてはいけない。**
+///    相が2つなら「交互」と同じ意味になる（それまでの盤面と規則は同じ）。
+///    3つなら「直前2枚と違う相」になる
 ///  - [minPathLength] 枚以上でチェイン成立
 ///  - パス上のマナのマスは必ず消える
 ///  - 敵には「威力 − 守り + 1」のダメージが通る。守り以下なら 0 で弾かれる。
@@ -180,10 +187,29 @@ class Board {
   Board({
     this.rows = 8,
     this.cols = 6,
-    this.oddChance = 0.65,
+    List<Phase>? phases,
+    List<int>? weights,
     Random? rng,
-  }) : _rng = rng ?? Random() {
+  }) : phases = List.unmodifiable(
+         phases == null || phases.isEmpty
+             ? const [Phase.heat, Phase.cold]
+             : phases,
+       ),
+       _weights = List.unmodifiable(
+         _fitWeights(phases, weights),
+       ),
+       _rng = rng ?? Random() {
     grid = List.generate(rows, (_) => List<Tile?>.filled(cols, null));
+  }
+
+  /// 補充の比率。渡されなければ均等。長さが合わなければ均等に倒す。
+  static List<int> _fitWeights(List<Phase>? phases, List<int>? weights) {
+    final n = phases == null || phases.isEmpty ? 2 : phases.length;
+    if (weights == null || weights.length != n) {
+      return List<int>.filled(n, 1);
+    }
+    // 0 や負の重みが混じると、その相が一切降ってこなくなって詰む。
+    return [for (final w in weights) w < 1 ? 1 : w];
   }
 
   /// チェイン成立に必要な最低枚数。
@@ -210,12 +236,20 @@ class Board {
   final int rows;
   final int cols;
 
-  /// 補充時に奇数が出る確率。
+  /// この盤面に出る相。編成から決まる。
+  final List<Phase> phases;
+
+  /// 補充の比率。編成の人数比を入れる。偏らせるほど、少ない側の相が
+  /// 「強い鎖を編むのに要る希少な資源」になる。相が2つ・2:1 のとき、
+  /// 偶奇だった頃の 65:35 とほぼ同じ手触りになる。
+  final List<int> _weights;
+
+  /// 同じ相を継げない範囲。相の数から決まる。
   ///
-  /// 合計値の条件が無くなったので、この値の影響は以前より小さい
-  /// （0.5 と 0.8 でクリア率の差は 6 ポイント程度）。偶奇バーの見た目と
-  /// 「偶数は貴重」という手触りを保つために 0.65 を据え置いている。
-  final double oddChance;
+  /// 相が2つなら1＝「直前1枚と違う」＝交互。3つなら2＝「直前2枚と違う」。
+  /// 素直に「隣と違えばよい」にすると、3つ相があればほぼ全部の盤面で
+  /// 12枚編めてしまい、希少な相のジレンマも雷の8枚条件も意味を失う。
+  int get window => phases.length < 2 ? 1 : phases.length - 1;
 
   final Random _rng;
   late final List<List<Tile?>> grid;
@@ -226,9 +260,19 @@ class Board {
     return grid[c.row][c.col];
   }
 
-  Tile _spawn([double? oddBias]) {
-    final bias = oddBias ?? oddChance;
-    return Tile(id: _nextId++, isOdd: _rng.nextDouble() < bias);
+  /// マナを1枚。[even] を立てると比率を無視して均等に引く。
+  Tile _spawn({bool even = false}) {
+    final weights = even ? List<int>.filled(phases.length, 1) : _weights;
+    var total = 0;
+    for (final w in weights) {
+      total += w;
+    }
+    var roll = _rng.nextInt(total);
+    for (var i = 0; i < phases.length; i++) {
+      roll -= weights[i];
+      if (roll < 0) return Tile(id: _nextId++, phase: phases[i]);
+    }
+    return Tile(id: _nextId++, phase: phases.last);
   }
 
   /// ステージを1つ作る。マナを敷いてから敵を置く。
@@ -270,25 +314,26 @@ class Board {
       final spec = foes[i];
       grid[cell.row][cell.col] = Tile(
         id: base.id,
-        isOdd: base.isOdd,
+        phase: base.phase,
         ward: spec.ward.clamp(minWard, maxWard),
         hp: spec.hp < 1 ? 1 : spec.hp,
       );
     }
   }
 
-  /// 初期盤面は偶奇を五分五分で敷く（開幕から詰んでいると理不尽なため）。
+  /// 初期盤面は相を均等に敷く（開幕から詰んでいると理不尽なため）。
+  /// 偏らせるのは補充のときだけ。
   void _fillInitial() {
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        grid[r][c] = _spawn(0.5);
+        grid[r][c] = _spawn(even: true);
       }
     }
     var guard = 0;
     while (!hasAnyChain() && guard++ < 50) {
       for (var r = 0; r < rows; r++) {
         for (var c = 0; c < cols; c++) {
-          grid[r][c] = _spawn(0.5);
+          grid[r][c] = _spawn(even: true);
         }
       }
     }
@@ -312,7 +357,7 @@ class Board {
       final room = ward >= maxWard - 1 ? 1 : hpCap;
       final hp = 1 + _rng.nextInt(room);
       grid[cell.row][cell.col] =
-          Tile(id: base.id, isOdd: base.isOdd, ward: ward, hp: hp);
+          Tile(id: base.id, phase: base.phase, ward: ward, hp: hp);
     }
   }
 
@@ -323,13 +368,31 @@ class Board {
     if (c.col < cols - 1) yield Cell(c.row, c.col + 1);
   }
 
-  /// [from] から [to] へ繋げられるか（隣接かつ偶奇が交互）。
-  bool canExtend(Cell from, Cell to) {
-    final a = tileAt(from);
-    final b = tileAt(to);
-    if (a == null || b == null) return false;
-    if ((from.row - to.row).abs() + (from.col - to.col).abs() != 1) return false;
-    return a.isOdd != b.isOdd;
+  bool _adjacent(Cell a, Cell b) =>
+      (a.row - b.row).abs() + (a.col - b.col).abs() == 1;
+
+  /// [path] の末尾に [to] を継げるか。隣接していて、[window] 枚ぶん
+  /// さかのぼった中に同じ相が無いこと。
+  bool canExtendPath(List<Cell> path, Cell to) {
+    if (path.isEmpty) return false;
+    if (!_adjacent(path.last, to)) return false;
+    return _fits(path, to, atFront: false);
+  }
+
+  /// [path] の端に [c] を足したとき、同じ相が窓の中に二度出ないか。
+  ///
+  /// 決まりは「窓の中に同じ相が二度現れない」で、前から見ても後ろから見ても
+  /// 同じことなので、パスの先頭に足すときも同じ判定で済む。
+  bool _fits(List<Cell> path, Cell c, {required bool atFront}) {
+    final t = tileAt(c);
+    if (t == null) return false;
+    final near = atFront
+        ? path.take(window)
+        : path.reversed.take(window);
+    for (final other in near) {
+      if (tileAt(other)?.phase == t.phase) return false;
+    }
+    return true;
   }
 
   /// 威力 [power] の鎖が [cell] に通すダメージ。マナのマスは 0。
@@ -355,7 +418,7 @@ class Board {
     return [for (final c in path) fells(c, p)];
   }
 
-  /// 隣接と偶奇だけを見た、パスとしての正しさ。
+  /// 隣接と相の決まりだけを見た、パスとしての正しさ。
   bool isConnected(List<Cell> path) {
     if (path.length < minPathLength) return false;
     final seen = <Cell>{};
@@ -363,8 +426,9 @@ class Board {
       if (tileAt(c) == null) return false;
       if (!seen.add(c)) return false;
     }
-    for (var i = 0; i + 1 < path.length; i++) {
-      if (!canExtend(path[i], path[i + 1])) return false;
+    for (var i = 1; i < path.length; i++) {
+      if (!_adjacent(path[i - 1], path[i])) return false;
+      if (!_fits(path.sublist(0, i), path[i], atFront: false)) return false;
     }
     return true;
   }
@@ -397,13 +461,13 @@ class Board {
     assert(isValidPath(path, power: p));
     final wards = <int?>[];
     final damages = <int>[];
-    final isOdds = <bool>[];
+    final tilePhases = <Phase>[];
     final cleared = <bool>[];
     var felled = 0;
     for (final cell in path) {
       final t = tileAt(cell)!;
       wards.add(t.ward);
-      isOdds.add(t.isOdd);
+      tilePhases.add(t.phase);
       if (!t.isFoe) {
         damages.add(0);
         cleared.add(true);
@@ -428,7 +492,7 @@ class Board {
       cleared: List.unmodifiable(cleared),
       wards: List.unmodifiable(wards),
       damages: List.unmodifiable(damages),
-      isOdds: List.unmodifiable(isOdds),
+      phases: List.unmodifiable(tilePhases),
       power: p,
       felled: felled,
       gained: scoreFor(p, felled),
@@ -447,7 +511,7 @@ class Board {
         if (damage >= t.hp) {
           grid[r][c] = null;
           fallen.add(
-            FoeFall(cell: Cell(r, c), ward: t.ward!, isOdd: t.isOdd),
+            FoeFall(cell: Cell(r, c), ward: t.ward!, phase: t.phase),
           );
         } else {
           grid[r][c] = t.hurt(damage);
@@ -523,48 +587,47 @@ class Board {
 
   /// [through] を通る、長さ [need] 以上の成立パスを1本返す。無ければ空。
   ///
-  /// パスを [through] で2本の腕に割って探す。腕はどちらも [through] から
-  /// 偶奇が交互に伸びるので、繋ぎ直しても接合部の交互性は自動的に満たされる。
+  /// [through] を起点に、後ろへ伸ばしてから前へ伸ばす。1本の並びとして
+  /// 持っているのは、**窓が接合部を跨ぐ**ため。相が2つだった頃は交互性が
+  /// 隣どうしだけの性質だったので、2本の腕を別々に伸ばして繋いでも
+  /// 自動的に成り立ったが、3つ以上ではそうならない。
   ///
-  /// 交互の制約が強い枝刈りになるので、盤面が枯れているほど速く終わる。
-  /// 8x6 盤・[need] が 10 でも、存在しないと答える最悪ケースで 750 ノード程度。
+  /// 相の制約が強い枝刈りになるので、盤面が枯れているほど速く終わる。
   List<Cell> findPathThrough(Cell through, int need) {
     if (tileAt(through) == null) return const [];
     final seen = <Cell>{through};
-    final arm1 = <Cell>[through];
-    final arm2 = <Cell>[through];
-    var found = <Cell>[];
+    final path = <Cell>[through];
 
-    bool extend2(Cell head) {
-      if (arm1.length + arm2.length - 1 >= need) {
-        found = [...arm1.reversed.take(arm1.length - 1), ...arm2];
-        return true;
-      }
-      for (final n in neighborsOf(head)) {
-        if (seen.contains(n) || !canExtend(head, n)) continue;
+    // 前（先頭側）へ伸ばす。ここまで来たら長さが足りているかを見る。
+    bool growFront() {
+      if (path.length >= need) return true;
+      for (final n in neighborsOf(path.first)) {
+        if (seen.contains(n) || !_fits(path, n, atFront: true)) continue;
         seen.add(n);
-        arm2.add(n);
-        if (extend2(n)) return true;
-        arm2.removeLast();
+        path.insert(0, n);
+        if (growFront()) return true;
+        path.removeAt(0);
         seen.remove(n);
       }
       return false;
     }
 
-    bool extend1(Cell head) {
-      if (extend2(through)) return true;
-      for (final n in neighborsOf(head)) {
-        if (seen.contains(n) || !canExtend(head, n)) continue;
+    // 後ろ（末尾側）へ伸ばす。伸ばしきったところで前側に切り替える。
+    bool growBack() {
+      if (growFront()) return true;
+      for (final n in neighborsOf(path.last)) {
+        if (seen.contains(n) || !_fits(path, n, atFront: false)) continue;
         seen.add(n);
-        arm1.add(n);
-        if (extend1(n)) return true;
-        arm1.removeLast();
+        path.add(n);
+        if (growBack()) return true;
+        path.removeLast();
         seen.remove(n);
       }
       return false;
     }
 
-    if (!extend1(through)) return const [];
+    if (!growBack()) return const [];
+    final found = List<Cell>.of(path);
     return isValidPath(found) ? found : const [];
   }
 
@@ -610,11 +673,12 @@ class Board {
     return const [];
   }
 
-  /// 盤面に残っている奇数ブロックの数。偶数との比率を見せるのに使う。
-  int get oddCount => _count((t) => t.isOdd);
+  /// 盤面に残っている [phase] のマスの数。相どうしの比率を見せるのに使う。
+  /// 少ない相が尽きると、長い鎖が編めなくなる。
+  int countOf(Phase phase) => _count((t) => t.phase == phase);
 
-  /// 盤面に残っている偶数ブロックの数。これが尽きると長いチェインが組めない。
-  int get evenCount => _count((t) => !t.isOdd);
+  /// 盤面に残っているマスの数を相ごとに。[phases] と同じ並びで返す。
+  List<int> get phaseCounts => [for (final p in phases) countOf(p)];
 
   int _count(bool Function(Tile) test) {
     var n = 0;

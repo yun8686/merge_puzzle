@@ -35,6 +35,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 | パス | 中身 |
 |---|---|
+| `lib/game/phase.dart` | 相（熱・冷・雷）の呼び名と並び。盤面も一党も UI もここを読む |
 | `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
@@ -48,8 +49,16 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `test/` | `board_test.dart` / `game_controller_test.dart` / `board_view_test.dart` |
 
-`party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（枚数と熱冷の内訳）
-だけを見る。ここを繋ぐと、README に書いてある検証済みの数値が意味を失う。
+`party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
+枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
+検証済みの数値が意味を失う。
+
+**盤面に出る相は編成で決まる。** 相が N 個なら「N 枚ぶんの窓に同じ相が二度出ない」
+が継ぎ方の決まりで、2相ならこれが交互と同じ意味になる。素直に「隣と違えばよい」に
+緩めると、3相でほぼ全部の盤面が12枚編めるようになり、希少な相のジレンマも雷の
+8枚条件も意味を失う（README 第7段階に測った数字がある）。
+
+**編成の相は2種類以上。** 1色の盤面では鎖が1枚も編めない。`Progress.minPhases`。
 
 一党は**潜る前に決まり、道中では増えない**。制圧の祝福で増えるのは体力だけ。
 ここを緩めると編成が判断にならなくなる（README 第5段階）。

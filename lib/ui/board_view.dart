@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../game/board.dart';
 import '../game/game_controller.dart';
+import '../game/phase.dart';
 import 'foe_art.dart';
 import 'particles.dart';
 import 'theme.dart';
@@ -173,7 +174,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
         _Pop(
           id: _seq++,
           ward: result.wards[i],
-          isOdd: result.isOdds[i],
+          phase: result.phases[i],
           center: _centerOf(cell),
           delay: stagger * i,
         ),
@@ -198,7 +199,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
         _Pop(
           id: _seq++,
           ward: fall.ward,
-          isOdd: fall.isOdd,
+          phase: fall.phase,
           center: _centerOf(fall.cell),
           delay: stagger * (result.length - 1),
         ),
@@ -213,12 +214,12 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
     // なぞった線が、弾ける位置に合わせて先頭から焼き切れていく。
     // どの順で消えたのかが線そのもので分かる。
-    final endIsOdd = result.isOdds.last;
+    final endPhase = result.phases.last;
     _flashes.add(
       _ChainFlash(
         id: _seq++,
         points: result.cells.map(_centerOf).toList(),
-        color: Palette.glowFor(endIsOdd),
+        color: Palette.glowFor(endPhase),
         stagger: stagger,
       ),
     );
@@ -226,19 +227,19 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     // 終端から大きな輪を1つ。長いチェインほど大きく広がる。
     _particles.shockwave(
       _centerOf(result.endCell),
-      Palette.glowFor(endIsOdd),
+      Palette.glowFor(endPhase),
       radius: (_cell * (1.4 + result.power * 0.3)).clamp(0.0, _cell * 5),
       life: 0.5,
       width: 7,
     );
 
     _frameGlow = (result.power / 6).clamp(0.45, 1.0);
-    _frameColor = Palette.glowFor(endIsOdd);
+    _frameColor = Palette.glowFor(endPhase);
     if (result.power >= 8) {
       // 強くすると盤面が白飛びして、何が消えたのか読めなくなる。
       // あくまで枠の発光を後押しする程度に留める。
       _screenFlash = (result.power / 60).clamp(0.0, 0.2);
-      _screenFlashColor = Palette.glowFor(endIsOdd);
+      _screenFlashColor = Palette.glowFor(endPhase);
     }
 
     _popups.add(
@@ -282,16 +283,16 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     if (mounted) setState(() {});
   }
 
-  void _burstAt(Offset center, bool isOdd) {
+  void _burstAt(Offset center, Phase phase) {
     _particles.burst(
       center,
-      Palette.baseFor(isOdd),
+      Palette.baseFor(phase),
       count: 16,
       power: _cell * 5.0,
     );
     _particles.shockwave(
       center,
-      Palette.glowFor(isOdd),
+      Palette.glowFor(phase),
       radius: _cell * 1.15,
       life: 0.34,
       width: 3.5,
@@ -411,7 +412,8 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                           points: controller.path.map(_centerOf).toList(),
                           core: const Color(0xD9FFF7E0),
                           glow: Palette.glowFor(
-                            board.tileAt(controller.path.last)?.isOdd ?? true,
+                            board.tileAt(controller.path.last)?.phase ??
+                                Phase.heat,
                           ),
                           width: cell * 0.15,
                         ),
@@ -427,10 +429,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     height: cell,
                     child: _PopTile(
                       ward: pop.ward,
-                      isOdd: pop.isOdd,
+                      phase: pop.phase,
                       size: cell,
                       delay: pop.delay,
-                      onBurst: () => _burstAt(pop.center, pop.isOdd),
+                      onBurst: () => _burstAt(pop.center, pop.phase),
                       onDone: () {
                         _pops.removeWhere((p) => p.id == pop.id);
                         if (mounted) setState(() {});
@@ -986,7 +988,7 @@ class _Pop {
   _Pop({
     required this.id,
     required this.ward,
-    required this.isOdd,
+    required this.phase,
     required this.center,
     required this.delay,
   });
@@ -995,7 +997,7 @@ class _Pop {
 
   /// 敵なら書かれていた守り。マナのマスは null。
   final int? ward;
-  final bool isOdd;
+  final Phase phase;
   final Offset center;
   final Duration delay;
 }
@@ -1097,8 +1099,8 @@ class _TileWidgetState extends State<TileWidget>
   @override
   Widget build(BuildContext context) {
     final size = widget.size;
-    final isOdd = widget.tile.isOdd;
-    final glow = Palette.glowFor(isOdd);
+    final phase = widget.tile.phase;
+    final glow = Palette.glowFor(phase);
 
     final face = AnimatedScale(
       scale: widget.selected ? 1.1 : 1.0,
@@ -1107,7 +1109,7 @@ class _TileWidgetState extends State<TileWidget>
       child: Container(
         margin: EdgeInsets.all(size * 0.06),
         decoration: BoxDecoration(
-          gradient: Palette.gradientFor(isOdd),
+          gradient: Palette.gradientFor(phase),
           borderRadius: BorderRadius.circular(size * 0.28),
           boxShadow: [
             BoxShadow(
@@ -1467,7 +1469,7 @@ class _WardPainter extends CustomPainter {
 class _PopTile extends StatefulWidget {
   const _PopTile({
     required this.ward,
-    required this.isOdd,
+    required this.phase,
     required this.size,
     required this.delay,
     required this.onBurst,
@@ -1475,7 +1477,7 @@ class _PopTile extends StatefulWidget {
   });
 
   final int? ward;
-  final bool isOdd;
+  final Phase phase;
   final double size;
   final Duration delay;
   final VoidCallback onBurst;
@@ -1557,11 +1559,11 @@ class _PopTileState extends State<_PopTile>
       child: Container(
         margin: EdgeInsets.all(size * 0.06),
         decoration: BoxDecoration(
-          gradient: Palette.gradientFor(widget.isOdd),
+          gradient: Palette.gradientFor(widget.phase),
           borderRadius: BorderRadius.circular(size * 0.26),
           boxShadow: [
             BoxShadow(
-              color: Palette.glowFor(widget.isOdd).withValues(alpha: 0.7),
+              color: Palette.glowFor(widget.phase).withValues(alpha: 0.7),
               blurRadius: size * 0.5,
             ),
           ],

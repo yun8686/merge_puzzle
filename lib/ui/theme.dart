@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../game/party.dart';
+import '../game/phase.dart';
 
 /// 熱の相=暖色、冷の相=寒色。この2色がゲームの中心情報なので、
 /// 背景は暗く沈めてマナとエフェクトを目立たせる。
 ///
-/// 内部では相を `isOdd` で持っている（true=熱、false=冷）。世界観の言い換えで
-/// あって、盤面ロジックは偶奇のまま。
+/// 相は [Phase] で持つ。盤面に出る相は編成から決まるので、ここは3色ぶん
+/// 用意しておいて、使うかどうかは一党の側に任せる。
 class Palette {
   static const background = Color(0xFF07070F);
 
@@ -31,6 +32,14 @@ class Palette {
   static const evenA = Color(0xFF45DBFF);
   static const evenB = Color(0xFF4458FF);
 
+  /// 雷の相。3つ目として足した色。
+  ///
+  /// 金や白金も試したが、暖色と混ざって濁り、盤面で見分けられなかった。
+  /// 緑は冷の水色と隣り合うと紛れる。藤から濃紫なら、暖色とも寒色とも
+  /// 離れていて、明るさもマナのマスとして足りる。
+  static const boltA = Color(0xFFC9A6FF);
+  static const boltB = Color(0xFF6D28D9);
+
   static const textPrimary = Color(0xFFF2F2F7);
   static const textMuted = Color(0xFF8C8CA6);
   static const textDim = Color(0xFF5A5A78);
@@ -41,22 +50,9 @@ class Palette {
   /// ぶつからない緑に置いて「盤面の外の資源」だと分かるようにする。
   static const life = Color(0xFF6BE8A0);
 
-  /// 盾の魔導士の色。相を持たず、攻めにも関わらないので、盤面の2色から
-  /// いちばん遠い藤色に置く。
-  static const steel = Color(0xFFBFA8FF);
-
-  /// 魔導士の色。能力が見ている相をそのまま色にしてある。
-  /// 熱に応える焔と烈火は暖色、冷に応える氷雨と霜は寒色。
-  /// 雷は相を持たないので金、風は盤面の外の資源なので体力と同じ緑。
-  static Color mageColor(MageKind kind) => switch (kind) {
-    MageKind.ember => oddA,
-    MageKind.blaze => oddB,
-    MageKind.rime => evenA,
-    MageKind.frost => evenB,
-    MageKind.storm => gold,
-    MageKind.gale => life,
-    MageKind.aegis => steel,
-  };
+  /// 魔導士の色。**持っている相の色をそのまま使う。**
+  /// 誰を入れると盤面が何色になるかが、編成の画面で色だけで読める。
+  static Color mageColor(MageKind kind) => baseFor(Mage.of(kind).phase);
 
   /// 敵を包む守りの色。金の封印として読ませる。
   static const ward = gold;
@@ -72,14 +68,31 @@ class Palette {
     return const Color(0xFF8CFFB0);
   }
 
-  static LinearGradient gradientFor(bool isOdd) => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: isOdd ? const [oddA, oddB] : const [evenA, evenB],
-  );
+  /// 相ごとの2色。マナのマスはこのグラデで塗る。
+  static (Color, Color) pairFor(Phase phase) => switch (phase) {
+    Phase.heat => (oddA, oddB),
+    Phase.cold => (evenA, evenB),
+    Phase.bolt => (boltA, boltB),
+  };
 
-  static Color glowFor(bool isOdd) => isOdd ? oddB : evenA;
-  static Color baseFor(bool isOdd) => isOdd ? oddA : evenA;
+  static LinearGradient gradientFor(Phase phase) {
+    final (a, b) = pairFor(phase);
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [a, b],
+    );
+  }
+
+  /// 光らせるときの色。濃い側を使う相と薄い側を使う相があるのは、
+  /// 暗い背景の上で同じくらいの明るさに見えるようにするため。
+  static Color glowFor(Phase phase) => switch (phase) {
+    Phase.heat => oddB,
+    Phase.cold => evenA,
+    Phase.bolt => boltA,
+  };
+
+  static Color baseFor(Phase phase) => pairFor(phase).$1;
 
   /// タイル上面のツヤ。白を薄く重ねるだけで、平面がふくらんで見える。
   static const gloss = LinearGradient(

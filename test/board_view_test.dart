@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
 import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
+import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/main.dart';
 import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/foe_art.dart';
@@ -18,19 +19,24 @@ void paintCheckerboard(Board board) {
   var id = 0;
   for (var r = 0; r < board.rows; r++) {
     for (var c = 0; c < board.cols; c++) {
-      board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+      board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
     }
   }
   final corner = board.grid[board.rows - 1][board.cols - 1]!;
   board.grid[board.rows - 1][board.cols - 1] = Tile(
     id: corner.id,
-    isOdd: corner.isOdd,
+    phase: corner.phase,
     ward: Board.maxWard,
   );
 }
 
 GameController newController(int seed) =>
-    GameController(createBoard: () => Board(rng: Random(seed)));
+    GameController(rng: Random(seed), roster: twoPhases);
+
+/// 熱と冷の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
+/// 相を入れる前の盤面と規則も手触りも変わらない。市松の盤面を
+/// 決め打ちで置くテストは、この2相を前提にしている。
+const twoPhases = [Mage.squireHeat, Mage.squireCold];
 
 void main() {
   testWidgets('なぞるとチェインが成立して点が入る', (tester) async {
@@ -198,7 +204,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, isOdd: true);
+        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.heat);
       }
     }
 
@@ -262,7 +268,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
       }
     }
     // 守りを散らして最下段に並べる。重力で動かないので位置が読める。
@@ -271,7 +277,7 @@ void main() {
       final base = controller.board.grid[7][i]!;
       controller.board.grid[7][i] = Tile(
         id: base.id,
-        isOdd: base.isOdd,
+        phase: base.phase,
         ward: wards[i],
       );
     }
@@ -316,13 +322,13 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
       }
     }
     final target = controller.board.grid[0][1]!;
     controller.board.grid[0][1] = Tile(
       id: target.id,
-      isOdd: target.isOdd,
+      phase: target.phase,
       ward: Board.minWard,
     );
 
@@ -454,13 +460,13 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, isOdd: (r + c).isEven);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
       }
     }
     final target = controller.board.grid[0][1]!;
     controller.board.grid[0][1] = Tile(
       id: target.id,
-      isOdd: target.isOdd,
+      phase: target.phase,
       ward: Board.minWard,
     );
 
