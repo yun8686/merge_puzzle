@@ -21,10 +21,23 @@ class Progress {
          for (final m in Mage.squires) m.kind,
        },
        cleared = cleared ?? <String>{},
-       party = party ?? <MageKind>[for (final m in Mage.squires) m.kind];
+       party = party ?? <MageKind>[...startingParty];
 
   /// 連れていける人数。ガチャで増えても、同時に出せるのはここまで。
   static const int partySlots = 3;
+
+  /// 始まりの編成。**従者は3人とも持っているが、連れていくのは2人**。
+  ///
+  /// 3枠を最初から埋めてしまうと、初めて引いた魔導士が編成に入らず、
+  /// 誰かを外すところから始めることになる。1枠空けておけば、引いた人が
+  /// そのまま入って、次の潜りで違いが出る。
+  ///
+  /// 空けるのは雷の枠。熱と冷の2相なら継ぎ方は「直前1枚と違う」＝交互で、
+  /// 盤面はいちばん編みやすい形から始まる。
+  static const List<MageKind> startingParty = [
+    MageKind.squireHeat,
+    MageKind.squireCold,
+  ];
 
   /// ガチャ1回の値段。
   static const int gachaCost = 10;

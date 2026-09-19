@@ -145,12 +145,10 @@ void main() {
 
   group('編成', () {
     testWidgets('押すと編成に入り、もう一度押すと外れる', (tester) async {
+      // 始まりの編成そのまま。3枠目が空いている。
       final store = await openBase(
         tester,
-        progress: Progress(
-          owned: {MageKind.storm},
-          party: [MageKind.squireHeat, MageKind.squireCold],
-        ),
+        progress: Progress(owned: {MageKind.storm}),
       );
       await goTab(tester, '一党');
       expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
@@ -165,9 +163,18 @@ void main() {
     });
 
     testWidgets('枠が埋まっていれば入らない', (tester) async {
-      await openBase(tester, progress: Progress(owned: {MageKind.gale}));
+      await openBase(
+        tester,
+        progress: Progress(
+          owned: {MageKind.gale},
+          party: [
+            MageKind.squireHeat,
+            MageKind.squireCold,
+            MageKind.squireBolt,
+          ],
+        ),
+      );
       await goTab(tester, '一党');
-      // 始まりの編成で既に3枠とも埋まっている。
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, find.text(Mage.gale.name));

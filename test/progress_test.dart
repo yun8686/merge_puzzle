@@ -6,11 +6,12 @@ import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/game/progress.dart';
 
 void main() {
-  test('始まりは相を1つずつ持つ従者3人で、魔晶は無い', () {
+  test('始まりは従者3人を持ち、連れていくのは2人', () {
     final progress = Progress();
     expect(progress.owned, {for (final m in Mage.squires) m.kind});
-    expect(progress.party, [for (final m in Mage.squires) m.kind]);
-    expect(progress.partyPhases, Phase.values);
+    expect(progress.party, Progress.startingParty);
+    expect(progress.party.length, Progress.partySlots - 1, reason: '1枠空いている');
+    expect(progress.partyPhases, [Phase.heat, Phase.cold]);
     expect(progress.partyIsValid, isTrue);
     expect(progress.shards, 0);
     expect(progress.canRoll, isFalse);
@@ -134,9 +135,23 @@ void main() {
       expect(progress.unowned, isEmpty);
     });
 
-    test('枠が埋まっていれば、引いた魔導士は編成に入らない', () {
-      // 始まりの編成で既に3枠とも埋まっている。
+    test('空いた枠には、引いた魔導士がそのまま入る', () {
+      // 始まりの編成は2人。3枠目が空いている。
       final progress = Progress(shards: Progress.gachaCost * 10);
+      expect(progress.party.length, Progress.partySlots - 1);
+
+      final first = progress.roll(Random(3));
+      expect(first, isNotNull);
+      expect(progress.party, contains(first!.kind));
+      expect(progress.party.length, Progress.partySlots);
+    });
+
+    test('枠が埋まっていれば、引いた魔導士は編成に入らない', () {
+      final progress = Progress(
+        owned: {MageKind.storm},
+        party: [MageKind.squireHeat, MageKind.squireCold, MageKind.storm],
+        shards: Progress.gachaCost * 10,
+      );
       expect(progress.party.length, Progress.partySlots);
 
       final mage = progress.roll(Random(3));
@@ -148,7 +163,10 @@ void main() {
 
   group('編成', () {
     test('枠が埋まっていれば入らない', () {
-      final progress = Progress(owned: {for (final m in Mage.roster) m.kind});
+      final progress = Progress(
+        owned: {for (final m in Mage.roster) m.kind},
+        party: [MageKind.squireHeat, MageKind.squireCold, MageKind.squireBolt],
+      );
       expect(progress.party.length, Progress.partySlots);
 
       progress.toggleParty(MageKind.gale);
