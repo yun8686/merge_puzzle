@@ -911,10 +911,12 @@ class _PartySlot extends StatelessWidget {
 
 /// 相ひとつを表す丸。編成の枠と「盤面の相」の帯で同じものを使う。
 class _PhaseDot extends StatelessWidget {
-  const _PhaseDot({required this.phase, this.size = 22});
+  const _PhaseDot({required this.phase});
 
   final Phase phase;
-  final double size;
+
+  /// 丸の直径。2箇所とも同じ大きさで出すので、引数にはしない。
+  static const double size = 22;
 
   @override
   Widget build(BuildContext context) {
@@ -928,7 +930,7 @@ class _PhaseDot extends StatelessWidget {
       ),
       child: Text(
         phase.label,
-        style: TextStyle(
+        style: const TextStyle(
           color: Palette.background,
           fontSize: size * 0.5,
           fontWeight: FontWeight.w800,
