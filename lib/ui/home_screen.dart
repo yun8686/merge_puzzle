@@ -39,12 +39,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
+  /// 記録が読めるのを待つ上限。これを過ぎたら、まっさらな記録で拠点を開く。
+  ///
+  /// 投げてくるとは限らない。保存のプラグインが載っていない環境では、
+  /// **返事そのものが返ってこない**ことがある。待ち続けると、ぐるぐる回る輪を
+  /// 見せたまま何もできなくなるので、諦める線を引いておく。
+  static const Duration _loadLimit = Duration(seconds: 3);
+
   Future<void> _load() async {
-    // 置き場所が何を投げてきても拠点は開く。読めないまま止まると、
-    // ぐるぐる回る輪を見せたまま何もできなくなる。
     Progress progress;
     try {
-      progress = await widget.store.load();
+      progress = await widget.store
+          .load()
+          .timeout(_loadLimit, onTimeout: Progress.new);
     } catch (_) {
       progress = Progress();
     }
