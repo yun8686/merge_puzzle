@@ -47,11 +47,41 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
-| `test/` | `board_test.dart` / `game_controller_test.dart` / `board_view_test.dart` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `board_view_test.dart` / `home_screen_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
 検証済みの数値が意味を失う。
+
+## 魔導士を増やすとき
+
+能力は**条件（`Trigger`）と効き目（`Boon`）の組**でしか書けない。`Party` は
+効き目の種類ごとに足し合わせるだけで、誰が居るかでは分岐しない。だから**名簿を
+増やしても `Party` は変わらない**。
+
+1. `MageKind` に1つ足す
+2. `Mage` に `static const` を1つ足し、`Ability(条件, 効き目)` を渡す
+3. `Mage.summonable` に並べる
+
+説明文（`Mage.effect`）は組から作られるので書かない。数値を変えれば文も動く。
+
+| 条件 | 意味 |
+|---|---|
+| `SamePhase(n)` | 自分の相を n 枚以上継いだ |
+| `ChainLength(n)` | n 枚以上継いだ（相は問わない） |
+| `StartsWith()` | 自分の相から継ぎ始めた |
+| `Always()` | 鎖を見ない。連れているだけで効く |
+
+| 効き目 | 集計先 |
+|---|---|
+| `PowerUp(n)` | `powerBonusFor` |
+| `TurnBack(n)` | `turnGainFor` |
+| `Mend(n)` | `healFor` |
+| `Strike(n)` | `boltFor`（階層の敵すべてに n） |
+| `Guard()` | `backlashFor`（痛手が半分・切り上げ） |
+
+**組で書けない能力を足したくなったら、`Party` に `if` を書かずに条件か効き目を
+1つ増やすこと。** そこを崩すと、また魔導士ごとの分岐に戻る。
 
 **盤面に出る相は編成で決まる。** 相が N 個なら「N 枚ぶんの窓に同じ相が二度出ない」
 が継ぎ方の決まりで、2相ならこれが交互と同じ意味になる。素直に「隣と違えばよい」に

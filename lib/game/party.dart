@@ -28,6 +28,149 @@ class ChainTally {
   final Phase? startPhase;
 
   int countOf(Phase phase) => counts[phase] ?? 0;
+
+  /// 鎖が1本も無い状態。鎖を見ない能力（[Always]）を数えるときに渡す。
+  static const none = ChainTally(
+    length: 0,
+    counts: <Phase, int>{},
+    startPhase: null,
+  );
+}
+
+/// 能力が応える条件。**見るのは鎖の戦果と、その魔導士自身の相だけ。**
+///
+/// 盤面も一党も見ないので、条件を1つ足しても他に波及しない。魔導士を
+/// 増やすときは、ここにある条件と [Boon] を組み合わせるだけで済む。
+sealed class Trigger {
+  const Trigger();
+
+  bool met(Phase phase, ChainTally tally);
+
+  /// 説明文の前半。[Boon.describe] と繋げて1文になる。
+  String describe(Phase phase);
+}
+
+/// 自分の相を [need] 枚以上継いだ鎖。
+final class SamePhase extends Trigger {
+  const SamePhase(this.need);
+
+  final int need;
+
+  @override
+  bool met(Phase phase, ChainTally tally) => tally.countOf(phase) >= need;
+
+  @override
+  String describe(Phase phase) => '${phase.label}を$need枚以上継いだ鎖';
+}
+
+/// [need] 枚以上継いだ鎖。相は問わない。
+final class ChainLength extends Trigger {
+  const ChainLength(this.need);
+
+  final int need;
+
+  @override
+  bool met(Phase phase, ChainTally tally) => tally.length >= need;
+
+  @override
+  String describe(Phase phase) => '$need枚以上継いだ鎖';
+}
+
+/// 自分の相から継ぎ始めた鎖。枚数を寄せる編み方とは噛み合わない。
+final class StartsWith extends Trigger {
+  const StartsWith();
+
+  @override
+  bool met(Phase phase, ChainTally tally) => tally.startPhase == phase;
+
+  @override
+  String describe(Phase phase) => '${phase.label}から継ぎ始めた鎖';
+}
+
+/// 鎖を見ない。連れているだけで効く。
+final class Always extends Trigger {
+  const Always();
+
+  @override
+  bool met(Phase phase, ChainTally tally) => true;
+
+  @override
+  String describe(Phase phase) => '';
+}
+
+/// 条件が満たされたときの効き目。
+///
+/// **種類がそのまま集計先になる。** [Party] は「[PowerUp] を全部足す」
+/// としか書いていないので、[PowerUp] を持つ魔導士が何人増えても
+/// [Party.powerBonusFor] は変わらない。
+sealed class Boon {
+  const Boon();
+
+  /// 説明文の後半。[Trigger.describe] の続きとして読める形にする。
+  String describe();
+}
+
+/// 鎖の威力に足す。
+final class PowerUp extends Boon {
+  const PowerUp(this.amount);
+
+  final int amount;
+
+  @override
+  String describe() => 'は威力 +$amount';
+}
+
+/// 使った手を返す。
+final class TurnBack extends Boon {
+  const TurnBack(this.amount);
+
+  final int amount;
+
+  @override
+  String describe() => 'はターンを $amount 返す';
+}
+
+/// 一党の体力を戻す。
+final class Mend extends Boon {
+  const Mend(this.amount);
+
+  final int amount;
+
+  @override
+  String describe() => 'で体力を $amount 戻す';
+}
+
+/// 階層に残っている敵すべてを打つ。
+final class Strike extends Boon {
+  const Strike(this.amount);
+
+  final int amount;
+
+  @override
+  String describe() => 'は階層の敵すべてに $amount ダメージ';
+}
+
+/// 階層を落としたときの痛手を半分にする（切り上げ）。
+/// 重ねれば重ねただけ半分になっていく。
+final class Guard extends Boon {
+  const Guard();
+
+  @override
+  String describe() => '階層を落としたときの痛手が半分になる';
+}
+
+/// 能力ひとつ。**条件と効き目の組でしか書けない。**
+///
+/// 説明文は組から作る。手で書いた文と数値がずれることが無い。
+class Ability {
+  const Ability(this.when, this.then);
+
+  final Trigger when;
+  final Boon then;
+
+  bool firesOn(Phase phase, ChainTally tally) => when.met(phase, tally);
+
+  String describe(Phase phase) => '${when.describe(phase)}${then.describe()}';
 }
 
 enum MageKind {
@@ -51,7 +194,7 @@ enum MageKind {
 /// 冷から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
-  const Mage._(this.kind, this.phase, this.name, this.sigil, this.effect);
+  const Mage._(this.kind, this.phase, this.name, this.sigil, [this.ability]);
 
   final MageKind kind;
 
@@ -65,9 +208,15 @@ class Mage {
   /// 一党の並びに出す一文字。
   final String sigil;
 
+  /// この魔導士の能力。持たない者は null。
+  ///
+  /// **[Party] は能力の中身で分岐しない。** ここに [Ability] を1つ置けば、
+  /// 集計は [Boon] の種類だけで回る。魔導士を増やすときに触るのは、この
+  /// 名簿と [MageKind] だけ。
+  final Ability? ability;
 
-  /// 能力の説明。画面にそのまま出す。
-  final String effect;
+  /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
+  String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
 
   /// 始まりの3人。相を1つ持つだけで、特殊な力は無い。
   /// 3人とも別の相なので、開幕から盤面は3色になる。
@@ -76,21 +225,18 @@ class Mage {
     Phase.heat,
     '熱の従者',
     '熱',
-    '特殊な力は持たない',
   );
   static const squireCold = Mage._(
     MageKind.squireCold,
     Phase.cold,
     '冷の従者',
     '冷',
-    '特殊な力は持たない',
   );
   static const squireBolt = Mage._(
     MageKind.squireBolt,
     Phase.bolt,
     '雷の従者',
     '雷',
-    '特殊な力は持たない',
   );
 
   static const ember = Mage._(
@@ -98,49 +244,49 @@ class Mage {
     Phase.heat,
     '焔の魔導士',
     '焔',
-    '熱を3枚以上継いだ鎖は威力 +1',
+    Ability(SamePhase(emberSame), PowerUp(1)),
   );
   static const blaze = Mage._(
     MageKind.blaze,
     Phase.heat,
     '烈火の魔導士',
     '烈',
-    '熱を5枚以上継いだ鎖は威力 +2',
+    Ability(SamePhase(blazeSame), PowerUp(2)),
   );
   static const gale = Mage._(
     MageKind.gale,
     Phase.heat,
     '風の魔導士',
     '風',
-    '7枚以上継いだ鎖はターンを 1 返す',
+    Ability(ChainLength(galeChain), TurnBack(1)),
   );
   static const rime = Mage._(
     MageKind.rime,
     Phase.cold,
     '氷雨の魔導士',
     '氷',
-    '冷を3枚以上継いだ鎖で体力を 1 戻す',
+    Ability(SamePhase(rimeSame), Mend(1)),
   );
   static const frost = Mage._(
     MageKind.frost,
     Phase.cold,
     '霜の魔導士',
     '霜',
-    '冷から継ぎ始めた鎖は威力 +1',
+    Ability(StartsWith(), PowerUp(1)),
   );
   static const storm = Mage._(
     MageKind.storm,
     Phase.bolt,
     '雷の魔導士',
     '電',
-    '8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ',
+    Ability(ChainLength(stormChain), Strike(1)),
   );
   static const aegis = Mage._(
     MageKind.aegis,
     Phase.bolt,
     '盾の魔導士',
     '盾',
-    '階層を落としたときの痛手が半分になる',
+    Ability(Always(), Guard()),
   );
 
   /// 始まりの3人。ガチャの対象にはならない。
@@ -258,37 +404,51 @@ class Party {
       members.where((m) => m.phase == phase).length,
   ];
 
-  /// 威力補正。重ねて乗る。
+  /// この鎖に応えた [T] 型の効き目を全部。
   ///
-  /// 焔（自分の相3枚以上）と烈火（同5枚以上）は同時に乗るので、熱を5枚
-  /// 継げば +3。霜は開始相だけを見るので、枚数を寄せる編み方とは噛み合わない。
-  /// 「同じ相を長く継ぐ」か「決まった相から始める」かで育て方が割れる。
-  int powerBonusFor(ChainTally tally) {
-    var bonus = 0;
-    if (_answers(MageKind.ember, tally, emberSame)) bonus += 1;
-    if (_answers(MageKind.blaze, tally, blazeSame)) bonus += 2;
-    if (has(MageKind.frost) && tally.startPhase == Mage.frost.phase) bonus += 1;
-    return bonus;
+  /// **ここから下に魔導士の名前は出てこない。** 誰が居るかではなく、
+  /// どの効き目が応えたかだけを数える。名簿に何人足しても変わらない。
+  Iterable<T> _boons<T extends Boon>(ChainTally tally) sync* {
+    for (final mage in members) {
+      final ability = mage.ability;
+      if (ability == null || ability.then is! T) continue;
+      if (!ability.firesOn(mage.phase, tally)) continue;
+      yield ability.then as T;
+    }
   }
 
-  /// [kind] が居て、その魔導士の相を [need] 枚以上継いでいるか。
-  bool _answers(MageKind kind, ChainTally tally, int need) =>
-      has(kind) && tally.countOf(Mage.of(kind).phase) >= need;
+  int _total<T extends Boon>(ChainTally tally, int Function(T) amount) =>
+      _boons<T>(tally).fold(0, (sum, boon) => sum + amount(boon));
 
-  /// 風が返すターン。
+  /// 威力補正。重ねて乗る。
+  ///
+  /// 焔（自分の相3枚以上 +1）と烈火（同5枚以上 +2）は同時に乗るので、熱を
+  /// 5枚継げば +3。霜は開始相だけを見るので、枚数を寄せる編み方とは
+  /// 噛み合わない。「同じ相を長く継ぐ」か「決まった相から始める」かで
+  /// 育て方が割れる。
+  int powerBonusFor(ChainTally tally) =>
+      _total<PowerUp>(tally, (b) => b.amount);
+
+  /// 鎖が返すターン。
   int turnGainFor(ChainTally tally) =>
-      has(MageKind.gale) && tally.length >= galeChain ? 1 : 0;
+      _total<TurnBack>(tally, (b) => b.amount);
 
-  /// 階層を落としたときに実際に受ける痛手。盾が居れば半分（切り上げ）。
-  int backlashFor(int threat) =>
-      has(MageKind.aegis) ? (threat + 1) ~/ 2 : threat;
+  /// 鎖が戻す体力。
+  int healFor(ChainTally tally) => _total<Mend>(tally, (b) => b.amount);
 
-  /// 氷雨の回復量。
-  int healFor(ChainTally tally) =>
-      _answers(MageKind.rime, tally, rimeSame) ? 1 : 0;
+  /// 階層の敵すべてに落ちる打点。0 なら落ちない。
+  /// 見るのは威力ではなく継いだ枚数（[ChainLength]）。
+  int boltFor(ChainTally tally) => _total<Strike>(tally, (b) => b.amount);
 
-  /// 雷が落ちるか。見るのは威力ではなく継いだ枚数。
-  bool boltFor(int length) => has(MageKind.storm) && length >= stormChain;
+  /// 階層を落としたときに実際に受ける痛手。[Guard] ひとつにつき半分
+  /// （切り上げ）になる。鎖を見ない能力なので [ChainTally.none] で数える。
+  int backlashFor(int threat) {
+    var taken = threat;
+    for (var i = _boons<Guard>(ChainTally.none).length; i > 0; i--) {
+      taken = (taken + 1) ~/ 2;
+    }
+    return taken;
+  }
 
   /// 実際に戻った体力を返す（満タンなら 0）。
   int heal(int amount) {

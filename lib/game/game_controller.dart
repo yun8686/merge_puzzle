@@ -283,11 +283,12 @@ class GameController extends ChangeNotifier {
     path.clear();
 
     lastHealed = party.heal(party.healFor(tally));
-    if (party.boltFor(tally.length)) {
+    final boltDamage = party.boltFor(tally);
+    if (boltDamage > 0) {
       // 落ちる先は、雷を落とす前に控える。討ち取れた敵は盤面から消えるので、
       // あとからでは「どこに落ちたのか」が分からなくなる。
       final struck = board.foeCells;
-      result = result.withBolt(board.strike(1), struck);
+      result = result.withBolt(board.strike(boltDamage), struck);
     }
 
     for (var i = 0; i < result.cells.length; i++) {
