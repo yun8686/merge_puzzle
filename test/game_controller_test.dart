@@ -375,6 +375,33 @@ void main() {
       expect(result.bolt.first.cell, const Cell(7, 5));
       expect(result.felled, 1);
       expect(controller.board.remainingFoes, 0);
+      // 演出は落ちた先をここから読む。
+      expect(result.boltCells, [const Cell(7, 5)]);
+    });
+
+    test('討ち取れなかった敵にも雷は落ちたことになる', () {
+      final controller = newController();
+      controller.party.members.add(Mage.storm);
+      // 体力2の敵。雷の1ダメージでは討てず、傷ついて残る。
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), hp: 2);
+
+      trace(controller, const [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+        Cell(1, 4),
+      ]);
+      final result = controller.commitPath();
+
+      // 討ててはいないので bolt は空。それでも当たってはいるので、
+      // 演出が「何も起きなかった」ように見えないよう boltCells には残る。
+      expect(result!.bolt, isEmpty);
+      expect(result.boltCells, [const Cell(7, 5)]);
+      expect(controller.board.tileAt(const Cell(7, 5))!.hp, 1);
     });
 
     test('雷が居なければ追撃は起きない', () {

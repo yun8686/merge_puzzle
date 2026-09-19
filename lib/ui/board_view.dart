@@ -26,6 +26,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final List<_Pop> _pops = <_Pop>[];
   final List<_Popup> _popups = <_Popup>[];
   final List<_ChainFlash> _flashes = <_ChainFlash>[];
+  final List<_Bolt> _bolts = <_Bolt>[];
 
   /// 敵の id ごとの「討たれずに残った回数」。値が変わったフレームで
   /// そのブロックを揺らす。消えずに残ったことを、その場で伝えるため。
@@ -179,6 +180,18 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       );
     }
 
+    // 雷は鎖の外で起きるので、鎖の演出に紛れると何が起きたのか分からない。
+    // 最後の1枚が弾けるのに合わせて、当たった敵すべてに落として見せる。
+    if (result.boltCells.isNotEmpty) {
+      _bolts.add(
+        _Bolt(
+          id: _seq++,
+          targets: [for (final cell in result.boltCells) _centerOf(cell)],
+          delay: stagger * (result.length - 1),
+        ),
+      );
+    }
+
     // 雷に討たれた敵は鎖の外なので、最後の1枚と同じ間で一緒に弾けさせる。
     for (final fall in result.bolt) {
       _pops.add(
@@ -246,6 +259,27 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     _shakeTime = 0;
     _ensureTicking();
     setState(() {});
+  }
+
+  /// 雷が落ちた瞬間。盤面ごと金に光らせて、鎖の演出と別物だと見せる。
+  void _strike(List<Offset> targets) {
+    _screenFlash = 0.22;
+    _screenFlashColor = Palette.gold;
+    for (final at in targets) {
+      _particles.burst(at, Palette.gold, count: 14, power: _cell * 4.5);
+      _particles.shockwave(
+        at,
+        Palette.gold,
+        radius: _cell * 1.3,
+        life: 0.4,
+        width: 4,
+      );
+    }
+    _shake = max(_shake, 18.0);
+    _shakeTime = 0;
+    HapticFeedback.heavyImpact();
+    _ensureTicking();
+    if (mounted) setState(() {});
   }
 
   void _burstAt(Offset center, bool isOdd) {
@@ -435,6 +469,34 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                           color: _screenFlashColor.withValues(
                             alpha: _screenFlash,
                           ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 雷は盤面の上端から落ちるので、盤の中に閉じ込める。
+                for (final bolt in _bolts)
+                  Positioned.fill(
+                    key: ValueKey('bolt-${bolt.id}'),
+                    child: IgnorePointer(
+                      child: ClipPath(
+                        clipper: _BoardClipper(
+                          left: _originX - cell * 0.12,
+                          top: _originY - cell * 0.12,
+                          width: boardW + cell * 0.24,
+                          height: boardH + cell * 0.24,
+                          radius: cell * 0.45,
+                        ),
+                        child: _BoltView(
+                          targets: bolt.targets,
+                          top: _originY,
+                          cell: cell,
+                          delay: bolt.delay,
+                          seed: bolt.id,
+                          onStrike: () => _strike(bolt.targets),
+                          onDone: () {
+                            _bolts.removeWhere((b) => b.id == bolt.id);
+                            if (mounted) setState(() {});
+                          },
                         ),
                       ),
                     ),
@@ -668,6 +730,212 @@ class _ChainFlashViewState extends State<_ChainFlashView>
       },
     );
   }
+}
+
+/// 雷の追撃の演出データ。落とす先は、削っただけの敵も含めた全部。
+class _Bolt {
+  _Bolt({required this.id, required this.targets, required this.delay});
+
+  final int id;
+
+  /// 落ちる先（マスの中心）。
+  final List<Offset> targets;
+
+  /// 鎖の最後の1枚が弾けるまでの間。そこに合わせて落とす。
+  final Duration delay;
+}
+
+/// 雷の魔導士の追撃。盤面の上端から、当たった敵すべてに1本ずつ落ちる。
+///
+/// 守りを無視して階層の敵すべてを削るという、鎖とは別の理屈で起きることなので、
+/// 鎖の色（熱／冷）ではなく魔導士の金で描き、盤面ごと光らせて別物だと見せる。
+/// 討ち取れなかった敵にも落とす。当たったことが見えないと、体力だけ減っていて
+/// 何が起きたのか分からない。
+class _BoltView extends StatefulWidget {
+  const _BoltView({
+    required this.targets,
+    required this.top,
+    required this.cell,
+    required this.delay,
+    required this.seed,
+    required this.onStrike,
+    required this.onDone,
+  });
+
+  final List<Offset> targets;
+
+  /// 盤面の上端。雷はここから落ちてくる。
+  final double top;
+
+  final double cell;
+  final Duration delay;
+
+  /// 折れ方の種。毎回同じ形だと作り物に見える。
+  final int seed;
+
+  /// 落ちた瞬間に鳴らすもの（フラッシュ・粒・揺れ）。
+  final VoidCallback onStrike;
+
+  final VoidCallback onDone;
+
+  @override
+  State<_BoltView> createState() => _BoltViewState();
+}
+
+class _BoltViewState extends State<_BoltView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  late final List<List<Offset>> _paths;
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final rng = Random(widget.seed);
+    _paths = [for (final t in widget.targets) _pathTo(rng, t)];
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _c.addStatusListener((s) {
+      if (s == AnimationStatus.completed) widget.onDone();
+    });
+    Future<void>.delayed(widget.delay, () {
+      if (!mounted) return;
+      setState(() => _started = true);
+      widget.onStrike();
+      _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  /// 上端から [target] まで落ちる折れ線。ゆらぎを左右交互に振ると、
+  /// でたらめに振るより折れがはっきりして雷に見える。
+  /// 近づくほど振れを小さくして、どのマスに落ちたのかを読めるようにする。
+  List<Offset> _pathTo(Random rng, Offset target) {
+    const segments = 14;
+    final cell = widget.cell;
+    final startX = target.dx + (rng.nextDouble() - 0.5) * cell * 1.2;
+    final points = <Offset>[];
+    for (var i = 0; i <= segments; i++) {
+      final t = i / segments;
+      // 落ち際だけ真っ直ぐ寄せたいので、寄せ方は二次で効かせる。
+      final x = startX + (target.dx - startX) * (t * t);
+      final y = widget.top + (target.dy - widget.top) * t;
+      if (i == 0 || i == segments) {
+        points.add(Offset(x, y));
+        continue;
+      }
+      final side = i.isOdd ? 1.0 : -1.0;
+      final ease = 0.55 + 0.45 * rng.nextDouble();
+      points.add(Offset(x + side * cell * 0.35 * (1 - t * 0.6) * ease, y));
+    }
+    return points;
+  }
+
+  /// 落ちた瞬間が一番明るく、二度またたいてから引く。
+  double _brightness(double t) {
+    if (t < 0.10) return 1.0;
+    if (t < 0.18) return 0.5;
+    if (t < 0.26) return 1.0;
+    return (1 - (t - 0.26) / 0.74).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_started) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) => CustomPaint(
+        painter: _BoltPainter(
+          paths: _paths,
+          targets: widget.targets,
+          top: widget.top,
+          cell: widget.cell,
+          brightness: _brightness(_c.value),
+        ),
+      ),
+    );
+  }
+}
+
+class _BoltPainter extends CustomPainter {
+  const _BoltPainter({
+    required this.paths,
+    required this.targets,
+    required this.top,
+    required this.cell,
+    required this.brightness,
+  });
+
+  final List<List<Offset>> paths;
+  final List<Offset> targets;
+  final double top;
+  final double cell;
+  final double brightness;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (brightness <= 0) return;
+    for (var i = 0; i < paths.length; i++) {
+      final target = targets[i];
+      final path = Path()..moveTo(paths[i].first.dx, paths[i].first.dy);
+      for (final p in paths[i].skip(1)) {
+        path.lineTo(p.dx, p.dy);
+      }
+
+      // 上端は薄く、着弾点に向かって濃く。盤の縁でぶつ切りに見えないように。
+      final span = Rect.fromLTRB(0, top, size.width, target.dy);
+
+      void bolt(Color color, double width, double blur) {
+        final paint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: 0),
+              color.withValues(alpha: brightness),
+              color.withValues(alpha: brightness),
+            ],
+            stops: const [0, 0.35, 1],
+          ).createShader(span)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        if (blur > 0) {
+          paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
+        }
+        canvas.drawPath(path, paint);
+      }
+
+      bolt(Palette.gold, cell * 0.15, cell * 0.18);
+      bolt(Palette.gold, cell * 0.075, cell * 0.09);
+      bolt(Colors.white, cell * 0.04, 0);
+
+      // 着弾点。どのマスに落ちたのかは、線よりここで読ませる。
+      void ring(double radius, Color color, double alpha) {
+        canvas.drawCircle(
+          target,
+          radius,
+          Paint()..color = color.withValues(alpha: alpha * brightness),
+        );
+      }
+
+      ring(cell * 0.42, Palette.gold, 0.28);
+      ring(cell * 0.22, Palette.gold, 0.55);
+      ring(cell * 0.11, Colors.white, 1.0);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BoltPainter old) =>
+      old.brightness != brightness || old.paths != paths;
 }
 
 /// 空きマスのくぼみ。タイルと同じ位置・同じ角丸で敷いておくと、

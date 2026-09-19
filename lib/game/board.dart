@@ -90,6 +90,7 @@ class ClearResult {
     required this.gained,
     required this.endCell,
     this.bolt = const <FoeFall>[],
+    this.boltCells = const <Cell>[],
   });
 
   /// なぞった順のマス。
@@ -124,11 +125,16 @@ class ClearResult {
   /// 鎖とは別に討ち取られた敵。
   final List<FoeFall> bolt;
 
+  /// 追撃が当たったマス。討ち取れた敵も、削っただけの敵も入る。
+  /// [bolt] は討ち取れた敵しか持たないので、演出はこちらを見る。
+  /// 削っただけの敵にも雷を落として見せないと、何が起きたのか伝わらない。
+  final List<Cell> boltCells;
+
   int get length => cells.length;
 
   /// 鎖の外で起きた追撃を足した結果を返す。盤面ロジックは追撃を知らないので、
-  /// パーティー側から後付けする。
-  ClearResult withBolt(List<FoeFall> fallen) => ClearResult(
+  /// パーティー側から後付けする。[struck] は落ちる前の敵の位置。
+  ClearResult withBolt(List<FoeFall> fallen, List<Cell> struck) => ClearResult(
     cells: cells,
     cleared: cleared,
     wards: wards,
@@ -139,6 +145,7 @@ class ClearResult {
     gained: gained,
     endCell: endCell,
     bolt: List.unmodifiable(fallen),
+    boltCells: List.unmodifiable(struck),
   );
 }
 

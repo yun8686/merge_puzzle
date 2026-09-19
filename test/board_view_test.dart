@@ -381,4 +381,55 @@ void main() {
     );
     expect(find.text('${Board.maxWard}'), findsOneWidget);
   });
+
+
+  testWidgets('雷が落ちる鎖でも、演出は最後まで走りきる', (tester) async {
+    final controller = newController(3);
+    paintCheckerboard(controller.board);
+    controller.party.members.add(Mage.storm);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 400,
+              child: BoardView(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final origin = tester.getTopLeft(find.byType(BoardView));
+    Offset centerOf(int row, int col) =>
+        origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
+
+    // 上段6枚＋下段3枚で9枚。焔の補正も乗るので威力は10で、雷が落ちる。
+    final gesture = await tester.startGesture(centerOf(0, 0));
+    await tester.pump();
+    for (var col = 1; col < 6; col++) {
+      await gesture.moveTo(centerOf(0, col));
+      await tester.pump();
+    }
+    for (var col = 5; col >= 3; col--) {
+      await gesture.moveTo(centerOf(1, col));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+
+    // 隅の敵は鎖に触れていないのに、雷で落ちている。
+    expect(controller.board.remainingFoes, 0);
+
+    // 雷は最後の1枚が弾けるのに合わせて落ちる。そこを跨いで描き切れること。
+    // 実機を見られなくても、描画で例外が出ればここで落ちる。
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
 }
