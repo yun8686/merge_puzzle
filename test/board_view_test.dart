@@ -38,6 +38,11 @@ GameController newController(int seed) =>
 /// 決め打ちで置くテストは、この2相を前提にしている。
 const twoPhases = [Mage.squireHeat, Mage.squireCold];
 
+/// 同じ2相でも、従者ではなく焔と氷雨を連れた一党。従者の印は '熱' '冷' で
+/// 相の呼び名とぶつかるので、印と相の数を別々に読みたいときはこちら。
+/// 焔が居るぶん、熱を3枚以上継いだ鎖には威力が1乗る。
+const emberPair = [Mage.ember, Mage.rime];
+
 void main() {
   testWidgets('なぞるとチェインが成立して点が入る', (tester) async {
     final controller = newController(1);
@@ -82,7 +87,7 @@ void main() {
   });
 
   testWidgets('長い鎖でもスコア表示は作り直されない', (tester) async {
-    final controller = newController(3);
+    final controller = GameController(rng: Random(3), roster: emberPair);
     paintCheckerboard(controller.board);
 
     await tester.pumpWidget(
@@ -245,7 +250,11 @@ void main() {
 
   testWidgets('盤面の画面に階層と敵の数が表示される', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: GameScreen(controller: newController(1))),
+      MaterialApp(
+        home: GameScreen(
+          controller: GameController(rng: Random(1), roster: emberPair),
+        ),
+      ),
     );
     await tester.pump();
 
@@ -255,12 +264,14 @@ void main() {
     // 残りターンと残りの敵。階層の進行がそのまま出ていること。
     expect(find.text('TURNS'), findsOneWidget);
     expect(find.text('FOES'), findsOneWidget);
-    // 熱と冷の比率。どちらの枚数も出ていること。
-    expect(find.text('HEAT'), findsOneWidget);
-    expect(find.text('FROST'), findsOneWidget);
-    // 階層をまたいで残る一党。始まりは焔の魔導士ひとり。
+    // 盤面に敷かれた相の比率。連れてきた相のぶんだけ出ていること。
+    expect(find.text(Phase.heat.label), findsOneWidget);
+    expect(find.text(Phase.cold.label), findsOneWidget);
+    expect(find.text(Phase.bolt.label), findsNothing, reason: '連れていない相');
+    // 階層をまたいで残る一党。連れてきた顔ぶれがそのまま出る。
     expect(find.text('PARTY'), findsOneWidget);
     expect(find.text(Mage.ember.sigil), findsOneWidget);
+    expect(find.text(Mage.rime.sigil), findsOneWidget);
   });
 
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
@@ -368,7 +379,7 @@ void main() {
 
     expect(controller.floor, 2);
     expect(controller.party.maxHp, maxHpBefore + Party.vigorGain);
-    expect(controller.party.members.length, 1);
+    expect(controller.party.members.length, twoPhases.length);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });

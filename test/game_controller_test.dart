@@ -37,6 +37,13 @@ GameController newController([int seed = 3]) =>
 /// 決め打ちで置くテストは、この2相を前提にしている。
 const twoPhases = [Mage.squireHeat, Mage.squireCold];
 
+/// 同じ2相を、従者ではなく焔と氷雨で揃えた一党。焔の補正（熱3枚で威力 +1）を
+/// 見たいテストはこちらを連れていく。
+const emberPair = [Mage.ember, Mage.rime];
+
+GameController emberController([int seed = 3]) =>
+    GameController(rng: Random(seed), roster: emberPair);
+
 /// なぞって離す。
 void trace(GameController controller, List<Cell> path) {
   controller.beginPath(path.first);
@@ -293,14 +300,14 @@ void main() {
   });
 
   group('一党', () {
-    test('始まりは焔の魔導士ひとり', () {
+    test('一党は連れてきた顔ぶれそのままで始まる', () {
       final controller = newController();
-      expect(controller.party.members, [Mage.ember]);
+      expect(controller.party.members, twoPhases);
       expect(controller.party.hp, Party.startingHp);
     });
 
     test('焔は熱を3枚以上継いだ鎖に威力を1足す', () {
-      final controller = newController();
+      final controller = emberController();
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
       // 熱（奇数）は (0,0) (0,2) の2枚だけ。まだ乗らない。
@@ -412,7 +419,7 @@ void main() {
     });
 
     test('焔の補正で威力8に届いても、7枚では雷は落ちない', () {
-      final controller = newController();
+      final controller = emberController();
       controller.party.members.add(Mage.storm);
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
@@ -457,8 +464,9 @@ void main() {
 
     test('未所持の魔導士は名簿の順に返る', () {
       // 道中では増えないが、この並びはガチャが未所持を数えるのに使う。
+      // 始まりの記録は従者3人ぶん。返ってくるのは招ける7人の並び。
       final party = Party.initial();
-      for (final mage in Mage.roster.skip(1)) {
+      for (final mage in Mage.summonable) {
         expect(party.nextRecruit, mage);
         party.members.add(mage);
       }
@@ -519,7 +527,7 @@ void main() {
     expect(controller.score, 0);
     expect(controller.party.hp, Party.startingHp);
     expect(controller.party.maxHp, Party.startingHp, reason: '加護も戻る');
-    expect(controller.party.members, [Mage.ember]);
+    expect(controller.party.members, twoPhases);
     expect(controller.movesLeft, controller.dungeon.floorAt(1).moveLimit);
     expect(controller.phase, GamePhase.playing);
   });
