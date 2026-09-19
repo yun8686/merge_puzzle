@@ -456,6 +456,9 @@ class Board {
     return n;
   }
 
+  /// 盤面に残っている敵の守り。決着画面に姿を並べるのに使う。
+  List<int> get foeWards => [for (final c in foeCells) tileAt(c)!.ward!];
+
   /// 討ち漏らしたまま階層を落としたときに受ける痛手。
   /// 守りが厚い敵を残すほど高くつく。
   int get foeThreat {

@@ -7,6 +7,7 @@ import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
 import 'package:parity_chain/main.dart';
 import 'package:parity_chain/ui/board_view.dart';
+import 'package:parity_chain/ui/foe_art.dart';
 import 'package:parity_chain/ui/game_screen.dart';
 
 /// 盤面を奇数・偶数の市松模様で塗りつぶす。どの方向にも繋がる状態。
@@ -276,6 +277,10 @@ void main() {
 
     expect(find.text('祝福を1つ選ぶ'), findsOneWidget);
     expect(find.text('同行'), findsOneWidget);
+    // 討ち果たした敵の姿と呼び名。守り3は小鬼。
+    expect(find.text('討ち果たした'), findsOneWidget);
+    expect(find.text(foeNameFor(Board.minWard)), findsOneWidget);
+    expect(find.byType(FoePortrait), findsOneWidget);
 
     await tester.ensureVisible(find.text('同行'));
     await tester.pump();

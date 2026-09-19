@@ -40,7 +40,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
 | `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 偶奇バー / 一党 / 決着画面 |
+| `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
+| `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `test/` | `board_test.dart` / `game_controller_test.dart` / `board_view_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（枚数と熱冷の内訳）

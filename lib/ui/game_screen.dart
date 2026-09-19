@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
 import 'board_view.dart';
+import 'foe_art.dart';
 import 'theme.dart';
 
 class GameScreen extends StatefulWidget {
@@ -648,7 +649,9 @@ class _FloorLostOverlay extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
+        _FoeLineup(wards: controller.board.foeWards),
+        const SizedBox(height: 18),
         Text('討ち漏らした敵の反撃', style: AppFont.label(10)),
         const SizedBox(height: 8),
         Text(
@@ -693,7 +696,9 @@ class _DefeatOverlay extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 20),
+        _FoeLineup(wards: controller.board.foeWards),
+        const SizedBox(height: 20),
         Text('SCORE', style: AppFont.label(10)),
         const SizedBox(height: 8),
         Text('${controller.score}', style: AppFont.number(56)),
@@ -738,6 +743,8 @@ class _StageClearOverlay extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
+        const SizedBox(height: 18),
+        _FoeLineup(wards: controller.felledWards, felled: true),
         const SizedBox(height: 18),
         Text('SCORE', style: AppFont.label(10)),
         const SizedBox(height: 8),
@@ -814,6 +821,101 @@ class _BlessingCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 決着画面に敵の姿を並べる。
+///
+/// 盤面のマスは実機で 40〜50px しかなく、守りの数字と体力の粒で埋まっている。
+/// 姿はここでだけ見せる。色は守りの厚さから決まるので、盤面で見ていた封印の
+/// 色とそのまま繋がる。
+class _FoeLineup extends StatelessWidget {
+  const _FoeLineup({required this.wards, this.felled = false});
+
+  final List<int> wards;
+
+  /// 討ち取った側の並びか。沈めて「もう居ない」ことを見せる。
+  final bool felled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (wards.isEmpty) return const SizedBox.shrink();
+    // 同じ敵が何体も居ることがあるので、守りごとに数える。
+    final counts = <int, int>{};
+    for (final w in wards) {
+      counts[w] = (counts[w] ?? 0) + 1;
+    }
+    final order = counts.keys.toList()..sort();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          felled ? '討ち果たした' : '討ち漏らした',
+          style: AppFont.label(10, color: Palette.textDim),
+        ),
+        const SizedBox(height: 12),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 268),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              for (final ward in order)
+                _FoeChip(ward: ward, count: counts[ward]!, felled: felled),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FoeChip extends StatelessWidget {
+  const _FoeChip({
+    required this.ward,
+    required this.count,
+    required this.felled,
+  });
+
+  final int ward;
+  final int count;
+  final bool felled;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = Palette.wardColorFor(ward);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            FoePortrait(ward: ward, size: 52, faded: felled),
+            // 同じ敵が複数居るときだけ体数を出す。1体のときは数字が邪魔。
+            if (count > 1)
+              Positioned(
+                right: -4,
+                top: -2,
+                child: Text(
+                  '×$count',
+                  style: AppFont.number(13, color: Palette.textMuted),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          foeNameFor(ward),
+          style: TextStyle(
+            color: felled ? Palette.textDim : Palette.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text('$ward', style: AppFont.number(13, color: tint)),
+      ],
     );
   }
 }

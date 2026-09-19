@@ -227,6 +227,64 @@ void main() {
     expect(foe.maxHp, 3);
   });
 
+  group('討った敵の記録', () {
+    test('討ち取った敵の守りが階層ごとに積まれる', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      expect(controller.felledWards, isEmpty);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      expect(controller.felledWards, [3]);
+    });
+
+    test('弾かれた敵は積まれない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 8);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      expect(controller.felledWards, isEmpty);
+    });
+
+    test('雷で討った敵も積まれる', () {
+      final controller = newController();
+      controller.party.members.add(Mage.storm);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+
+      trace(controller, const [
+        Cell(0, 0),
+        Cell(0, 1),
+        Cell(0, 2),
+        Cell(0, 3),
+        Cell(0, 4),
+        Cell(0, 5),
+        Cell(1, 5),
+        Cell(1, 4),
+      ]);
+      controller.commitPath();
+      expect(controller.felledWards, [6]);
+    });
+
+    test('階層が変わると空に戻る', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+      expect(controller.felledWards, [3]);
+
+      controller.nextStage(Blessing.heal);
+      expect(controller.felledWards, isEmpty);
+    });
+
+    test('討ち漏らした敵の守りは盤面から読める', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      expect(controller.board.foeWards, [6]);
+    });
+  });
+
   group('一党', () {
     test('始まりは焔の魔導士ひとり', () {
       final controller = newController();

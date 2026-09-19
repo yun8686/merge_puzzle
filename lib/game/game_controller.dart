@@ -46,6 +46,10 @@ class GameController extends ChangeNotifier {
   /// 直近の鎖で氷雨が戻した体力。0 なら何も起きていない。
   int lastHealed = 0;
 
+  /// この階層で討ち取った敵の守り。討った順に積む。制圧画面に姿を並べるのに使う。
+  /// 敵は盤面から消えてしまうので、ここに控えておかないと何を討ったか分からない。
+  final List<int> felledWards = <int>[];
+
   /// 直近に補充されたブロックの id。降ってくる演出に使う。
   Set<int> freshTileIds = <int>{};
 
@@ -93,6 +97,7 @@ class GameController extends ChangeNotifier {
     freshTileIds = const <int>{};
     isSettling = false;
     lastHealed = 0;
+    felledWards.clear();
     phase = GamePhase.playing;
   }
 
@@ -262,6 +267,14 @@ class GameController extends ChangeNotifier {
     lastHealed = party.heal(party.healFor(tally));
     if (party.boltFor(p)) {
       result = result.withBolt(board.strike(1));
+    }
+
+    for (var i = 0; i < result.cells.length; i++) {
+      final ward = result.wards[i];
+      if (result.cleared[i] && ward != null) felledWards.add(ward);
+    }
+    for (final fall in result.bolt) {
+      felledWards.add(fall.ward);
     }
 
     score += result.gained;
