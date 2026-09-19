@@ -1285,7 +1285,7 @@ class _PopTileState extends State<_PopTile>
 class _ScorePopup extends StatefulWidget {
   const _ScorePopup({
     required this.gained,
-    required this.length,
+    required this.power,
     required this.onDone,
   });
 
