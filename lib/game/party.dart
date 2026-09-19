@@ -80,7 +80,10 @@ const int rimeFrost = 3;
 const int stormChain = 8;
 
 /// 階層を制圧したときに選ぶ祝福。
-enum Blessing { heal, vigor, companion }
+///
+/// 仲間は増えない。誰を連れていくかは潜る前の編成で決まっていて、道中で
+/// 変わらない。ここで増えるのは体力と最大体力だけ。
+enum Blessing { heal, vigor }
 
 /// 祝福の1択ぶん。中身は選ぶ時点の一党によって変わる。
 class BlessingOffer {
@@ -123,6 +126,7 @@ class Party {
   bool has(MageKind kind) => members.any((m) => m.kind == kind);
 
   /// まだ仲間になっていない次の魔導士。全員揃っていれば null。
+  /// 道中では増えないので、いまはガチャ側が未所持を数えるのに使う。
   Mage? get nextRecruit {
     for (final m in Mage.roster) {
       if (!has(m.kind)) return m;
@@ -156,27 +160,18 @@ class Party {
   }
 
   /// いま選べる祝福。仲間が揃っていれば「同行」は出ない。
-  List<BlessingOffer> offers() {
-    final recruit = nextRecruit;
-    return [
-      BlessingOffer(
-        blessing: Blessing.heal,
-        title: '癒やし',
-        detail: '体力を ${(maxHp * 0.4).round()} 戻す',
-      ),
-      BlessingOffer(
-        blessing: Blessing.vigor,
-        title: '加護',
-        detail: '最大体力 +$vigorGain',
-      ),
-      if (recruit != null)
-        BlessingOffer(
-          blessing: Blessing.companion,
-          title: '同行',
-          detail: '${recruit.name}／${recruit.effect}',
-        ),
-    ];
-  }
+  List<BlessingOffer> offers() => [
+    BlessingOffer(
+      blessing: Blessing.heal,
+      title: '癒やし',
+      detail: '体力を ${(maxHp * 0.4).round()} 戻す',
+    ),
+    BlessingOffer(
+      blessing: Blessing.vigor,
+      title: '加護',
+      detail: '最大体力 +$vigorGain',
+    ),
+  ];
 
   void grant(Blessing blessing) {
     switch (blessing) {
@@ -185,9 +180,6 @@ class Party {
       case Blessing.vigor:
         maxHp += vigorGain;
         heal(vigorGain);
-      case Blessing.companion:
-        final recruit = nextRecruit;
-        if (recruit != null) members.add(recruit);
     }
   }
 }

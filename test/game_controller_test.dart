@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
+import 'package:parity_chain/game/dungeon.dart';
 import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
 
@@ -143,10 +144,10 @@ void main() {
     controller.settle();
     expect(controller.phase, GamePhase.floorLost);
 
-    final stage = controller.stage;
+    final floor = controller.floor;
     final hp = controller.party.hp;
     controller.retryFloor();
-    expect(controller.stage, stage, reason: '深さは変わらない');
+    expect(controller.floor, floor, reason: '深さは変わらない');
     expect(controller.party.hp, hp, reason: '体力は反撃のときに減らしてある');
     expect(controller.phase, GamePhase.playing);
     expect(controller.movesLeft, greaterThan(0));
@@ -274,7 +275,7 @@ void main() {
       controller.settle();
       expect(controller.felledWards, [3]);
 
-      controller.nextStage(Blessing.heal);
+      controller.nextFloor(Blessing.heal);
       expect(controller.felledWards, isEmpty);
     });
 
@@ -448,21 +449,14 @@ void main() {
       expect(controller.board.remainingFoes, 1);
     });
 
-    test('祝福は仲間が揃うまで同行を出す', () {
+    test('未所持の魔導士は加入順に返る', () {
+      // 道中では増えないが、この並びはガチャが未所持を数えるのに使う。
       final party = Party.initial();
-      expect(party.offers().map((o) => o.blessing), contains(Blessing.companion));
-
-      party.grant(Blessing.companion);
-      expect(party.members, [Mage.ember, Mage.rime]);
-      party.grant(Blessing.companion);
-      expect(party.members, [Mage.ember, Mage.rime, Mage.storm]);
-
-      // 全員揃えば同行は出ない。
+      expect(party.nextRecruit, Mage.rime);
+      party.members.add(Mage.rime);
+      expect(party.nextRecruit, Mage.storm);
+      party.members.add(Mage.storm);
       expect(party.nextRecruit, isNull);
-      expect(
-        party.offers().map((o) => o.blessing),
-        isNot(contains(Blessing.companion)),
-      );
     });
 
     test('加護は最大体力を増やす', () {
@@ -475,91 +469,165 @@ void main() {
 
     test('制圧の祝福は次の階層に持ち越される', () {
       final controller = newController();
-      controller.nextStage(Blessing.companion);
-      expect(controller.stage, 2);
-      expect(controller.party.members.length, 2);
+      controller.nextFloor(Blessing.vigor);
+      expect(controller.floor, 2);
+      expect(controller.party.maxHp, Party.startingHp + Party.vigorGain);
+    });
+
+    test('祝福で仲間は増えない', () {
+      final party = Party.initial();
+      final before = party.members.length;
+      for (final offer in party.offers()) {
+        party.grant(offer.blessing);
+      }
+      expect(party.members.length, before);
     });
   });
 
-  test('次の階層に進むと敵が増えて手数が戻る', () {
+  test('次の階層に進むと、その階層の定義どおりに組み直される', () {
     final controller = newController();
-    expect(controller.stage, 1);
-    expect(controller.remainingFoes, 1);
-    expect(controller.movesLeft, Board.movesFor(1));
+    final dungeon = controller.dungeon;
+    expect(controller.floor, 1);
+    expect(controller.remainingFoes, dungeon.floorAt(1).foes.length);
+    expect(controller.movesLeft, dungeon.floorAt(1).moveLimit);
 
-    controller.nextStage();
-    expect(controller.stage, 2);
-    expect(controller.remainingFoes, 2);
-    expect(controller.movesLeft, Board.movesFor(2));
+    controller.nextFloor();
+    expect(controller.floor, 2);
+    expect(controller.remainingFoes, dungeon.floorAt(2).foes.length);
+    expect(controller.movesLeft, dungeon.floorAt(2).moveLimit);
     expect(controller.phase, GamePhase.playing);
   });
 
-  test('やり直すと1階からになり、一党もスコアも戻る', () {
+  test('やり直すと1階層目からになり、一党もスコアも戻る', () {
     final controller = newController();
     paintCheckerboard(controller.board, foe: const Cell(7, 5));
     trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     controller.commitPath();
     controller.settle();
-    controller.nextStage(Blessing.companion);
+    controller.nextFloor(Blessing.vigor);
     controller.party.hp = 3;
-    expect(controller.stage, 2);
+    expect(controller.floor, 2);
 
     controller.restart();
-    expect(controller.stage, 1);
+    expect(controller.floor, 1);
     expect(controller.score, 0);
     expect(controller.party.hp, Party.startingHp);
+    expect(controller.party.maxHp, Party.startingHp, reason: '加護も戻る');
     expect(controller.party.members, [Mage.ember]);
-    expect(controller.movesLeft, Board.movesFor(1));
+    expect(controller.movesLeft, controller.dungeon.floorAt(1).moveLimit);
     expect(controller.phase, GamePhase.playing);
   });
 
-  group('階層の難度', () {
-    test('敵の数は5体で頭打ちになる', () {
-      expect(GameController.foeCountFor(1), 1);
-      expect(GameController.foeCountFor(5), 5);
-      expect(GameController.foeCountFor(9), 5);
-    });
-
-    test('序盤は小さい守りしか出ない', () {
-      expect(GameController.maxWardFor(1), 4);
-      expect(GameController.maxWardFor(20), Board.maxWard);
-    });
-
-    test('体力を持つ敵は3階から出てくる', () {
-      expect(GameController.maxFoeHpFor(1), 1);
-      expect(GameController.maxFoeHpFor(2), 1);
-      expect(GameController.maxFoeHpFor(3), 2);
-      expect(GameController.maxFoeHpFor(6), 3);
-    });
-
-    test('手数は敵の体力の合計から決まる', () {
-      // 体力を持つ敵が居なければ、体数で数えていた頃と同じ。
-      expect(GameController.moveLimitFor(5), Board.movesFor(5));
-      expect(GameController.moveLimitFor(6), Board.movesFor(5) - 1);
-      expect(GameController.moveLimitFor(40), greaterThanOrEqualTo(10));
-      // 体力の合計が増えれば、そのぶん手数も増える。
-      expect(
-        GameController.moveLimitFor(3, totalFoeHp: 6),
-        greaterThan(GameController.moveLimitFor(3, totalFoeHp: 3)),
-      );
-    });
-
-    test('階層を作ると、その階層の体力の合計から手数が決まる', () {
-      for (var stage = 1; stage <= 8; stage++) {
-        final controller = GameController(
-          createBoard: () => Board(rng: Random(stage)),
-          startStage: stage,
-        );
-        expect(
-          controller.movesLeft,
-          GameController.moveLimitFor(
-            stage,
-            totalFoeHp: controller.board.totalFoeHp,
-          ),
-          reason: 'stage=$stage',
-        );
-        expect(controller.movesLeft, greaterThanOrEqualTo(5));
+  group('ダンジョン', () {
+    test('階層は定義どおりに組まれる', () {
+      for (final dungeon in Dungeons.all) {
+        for (var floor = 1; floor <= dungeon.depth; floor++) {
+          final controller = GameController(
+            createBoard: () => Board(rng: Random(floor)),
+            dungeon: dungeon,
+            startFloor: floor,
+          );
+          final spec = dungeon.floorAt(floor);
+          expect(
+            controller.remainingFoes,
+            spec.foes.length,
+            reason: '${dungeon.id} B${floor}F',
+          );
+          expect(
+            controller.board.totalFoeHp,
+            spec.totalFoeHp,
+            reason: '${dungeon.id} B${floor}F',
+          );
+          expect(controller.movesLeft, spec.moveLimit);
+          expect(controller.movesLeft, greaterThanOrEqualTo(5));
+        }
       }
+    });
+
+    test('守りと体力は指定した通りに置かれる', () {
+      // 散らす側は「守りが厚いほど体力は薄く」と曲げるが、
+      // 手で書いた階層は曲げない。竜に体力3を持たせられないと困る。
+      final board = Board(rng: Random(1));
+      board.buildStage(
+        foes: const [FoeSpec(8, hp: 3), FoeSpec(3)],
+      );
+      final wards = board.foeWards.toList()..sort();
+      expect(wards, [3, 8]);
+      expect(board.totalFoeHp, 4);
+    });
+
+    test('最下層を制圧すると踏破になる', () {
+      final controller = GameController(
+        createBoard: () => Board(rng: Random(2)),
+        startFloor: Dungeons.all.first.depth,
+      );
+      expect(controller.isLastFloor, isTrue);
+
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.phase, GamePhase.dungeonCleared);
+    });
+
+    test('最下層の手前なら踏破ではなく制圧になる', () {
+      final controller = newController();
+      expect(controller.isLastFloor, isFalse);
+
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.phase, GamePhase.stageCleared);
+    });
+
+    test('最下層では次の階層に進めない', () {
+      final dungeon = Dungeons.all.first;
+      final controller = GameController(
+        createBoard: () => Board(rng: Random(2)),
+        startFloor: dungeon.depth,
+      );
+      controller.nextFloor(Blessing.vigor);
+      expect(controller.floor, dungeon.depth);
+      expect(controller.party.maxHp, Party.startingHp, reason: '祝福も乗らない');
+    });
+
+    test('別のダンジョンに入り直すと1階層目から始まる', () {
+      final controller = newController();
+      controller.nextFloor();
+      controller.party.hp = 5;
+      controller.score = 999;
+
+      controller.enterDungeon(Dungeons.all[1]);
+      expect(controller.dungeon.id, Dungeons.all[1].id);
+      expect(controller.floor, 1);
+      expect(controller.score, 0);
+      expect(controller.party.hp, Party.startingHp);
+      expect(controller.movesLeft, Dungeons.all[1].floorAt(1).moveLimit);
+    });
+
+    test('連れていく顔ぶれは入り直しても保たれる', () {
+      final controller = GameController(
+        createBoard: () => Board(rng: Random(4)),
+        roster: const [Mage.ember, Mage.storm],
+      );
+      expect(controller.party.members, [Mage.ember, Mage.storm]);
+
+      controller.restart();
+      expect(controller.party.members, [Mage.ember, Mage.storm]);
+      expect(controller.party.hp, Party.startingHp);
+    });
+
+    test('ダンジョンは3本あって、どれも7階層', () {
+      expect(Dungeons.all.length, 3);
+      for (final d in Dungeons.all) {
+        expect(d.depth, 7, reason: d.id);
+        expect(Dungeons.byId(d.id).id, d.id);
+      }
+      expect(Dungeons.after(Dungeons.all.last), isNull);
+      expect(Dungeons.after(Dungeons.all.first)?.id, Dungeons.all[1].id);
     });
   });
 

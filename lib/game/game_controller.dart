@@ -1,35 +1,52 @@
 import 'package:flutter/foundation.dart';
 
 import 'board.dart';
+import 'dungeon.dart';
 import 'party.dart';
 
 /// 階層の決着。
 ///
 ///  - [stageCleared] … その階層の敵を討ち果たした。祝福を1つ選んで次の階層へ
+///  - [dungeonCleared] … 最下層まで討ち果たした。ダンジョンの踏破
 ///  - [floorLost] … ターン切れか手詰まり。討ち漏らした敵の反撃を受けて編み直す
-///  - [defeated] … 反撃で一党の体力が尽きた。ここで終わり
-enum GamePhase { playing, stageCleared, floorLost, defeated }
+///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
+enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 
 /// 盤面の上に乗る「遊び」の状態管理。
 ///
-/// 階層制。敵を全部討てば制圧、ターンを使い切れば階層を落とす。
-/// 階層をまたいで残るのは [party] だけで、盤面は毎回編み直される。
+/// ダンジョン制。[dungeon] の階層を1階層目から順に降り、最下層を制圧すれば踏破。
+/// 体力が尽きたらそのダンジョンは失敗で、**1階層目からやり直す**。
+///
+/// 一党は潜る前に決めて、道中では増えない。増えるのは体力と最大体力だけ
+/// （制圧のたびの祝福）。誰を連れていくかは編成の側の判断に閉じている。
 class GameController extends ChangeNotifier {
-  GameController({Board Function()? createBoard, int startStage = 1})
-    : _createBoard = createBoard ?? Board.new {
-    party = Party.initial();
-    _startStage(startStage);
+  GameController({
+    Board Function()? createBoard,
+    Dungeon? dungeon,
+    List<Mage>? roster,
+    int startFloor = 1,
+  }) : _createBoard = createBoard ?? Board.new {
+    this.dungeon = dungeon ?? Dungeons.all.first;
+    _roster = List.of(roster ?? const <Mage>[Mage.ember]);
+    party = _freshParty();
+    _startFloor(startFloor);
   }
 
   final Board Function() _createBoard;
 
   late Board board;
 
+  /// いま潜っているダンジョン。
+  late Dungeon dungeon;
+
+  /// 連れてきた魔導士。失敗してやり直すときはここから編み直す。
+  late List<Mage> _roster;
+
   /// 階層をまたいで持ち越す一党。
   late Party party;
 
-  /// 1から始まる階層番号。深いほど敵が増え、守りも体力も厚くなる。
-  late int stage;
+  /// 1から始まる階層番号。[Dungeon.depth] まで降りれば踏破。
+  late int floor;
 
   /// この階層に残っている手数。
   late int movesLeft;
@@ -59,39 +76,24 @@ class GameController extends ChangeNotifier {
   /// 見せたいので、その間は盤面を凍らせて穴が開いたままにしておく。
   bool isSettling = false;
 
-  /// この階層に置く敵の数。5体で頭打ち。
-  static int foeCountFor(int stage) => stage.clamp(1, 5);
+  /// いまが最下層か。
+  bool get isLastFloor => floor >= dungeon.depth;
 
-  /// この階層の敵の守りの上限。
-  /// 序盤は小さい数字しか出ないので、ルールを覚えるうちは詰まらない。
-  static int maxWardFor(int stage) =>
-      (Board.minWard + stage).clamp(Board.minWard + 1, Board.maxWard);
+  /// 連れてきた魔導士（読み取り専用）。
+  List<Mage> get roster => List.unmodifiable(_roster);
 
-  /// この階層の敵の体力の上限。深くなってから2回・3回と殴らせる。
-  /// 序盤は 1 のまま＝体力を持たなかった頃と同じ手触りにしておく。
-  static int maxFoeHpFor(int stage) {
-    if (stage <= 2) return 1;
-    if (stage <= 5) return 2;
-    return 3;
-  }
+  /// 潜り始めの一党。体力は毎回満タンから。
+  Party _freshParty() => Party(
+    members: List.of(_roster),
+    hp: Party.startingHp,
+    maxHp: Party.startingHp,
+  );
 
-  /// この階層の手数。敵の体力の合計から決まるが、6階以降は1階ごとに1手ずつ削る。
-  static int moveLimitFor(int stage, {int? totalFoeHp}) {
-    final hp = totalFoeHp ?? foeCountFor(stage);
-    final base = Board.movesFor(hp);
-    final squeeze = stage > 5 ? stage - 5 : 0;
-    return (base - squeeze).clamp(hp * 2, base);
-  }
-
-  void _startStage(int n) {
-    stage = n;
+  void _startFloor(int n) {
+    floor = n.clamp(1, dungeon.depth);
     board = _createBoard();
-    board.buildStage(
-      foeCount: foeCountFor(n),
-      wardCap: maxWardFor(n),
-      maxFoeHp: maxFoeHpFor(n),
-    );
-    movesLeft = moveLimitFor(n, totalFoeHp: board.totalFoeHp);
+    board.buildStage(foes: dungeon.floorAt(floor).foes);
+    movesLeft = dungeon.floorAt(floor).moveLimit;
     path.clear();
     hintPath = const [];
     freshTileIds = const <int>{};
@@ -101,28 +103,35 @@ class GameController extends ChangeNotifier {
     phase = GamePhase.playing;
   }
 
-  /// 祝福を受け取って次の階層へ。
-  void nextStage([Blessing? blessing]) {
+  /// 祝福を受け取って次の階層へ。最下層では何もしない。
+  void nextFloor([Blessing? blessing]) {
+    if (isLastFloor) return;
     if (blessing != null) party.grant(blessing);
-    _startStage(stage + 1);
+    _startFloor(floor + 1);
     notifyListeners();
   }
 
   /// 落とした階層を編み直す。体力は既に減らしてあるので、ここでは触らない。
   void retryFloor() {
-    _startStage(stage);
+    _startFloor(floor);
     notifyListeners();
   }
 
-  /// 最初からやり直す。一党もスコアも戻す。
-  void restart() {
+  /// ダンジョンに入り直す。1階層目から、体力も満タンから。
+  /// [roster] を渡すと連れていく顔ぶれも入れ替える（編成をやり直したとき）。
+  void enterDungeon(Dungeon next, {List<Mage>? roster}) {
+    dungeon = next;
+    if (roster != null) _roster = List.of(roster);
     score = 0;
     bestChain = 0;
     lastBacklash = 0;
-    party = Party.initial();
-    _startStage(1);
+    party = _freshParty();
+    _startFloor(1);
     notifyListeners();
   }
+
+  /// いまのダンジョンを1階層目からやり直す。失敗したときもこれ。
+  void restart() => enterDungeon(dungeon);
 
   bool get isTracing => path.isNotEmpty;
 
@@ -300,7 +309,7 @@ class GameController extends ChangeNotifier {
     freshTileIds = board.refill();
 
     if (board.remainingFoes == 0) {
-      phase = GamePhase.stageCleared;
+      phase = isLastFloor ? GamePhase.dungeonCleared : GamePhase.stageCleared;
     } else if (movesLeft <= 0 || !board.hasAnyChain()) {
       // 討ち漏らした敵の反撃。守りが厚い敵を残すほど高くつく。
       lastBacklash = board.foeThreat;

@@ -38,6 +38,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
+| `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵と手数を手で書く。増やすのはここ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
 | `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 偶奇バー / 一党 / 決着画面 |
 | `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
@@ -47,6 +48,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（枚数と熱冷の内訳）
 だけを見る。ここを繋ぐと、README に書いてある検証済みの数値が意味を失う。
+
+一党は**潜る前に決まり、道中では増えない**。制圧の祝福で増えるのは体力だけ。
+ここを緩めると編成が判断にならなくなる（README 第5段階）。
 
 ## 消える演出のテンポ
 

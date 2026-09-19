@@ -67,6 +67,18 @@ class Tile {
       Tile(id: id, isOdd: isOdd, ward: ward, hp: hp - damage, maxHp: maxHp);
 }
 
+/// 階層に置く敵1体ぶんの指定。ダンジョンの階層を手で書くのに使う。
+///
+/// 散らす方（[Board.buildStage] の [foeCount] 側）は「守りが厚い敵ほど体力は
+/// 薄く」という縛りを掛けているが、こちらは掛けない。手で書く以上、厚い守りと
+/// 厚い体力を重ねてよいのはボスだけ、という判断は書く側の責任になる。
+class FoeSpec {
+  const FoeSpec(this.ward, {this.hp = 1});
+
+  final int ward;
+  final int hp;
+}
+
 /// 鎖の外で討ち取られた敵。いまは雷の魔導士の追撃だけがこれを作る。
 /// 演出に要る情報しか持たない。
 class FoeFall {
@@ -223,13 +235,46 @@ class Board {
   ///
   /// [foeCount] 体の敵に、[minWard]〜[wardCap] の範囲で守りを割り振り、
   /// 体力を 1〜[maxFoeHp] から選ぶ。
+  /// 階層を組む。[foes] を渡すとその通りに置き、渡さなければ
+  /// [foeCount] / [wardCap] / [maxFoeHp] から適当に散らす。
+  ///
+  /// ダンジョンは階層を手で書くので [foes] を使う。散らす方は、決め打ちの
+  /// ダンジョンを持たない遊び方（無限に潜る形）を残すために置いてある。
   void buildStage({
-    required int foeCount,
-    required int wardCap,
+    int foeCount = 1,
+    int wardCap = maxWard,
     int maxFoeHp = 1,
+    List<FoeSpec>? foes,
   }) {
     _fillInitial();
-    _placeFoes(foeCount, wardCap, maxFoeHp);
+    if (foes != null) {
+      _placeGiven(foes);
+    } else {
+      _placeFoes(foeCount, wardCap, maxFoeHp);
+    }
+  }
+
+  /// 指定された敵をそのまま置く。守りも体力も曲げない。
+  /// 置く場所だけは毎回変える。同じ階層でも盤面は編み直されるため。
+  void _placeGiven(List<FoeSpec> foes) {
+    final cells = <Cell>[];
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        cells.add(Cell(r, c));
+      }
+    }
+    cells.shuffle(_rng);
+    for (var i = 0; i < foes.length && i < cells.length; i++) {
+      final cell = cells[i];
+      final base = grid[cell.row][cell.col]!;
+      final spec = foes[i];
+      grid[cell.row][cell.col] = Tile(
+        id: base.id,
+        isOdd: base.isOdd,
+        ward: spec.ward.clamp(minWard, maxWard),
+        hp: spec.hp < 1 ? 1 : spec.hp,
+      );
+    }
   }
 
   /// 初期盤面は偶奇を五分五分で敷く（開幕から詰んでいると理不尽なため）。

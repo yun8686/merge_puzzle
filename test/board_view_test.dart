@@ -329,7 +329,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('祝福を1つ選ぶ'), findsOneWidget);
-    expect(find.text('同行'), findsOneWidget);
+    expect(find.text('癒やし'), findsOneWidget);
+    expect(find.text('加護'), findsOneWidget);
+    expect(find.text('同行'), findsNothing, reason: '仲間は道中で増えない');
     // 討ち果たした敵の姿と呼び名。守り3は小鬼。
     expect(find.text('討ち果たした'), findsOneWidget);
     expect(find.text(foeNameFor(Board.minWard)), findsOneWidget);
@@ -341,13 +343,16 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.ensureVisible(find.text('同行'));
+    // 祝福で仲間は増えない。増えるのは体力と最大体力だけ。
+    final maxHpBefore = controller.party.maxHp;
+    await tester.ensureVisible(find.text('加護'));
     await tester.pump();
-    await tester.tap(find.text('同行'));
+    await tester.tap(find.text('加護'));
     await tester.pump();
 
-    expect(controller.stage, 2);
-    expect(controller.party.members.length, 2);
+    expect(controller.floor, 2);
+    expect(controller.party.maxHp, maxHpBefore + Party.vigorGain);
+    expect(controller.party.members.length, 1);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../game/dungeon.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
 import 'board_view.dart';
@@ -64,7 +65,9 @@ class _GameScreenState extends State<GameScreen> {
     // ここは notifyListeners の中なので setState は呼ばない。
     // 画面は AnimatedBuilder が同じ通知で描き直す。
     _pause?.cancel();
-    if (phase != GamePhase.stageCleared || !wasPlaying) {
+    final cleared =
+        phase == GamePhase.stageCleared || phase == GamePhase.dungeonCleared;
+    if (!cleared || !wasPlaying) {
       _holdingClear = false;
       return;
     }
@@ -77,7 +80,13 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() => _controller.restart();
 
-  void _nextStage(Blessing blessing) => _controller.nextStage(blessing);
+  /// 踏破したので次のダンジョンへ。最後まで行っていたら1本目に戻る。
+  void _nextDungeon() {
+    final next = Dungeons.after(_controller.dungeon) ?? Dungeons.all.first;
+    _controller.enterDungeon(next);
+  }
+
+  void _nextFloor(Blessing blessing) => _controller.nextFloor(blessing);
 
   void _retryFloor() => _controller.retryFloor();
 
@@ -138,7 +147,13 @@ class _GameScreenState extends State<GameScreen> {
                         !_holdingClear)
                       _StageClearOverlay(
                         controller: _controller,
-                        onChoose: _nextStage,
+                        onChoose: _nextFloor,
+                      ),
+                    if (_controller.phase == GamePhase.dungeonCleared &&
+                        !_holdingClear)
+                      _DungeonClearOverlay(
+                        controller: _controller,
+                        onNext: _nextDungeon,
                       ),
                     if (_controller.phase == GamePhase.floorLost)
                       _FloorLostOverlay(
@@ -256,9 +271,22 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 10),
             _StatPanel(
               label: 'DEPTH',
-              value: Text(
-                'B${controller.stage}F',
-                style: AppFont.number(22, color: Palette.textMuted),
+              value: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    'B${controller.floor}F',
+                    style: AppFont.number(22, color: Palette.textMuted),
+                  ),
+                  // あと何階層あるのかが分からないと、体力をどこまで使ってよいか
+                  // 決められない。踏破が目標になった以上ここは要る。
+                  Text(
+                    ' /${controller.dungeon.depth}',
+                    style: AppFont.number(13, color: Palette.textDim),
+                  ),
+                ],
               ),
             ),
           ],
@@ -675,7 +703,7 @@ class _FloorLostOverlay extends StatelessWidget {
     return _Curtain(
       children: [
         Text(
-          'B${controller.stage}F を落とした',
+          'B${controller.floor}F を落とした',
           style: AppFont.number(26, color: Palette.danger),
         ),
         const SizedBox(height: 6),
@@ -727,7 +755,7 @@ class _DefeatOverlay extends StatelessWidget {
         Text('一党は倒れた', style: AppFont.number(30, color: Palette.danger)),
         const SizedBox(height: 6),
         Text(
-          'B${controller.stage}F の反撃で体力が尽きた',
+          'B${controller.floor}F の反撃で体力が尽きた',
           style: const TextStyle(
             color: Palette.textMuted,
             fontSize: 13,
@@ -741,7 +769,7 @@ class _DefeatOverlay extends StatelessWidget {
         const SizedBox(height: 8),
         Text('${controller.score}', style: AppFont.number(56)),
         const SizedBox(height: 18),
-        _ResultRow(label: '到達', value: 'B${controller.stage}F'),
+        _ResultRow(label: '到達', value: 'B${controller.floor}F'),
         const SizedBox(height: 8),
         _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
         const SizedBox(height: 8),
@@ -750,7 +778,7 @@ class _DefeatOverlay extends StatelessWidget {
           value: '${controller.remainingFoes} 体',
         ),
         const SizedBox(height: 26),
-        _PrimaryButton(label: 'やり直す', onTap: onRestart),
+        _PrimaryButton(label: '1階層目からやり直す', onTap: onRestart),
       ],
     );
   }
@@ -769,7 +797,7 @@ class _StageClearOverlay extends StatelessWidget {
     return _Curtain(
       children: [
         Text(
-          'B${controller.stage}F 制圧',
+          'B${controller.floor}F 制圧',
           style: AppFont.number(26, color: Palette.gold),
         ),
         const SizedBox(height: 6),
@@ -807,6 +835,57 @@ class _StageClearOverlay extends StatelessWidget {
   }
 }
 
+/// ダンジョンの踏破。最下層を制圧したときだけ出る。
+///
+/// ここでは祝福を選ばせない。持ち越す先が無いのと、踏破の瞬間に選択を挟むと
+/// 「終わった」という区切りがぼやけるため。
+class _DungeonClearOverlay extends StatelessWidget {
+  const _DungeonClearOverlay({required this.controller, required this.onNext});
+
+  final GameController controller;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = Dungeons.after(controller.dungeon);
+    final party = controller.party;
+    return _Curtain(
+      children: [
+        Text('踏 破', style: AppFont.number(34, color: Palette.gold)),
+        const SizedBox(height: 8),
+        Text(
+          controller.dungeon.name,
+          style: const TextStyle(
+            color: Palette.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 18),
+        _FoeLineup(wards: controller.felledWards, felled: true),
+        const SizedBox(height: 20),
+        Text('SCORE', style: AppFont.label(10)),
+        const SizedBox(height: 8),
+        Text('${controller.score}', style: AppFont.number(56)),
+        const SizedBox(height: 18),
+        _ResultRow(label: '踏破した階層', value: 'B${controller.dungeon.depth}F'),
+        const SizedBox(height: 8),
+        _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
+        const SizedBox(height: 8),
+        _ResultRow(
+          label: '残った体力',
+          value: '${party.hp} / ${party.maxHp}',
+        ),
+        const SizedBox(height: 26),
+        _PrimaryButton(
+          label: next == null ? '最初のダンジョンへ' : '${next.name} へ',
+          onTap: onNext,
+        ),
+      ],
+    );
+  }
+}
+
 /// 祝福の1択。押した瞬間に次の階層が始まる。
 class _BlessingCard extends StatelessWidget {
   const _BlessingCard({required this.offer, required this.onTap});
@@ -819,7 +898,6 @@ class _BlessingCard extends StatelessWidget {
     final tint = switch (offer.blessing) {
       Blessing.heal => Palette.life,
       Blessing.vigor => Palette.gold,
-      Blessing.companion => Palette.evenA,
     };
     return SizedBox(
       width: 260,
