@@ -301,20 +301,11 @@ void main() {
     });
 
     test('雷で討った敵も積まれる', () {
-      final controller = newController();
+      final controller = prismController();
       controller.party.members.add(Mage.storm);
-      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      paintPrism(controller.board, foe: const Cell(7, 5), ward: 6);
 
-      trace(controller, const [
-        Cell(0, 0),
-        Cell(0, 1),
-        Cell(0, 2),
-        Cell(0, 3),
-        Cell(0, 4),
-        Cell(0, 5),
-        Cell(1, 5),
-        Cell(1, 4),
-      ]);
+      trace(controller, boltPath);
       controller.commitPath();
       expect(controller.felledWards, [6]);
     });
