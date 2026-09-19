@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../game/party.dart';
+
 /// 熱の相=暖色、冷の相=寒色。この2色がゲームの中心情報なので、
 /// 背景は暗く沈めてマナとエフェクトを目立たせる。
 ///
@@ -34,6 +36,18 @@ class Palette {
   static const textDim = Color(0xFF5A5A78);
   static const danger = Color(0xFFFF4E5E);
   static const gold = Color(0xFFFFD24E);
+
+  /// 一党の体力。減るのは階層を落としたときだけなので、盤面の2色と
+  /// ぶつからない緑に置いて「盤面の外の資源」だと分かるようにする。
+  static const life = Color(0xFF6BE8A0);
+
+  /// 魔導士の色。能力が見ている相をそのまま色にしてある。
+  /// 雷だけは相を持たないので金。
+  static Color mageColor(MageKind kind) => switch (kind) {
+    MageKind.ember => oddA,
+    MageKind.rime => evenA,
+    MageKind.storm => gold,
+  };
 
   /// 敵を包む守りの色。金の封印として読ませる。
   static const ward = gold;
@@ -110,20 +124,20 @@ BoxDecoration panelDecoration({
   ],
 );
 
-/// 鎖の長さに応じた呪文の位階。継ぎ目が多いほど衝撃が積み上がるので、
-/// 長いほど上位の名で呼ばれる。
+/// 鎖の威力に応じた呪文の位階。継ぎ目が多いほど衝撃が積み上がるので、
+/// 強いほど上位の名で呼ばれる。
 class ChainRank {
   const ChainRank(this.label, this.color);
 
   final String label;
   final Color color;
 
-  static ChainRank? of(int length) {
-    if (length >= 12) return const ChainRank('RAGNAROK!!!', Color(0xFFFFE14E));
-    if (length >= 10) return const ChainRank('CATACLYSM!!', Color(0xFFFFB03D));
-    if (length >= 8) return const ChainRank('SHATTER!!', Color(0xFFFF7A4E));
-    if (length >= 6) return const ChainRank('FRACTURE!', Color(0xFF6BE8FF));
-    if (length >= 5) return const ChainRank('SPARK', Color(0xFF8CFFB0));
+  static ChainRank? of(int power) {
+    if (power >= 12) return const ChainRank('RAGNAROK!!!', Color(0xFFFFE14E));
+    if (power >= 10) return const ChainRank('CATACLYSM!!', Color(0xFFFFB03D));
+    if (power >= 8) return const ChainRank('SHATTER!!', Color(0xFFFF7A4E));
+    if (power >= 6) return const ChainRank('FRACTURE!', Color(0xFF6BE8FF));
+    if (power >= 5) return const ChainRank('SPARK', Color(0xFF8CFFB0));
     return null;
   }
 }

@@ -26,7 +26,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final List<_Popup> _popups = <_Popup>[];
   final List<_ChainFlash> _flashes = <_ChainFlash>[];
 
-  /// 目標ブロックの id ごとの「耐えた回数」。値が変わったフレームで
+  /// 敵の id ごとの「討たれずに残った回数」。値が変わったフレームで
   /// そのブロックを揺らす。消えずに残ったことを、その場で伝えるため。
   final Map<int, int> _resists = <int, int>{};
 
@@ -148,16 +148,16 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
     final stagger = _staggerFor(result.length);
 
-    if (result.length >= 8) {
+    if (result.power >= 8) {
       HapticFeedback.heavyImpact();
-    } else if (result.length >= 5) {
+    } else if (result.power >= 5) {
       HapticFeedback.mediumImpact();
     } else {
       HapticFeedback.lightImpact();
     }
 
-    // 消えたマスだけ弾けさせる。長さが足りずに耐えた目標ブロックは
-    // その場に残るので、弾ける代わりに揺らして「効かなかった」ことを見せる。
+    // 消えたマスだけ弾けさせる。討ち取れなかった敵はその場に残るので、
+    // 弾ける代わりに揺らす。弾かれたのか、傷はついたのかは封印の側で見せる。
     for (var i = 0; i < result.cells.length; i++) {
       final cell = result.cells[i];
       if (!result.cleared[i]) {
@@ -170,10 +170,23 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
       _pops.add(
         _Pop(
           id: _seq++,
-          requiredLength: result.requiredLengths[i],
+          ward: result.wards[i],
           isOdd: result.isOdds[i],
           center: _centerOf(cell),
           delay: stagger * i,
+        ),
+      );
+    }
+
+    // 雷に討たれた敵は鎖の外なので、最後の1枚と同じ間で一緒に弾けさせる。
+    for (final fall in result.bolt) {
+      _pops.add(
+        _Pop(
+          id: _seq++,
+          ward: fall.ward,
+          isOdd: fall.isOdd,
+          center: _centerOf(fall.cell),
+          delay: stagger * (result.length - 1),
         ),
       );
     }
@@ -200,17 +213,17 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     _particles.shockwave(
       _centerOf(result.endCell),
       Palette.glowFor(endIsOdd),
-      radius: (_cell * (1.4 + result.length * 0.3)).clamp(0.0, _cell * 5),
+      radius: (_cell * (1.4 + result.power * 0.3)).clamp(0.0, _cell * 5),
       life: 0.5,
       width: 7,
     );
 
-    _frameGlow = (result.length / 6).clamp(0.45, 1.0);
+    _frameGlow = (result.power / 6).clamp(0.45, 1.0);
     _frameColor = Palette.glowFor(endIsOdd);
-    if (result.length >= 8) {
+    if (result.power >= 8) {
       // 強くすると盤面が白飛びして、何が消えたのか読めなくなる。
       // あくまで枠の発光を後押しする程度に留める。
-      _screenFlash = (result.length / 60).clamp(0.0, 0.2);
+      _screenFlash = (result.power / 60).clamp(0.0, 0.2);
       _screenFlashColor = Palette.glowFor(endIsOdd);
     }
 
@@ -219,16 +232,16 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
         id: _seq++,
         center: _centerOf(result.endCell),
         gained: result.gained,
-        length: result.length,
+        power: result.power,
       ),
     );
 
-    final rank = ChainRank.of(result.length);
+    final rank = ChainRank.of(result.power);
     if (rank != null) {
       _rank = _Rank(id: _seq++, rank: rank);
     }
 
-    _shake = (result.length * 3.0).clamp(4.0, 32.0);
+    _shake = (result.power * 3.0).clamp(4.0, 32.0);
     _shakeTime = 0;
     _ensureTicking();
     setState(() {});
@@ -378,7 +391,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     width: cell,
                     height: cell,
                     child: _PopTile(
-                      requiredLength: pop.requiredLength,
+                      ward: pop.ward,
                       isOdd: pop.isOdd,
                       size: cell,
                       delay: pop.delay,
@@ -454,7 +467,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     child: IgnorePointer(
                       child: _ScorePopup(
                         gained: popup.gained,
-                        length: popup.length,
+                        power: popup.power,
                         onDone: () {
                           _popups.removeWhere((p) => p.id == popup.id);
                           if (mounted) setState(() {});
@@ -509,7 +522,8 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
               selected: controller.isSelected(at),
               candidate: controller.isCandidate(at),
               fresh: controller.freshTileIds.contains(tile.id),
-              willClear: controller.willClear(at),
+              willFell: controller.willFell(at),
+              willHurt: controller.willHurt(at),
               resistCount: _resists[tile.id] ?? 0,
             ),
           ),
@@ -702,7 +716,7 @@ class _WellPainter extends CustomPainter {
 class _Pop {
   _Pop({
     required this.id,
-    required this.requiredLength,
+    required this.ward,
     required this.isOdd,
     required this.center,
     required this.delay,
@@ -710,8 +724,8 @@ class _Pop {
 
   final int id;
 
-  /// 目標ブロックなら書かれていた数字。通常ブロックは null。
-  final int? requiredLength;
+  /// 敵なら書かれていた守り。マナのマスは null。
+  final int? ward;
   final bool isOdd;
   final Offset center;
   final Duration delay;
@@ -722,13 +736,13 @@ class _Popup {
     required this.id,
     required this.center,
     required this.gained,
-    required this.length,
+    required this.power,
   });
 
   final int id;
   final Offset center;
   final int gained;
-  final int length;
+  final int power;
 }
 
 class _Rank {
@@ -747,7 +761,8 @@ class TileWidget extends StatefulWidget {
     required this.selected,
     required this.candidate,
     required this.fresh,
-    required this.willClear,
+    required this.willFell,
+    required this.willHurt,
     required this.resistCount,
   });
 
@@ -757,11 +772,14 @@ class TileWidget extends StatefulWidget {
   final bool candidate;
   final bool fresh;
 
-  /// 目標ブロックが、いまなぞっている長さで消えるか。
+  /// 敵が、いまなぞっている威力で討ち取れるか。
   /// パスに入っていないブロックでは常に false。
-  final bool willClear;
+  final bool willFell;
 
-  /// このブロックが「長さが足りなくて耐えた」回数。
+  /// 敵に、いまなぞっている威力で傷がつくか。討ち取れなくても体力は削れる。
+  final bool willHurt;
+
+  /// このブロックが「討ち取られずに耐えた」回数。
   /// 増えたフレームで揺らす。
   final int resistCount;
 
@@ -856,11 +874,15 @@ class _TileWidgetState extends State<TileWidget>
             if (widget.candidate && !widget.selected)
               _CandidatePulse(size: size),
             // 数字が書かれているのは敵だけ。マナのマスは相の色しか持たない。
-            if (widget.tile.isTarget) _FoeFace(
-              ward: widget.tile.requiredLength!,
-              size: size,
-              willBreak: widget.willClear,
-            ),
+            if (widget.tile.isFoe)
+              _FoeFace(
+                ward: widget.tile.ward!,
+                hp: widget.tile.hp,
+                maxHp: widget.tile.maxHp,
+                size: size,
+                willFall: widget.willFell,
+                willHurt: widget.willHurt,
+              ),
           ],
         ),
       ),
@@ -938,51 +960,131 @@ class _CandidatePulseState extends State<_CandidatePulse>
   }
 }
 
-/// 敵を包む「守り」。書かれている数字は、破るのに要る鎖の威力。
+/// 敵を包む「守り」。書かれている数字は、傷をつけるのに要る鎖の威力。
 /// マナのマスと読み違えられないよう、六角の封印で囲って別物に見せる。
-/// いま編んでいる鎖の威力が足りていれば、封印が金色に灯る。
+/// いま編んでいる鎖で討ち取れるなら、封印が金色に灯る。
+///
+/// 体力が 2 以上の敵だけ、封印の下に体力の粒が並ぶ。1 の敵には出さない。
+/// 「守りを上回れば一撃」という読み方をそのまま残すため。
 class _FoeFace extends StatelessWidget {
   const _FoeFace({
     required this.ward,
+    required this.hp,
+    required this.maxHp,
     required this.size,
-    required this.willBreak,
+    required this.willFall,
+    required this.willHurt,
   });
 
   final int ward;
+  final int hp;
+  final int maxHp;
   final double size;
 
-  /// いま指を離せばこの守りが破れるか。
-  final bool willBreak;
+  /// いま指を離せばこの敵を討ち取れるか。
+  final bool willFall;
+
+  /// いま指を離せば傷だけはつくか。討てなくても体力は削れる。
+  final bool willHurt;
 
   @override
   Widget build(BuildContext context) {
-    // 破れるときは金、そうでなければ守りの厚さの色。数字を読む前に
+    // 討てるときは金、そうでなければ守りの厚さの色。数字を読む前に
     // 「硬そうか」が伝わる。
-    final tint = willBreak ? Palette.ward : Palette.wardColorFor(ward);
-    return Center(
-      child: SizedBox(
-        width: size * 0.78,
-        height: size * 0.78,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _WardPainter(color: tint, lit: willBreak),
+    final tint = willFall ? Palette.ward : Palette.wardColorFor(ward);
+    // 粒を並べる敵は、その分だけ封印を小さくして場所を空ける。
+    final sealSize = maxHp > 1 ? size * 0.62 : size * 0.78;
+    final seal = SizedBox(
+      width: sealSize,
+      height: sealSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _WardPainter(color: tint, lit: willFall),
+            ),
+          ),
+          Padding(
+            // 封印の内側に取る余白。封印の大きさに比例させて、
+            // 粒が出ても数字と環の間隔が変わらないようにする。
+            padding: EdgeInsets.all(sealSize * 0.26),
+            child: FittedBox(
+              child: Text(
+                '$ward',
+                style: AppFont.number(size * 0.4, color: tint),
               ),
             ),
-            Padding(
-              padding: EdgeInsets.all(size * 0.2),
-              child: FittedBox(
-                child: Text(
-                  '$ward',
-                  style: AppFont.number(size * 0.4, color: tint),
+          ),
+        ],
+      ),
+    );
+
+    if (maxHp <= 1) return Center(child: seal);
+
+    // 粒のぶんだけ封印を持ち上げる。下端に寄ると窮屈に見える。
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Align(alignment: const Alignment(0, -0.42), child: seal),
+        Align(
+          alignment: const Alignment(0, 0.88),
+          child: _HpPips(
+            hp: hp,
+            maxHp: maxHp,
+            size: size,
+            // 傷がつく威力が乗っているときは粒も灯して、
+            // 「討てないが削れる」状態をその場で見せる。
+            color: willHurt ? Palette.ward : tint,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 敵の残り体力。菱形の粒を最大体力ぶん並べ、残っている数だけ塗る。
+class _HpPips extends StatelessWidget {
+  const _HpPips({
+    required this.hp,
+    required this.maxHp,
+    required this.size,
+    required this.color,
+  });
+
+  final int hp;
+  final int maxHp;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pip = size * 0.1;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < maxHp; i++)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: size * 0.028),
+            child: Transform.rotate(
+              angle: pi / 4,
+              child: Container(
+                width: pip,
+                height: pip,
+                decoration: BoxDecoration(
+                  color: i < hp ? color : Colors.transparent,
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.7),
+                    width: size * 0.016,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x99000000), blurRadius: 3),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
 }
@@ -1062,7 +1164,7 @@ class _WardPainter extends CustomPainter {
 /// 消える瞬間のタイル。膨らんでから弾ける。
 class _PopTile extends StatefulWidget {
   const _PopTile({
-    required this.requiredLength,
+    required this.ward,
     required this.isOdd,
     required this.size,
     required this.delay,
@@ -1070,7 +1172,7 @@ class _PopTile extends StatefulWidget {
     required this.onDone,
   });
 
-  final int? requiredLength;
+  final int? ward;
   final bool isOdd;
   final double size;
   final Duration delay;
@@ -1162,14 +1264,14 @@ class _PopTileState extends State<_PopTile>
             ),
           ],
         ),
-        child: widget.requiredLength == null
+        child: widget.ward == null
             ? null
             : Center(
                 child: Padding(
                   padding: EdgeInsets.all(size * 0.18),
                   child: FittedBox(
                     child: Text(
-                      '${widget.requiredLength}',
+                      '${widget.ward}',
                       style: AppFont.number(size * 0.56, color: Colors.white),
                     ),
                   ),
@@ -1188,7 +1290,7 @@ class _ScorePopup extends StatefulWidget {
   });
 
   final int gained;
-  final int length;
+  final int power;
   final VoidCallback onDone;
 
   @override
@@ -1242,7 +1344,7 @@ class _ScorePopupState extends State<_ScorePopup>
                     style: AppFont.number(28, color: const Color(0xFFFFF0B8)),
                   ),
                   Text(
-                    'POWER ${widget.length}',
+                    'POWER ${widget.power}',
                     style: AppFont.label(12, color: Colors.white70),
                   ),
                 ],

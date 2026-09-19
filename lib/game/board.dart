@@ -20,19 +20,61 @@ class Cell {
 
 /// 1枚のブロック。id はアニメーションで同一ブロックを追跡するために使う。
 ///
-/// 通常ブロックは偶奇（＝色）しか持たず、数字は書かれていない。
-/// 目標ブロックだけが [requiredLength] を持ち、それが盤面に数字で書かれる。
-/// この数字はブロックの「値」ではなく、**消すのに必要なチェインの長さ**。
+/// マナのマスは偶奇（＝相）しか持たず、数字は書かれていない。
+/// 敵だけが [ward]（守り）と [hp]（体力）を持ち、守りが盤面に数字で書かれる。
+///
+/// 守りは「この威力までは弾く」しきい値で、上回った分がそのままダメージになる。
+/// 体力が 1 なら守りを1でも上回った時点で討ち取れるので、体力を持たなかった
+/// 頃のルールと完全に同じ挙動になる。
 class Tile {
-  const Tile({required this.id, required this.isOdd, this.requiredLength});
+  const Tile({
+    required this.id,
+    required this.isOdd,
+    this.ward,
+    this.hp = 1,
+    int? maxHp,
+  }) : maxHp = maxHp ?? hp;
 
   final int id;
   final bool isOdd;
 
-  /// 目標ブロックなら、消すのに必要なチェイン長。通常ブロックは null。
-  final int? requiredLength;
+  /// 敵なら守り。マナのマスは null。
+  final int? ward;
 
-  bool get isTarget => requiredLength != null;
+  /// 敵の残り体力。マナのマスでは使わない。
+  final int hp;
+
+  /// 敵の最大体力。減り具合を見せるために持っている。
+  final int maxHp;
+
+  bool get isFoe => ward != null;
+
+  /// 威力 [power] の鎖がこの敵に通すダメージ。守り以下なら弾かれて 0。
+  int damageFrom(int power) {
+    final d = power - ward! + 1;
+    return d < 0 ? 0 : d;
+  }
+
+  /// この敵に傷をつけるのに要る最低の威力。＝守り。
+  int get powerToHurt => ward!;
+
+  /// 1本の鎖で討ち取るのに要る威力。守りを1上回るごとに1ダメージなので、
+  /// 残り体力のぶんだけ余分に要る。
+  int get powerToFell => ward! + hp - 1;
+
+  /// ダメージを受けて残った姿。id を引き継ぐので演出は同じブロックとして追う。
+  Tile hurt(int damage) =>
+      Tile(id: id, isOdd: isOdd, ward: ward, hp: hp - damage, maxHp: maxHp);
+}
+
+/// 鎖の外で討ち取られた敵。いまは雷の魔導士の追撃だけがこれを作る。
+/// 演出に要る情報しか持たない。
+class FoeFall {
+  const FoeFall({required this.cell, required this.ward, required this.isOdd});
+
+  final Cell cell;
+  final int ward;
+  final bool isOdd;
 }
 
 /// なぞって消したときの結果。演出側はこれを見てエフェクトを出す。
@@ -40,53 +82,81 @@ class ClearResult {
   const ClearResult({
     required this.cells,
     required this.cleared,
-    required this.requiredLengths,
+    required this.wards,
+    required this.damages,
     required this.isOdds,
-    required this.clearedTargets,
+    required this.power,
+    required this.felled,
     required this.gained,
     required this.endCell,
+    this.bolt = const <FoeFall>[],
   });
 
   /// なぞった順のマス。
   final List<Cell> cells;
 
   /// [cells] と同じ並びで、そのマスが実際に消えたか。
-  /// 長さの足りなかった目標ブロックだけが false になる。
+  /// 討ち取れなかった敵だけが false になる。
   final List<bool> cleared;
 
-  /// [cells] と同じ並びで、目標ブロックなら必要チェイン長。通常は null。
-  final List<int?> requiredLengths;
+  /// [cells] と同じ並びで、敵なら守り。マナのマスは null。
+  final List<int?> wards;
+
+  /// [cells] と同じ並びで、敵に通ったダメージ。マナのマスは 0。
+  /// 0 なら弾かれている。
+  final List<int> damages;
 
   /// [cells] と同じ並びの偶奇。演出の色に使う。
   final List<bool> isOdds;
 
-  /// このチェインで消した目標ブロックの数。
-  final int clearedTargets;
+  /// この鎖の威力。枚数に魔導士の補正を足したもの。
+  final int power;
 
-  /// このチェインで得た点数。
+  /// この鎖で討ち取った敵の数。
+  final int felled;
+
+  /// この鎖で得た点数。
   final int gained;
 
   /// 演出をどこに出すかだけに使う、なぞり終わりのマス。
   final Cell endCell;
 
+  /// 鎖とは別に討ち取られた敵。
+  final List<FoeFall> bolt;
+
   int get length => cells.length;
+
+  /// 鎖の外で起きた追撃を足した結果を返す。盤面ロジックは追撃を知らないので、
+  /// パーティー側から後付けする。
+  ClearResult withBolt(List<FoeFall> fallen) => ClearResult(
+    cells: cells,
+    cleared: cleared,
+    wards: wards,
+    damages: damages,
+    isOdds: isOdds,
+    power: power,
+    felled: felled + fallen.length,
+    gained: gained,
+    endCell: endCell,
+    bolt: List.unmodifiable(fallen),
+  );
 }
 
 /// 盤面ロジック。UI から独立していてテスト可能。
 ///
 /// 世界観では熱の相 / 冷の相、敵、守り、威力と呼んでいるが、実装は偶奇のまま。
-/// ここは呼び名を持たず、[Tile.isOdd] と長さだけで話す。
+/// ここは相の呼び名を持たず、[Tile.isOdd] と数だけで話す。
 ///
 /// ルール:
 ///  - 上下左右に隣接するブロックを辿ってパスを作る
 ///  - 連続する2枚は必ず偶奇が交互になっていること
 ///  - [minPathLength] 枚以上でチェイン成立
-///  - パス上の通常ブロックは必ず消える
-///  - 目標ブロックは、チェイン長がその [Tile.requiredLength] 以上のときだけ消える。
-///    足りなければその場に残る
-///  - 何ひとつ消えないチェイン（全部が要求未達の目標ブロック）は不成立
-///  - 消えた跡は重力で詰め、上から新しい通常ブロックが降ってくる
-///  - 目標ブロックは補充されない。ステージ開始時に置かれたものが全て
+///  - パス上のマナのマスは必ず消える
+///  - 敵には「威力 − 守り + 1」のダメージが通る。守り以下なら 0 で弾かれる。
+///    体力を削り切れば討ち取れ、残れば傷ついたままその場に残る
+///  - 何ひとつ起きないチェイン（誰にも傷がつかない）は不成立
+///  - 消えた跡は重力で詰め、上から新しいマナが降ってくる
+///  - 敵は補充されない。ステージ開始時に置かれたものが全て
 class Board {
   Board({
     this.rows = 8,
@@ -100,20 +170,23 @@ class Board {
   /// チェイン成立に必要な最低枚数。
   static const int minPathLength = 3;
 
-  /// 目標ブロックに書ける数字の範囲。
+  /// 敵の守りに書ける数字の範囲。
   ///
-  /// 下限は [minPathLength] と同じで「成立すれば必ず消える」入門用。
+  /// 下限は [minPathLength] と同じで「成立すれば必ず傷がつく」入門用。
   /// 上限 8 は、シミュレーションで成立率が保てる限界。9 以上にすると
   /// 盤面によっては通るパスが無く、運任せになる。
-  static const int minRequired = minPathLength;
-  static const int maxRequired = 8;
+  static const int minWard = minPathLength;
+  static const int maxWard = 8;
 
-  /// 目標ブロックの数から手数を決める。
+  /// 階層に置かれた敵の体力の合計から手数を決める。
   ///
-  /// シミュレーション（目標の周辺を崩して周囲を入れ替える打ち方）で、
+  /// シミュレーション（敵の周辺を崩して周囲を入れ替える打ち方）で、
   /// この手数のときクリア率が 78〜93% になる。×2+2 だと 69% まで落ちて
   /// 理不尽寄り、×4+2 にしても 86% 止まりで緩めた分だけ間延びする。
-  static int movesFor(int targetCount) => targetCount * 3 + 2;
+  ///
+  /// 体力を持つ敵は1体で複数ターンを要求するので、体数ではなく体力の合計で
+  /// 数える。全員の体力が 1 なら体数で数えていた頃と同じ値になる。
+  static int movesFor(int totalFoeHp) => totalFoeHp * 3 + 2;
 
   final int rows;
   final int cols;
@@ -139,13 +212,17 @@ class Board {
     return Tile(id: _nextId++, isOdd: _rng.nextDouble() < bias);
   }
 
-  /// ステージを1つ作る。通常ブロックを敷いてから目標ブロックを置く。
+  /// ステージを1つ作る。マナを敷いてから敵を置く。
   ///
-  /// [targetCount] 個の目標ブロックに、[minRequired]〜[maxRequired] の
-  /// 範囲で数字を割り振る。
-  void buildStage({required int targetCount, required int maxRequiredLength}) {
+  /// [foeCount] 体の敵に、[minWard]〜[wardCap] の範囲で守りを割り振り、
+  /// 体力を 1〜[maxFoeHp] から選ぶ。
+  void buildStage({
+    required int foeCount,
+    required int wardCap,
+    int maxFoeHp = 1,
+  }) {
     _fillInitial();
-    _placeTargets(targetCount, maxRequiredLength);
+    _placeFoes(foeCount, wardCap, maxFoeHp);
   }
 
   /// 初期盤面は偶奇を五分五分で敷く（開幕から詰んでいると理不尽なため）。
@@ -165,7 +242,7 @@ class Board {
     }
   }
 
-  void _placeTargets(int count, int maxRequiredLength) {
+  void _placeFoes(int count, int wardCap, int maxFoeHp) {
     final cells = <Cell>[];
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
@@ -173,12 +250,17 @@ class Board {
       }
     }
     cells.shuffle(_rng);
-    final cap = maxRequiredLength.clamp(minRequired, maxRequired);
+    final cap = wardCap.clamp(minWard, maxWard);
+    final hpCap = maxFoeHp < 1 ? 1 : maxFoeHp;
     for (final cell in cells.take(count)) {
       final base = grid[cell.row][cell.col]!;
-      final need = minRequired + _rng.nextInt(cap - minRequired + 1);
+      final ward = minWard + _rng.nextInt(cap - minWard + 1);
+      // 守りが厚い敵ほど体力は薄く。両方が重なると、1本で討てないうえに
+      // 削るのにも何ターンもかかる、ただ長引くだけの敵になる。
+      final room = ward >= maxWard - 1 ? 1 : hpCap;
+      final hp = 1 + _rng.nextInt(room);
       grid[cell.row][cell.col] =
-          Tile(id: base.id, isOdd: base.isOdd, requiredLength: need);
+          Tile(id: base.id, isOdd: base.isOdd, ward: ward, hp: hp);
     }
   }
 
@@ -198,16 +280,28 @@ class Board {
     return a.isOdd != b.isOdd;
   }
 
-  /// 長さ [length] のチェインを打ったとき、[cell] のブロックが消えるか。
-  bool clearsAt(Cell cell, int length) {
+  /// 威力 [power] の鎖が [cell] に通すダメージ。マナのマスは 0。
+  int damageAt(Cell cell, int power) {
+    final t = tileAt(cell);
+    if (t == null || !t.isFoe) return 0;
+    return t.damageFrom(power);
+  }
+
+  /// 威力 [power] の鎖で [cell] のブロックが盤面から消えるか。
+  /// マナのマスは必ず消える。敵は体力を削り切ったときだけ。
+  bool fells(Cell cell, int power) {
     final t = tileAt(cell);
     if (t == null) return false;
-    return (t.requiredLength ?? 0) <= length;
+    if (!t.isFoe) return true;
+    return t.damageFrom(power) >= t.hp;
   }
 
   /// パスを打ったとき、どのマスが消えるか。[path] と同じ並びで返す。
-  List<bool> clearMaskFor(List<Cell> path) =>
-      [for (final c in path) clearsAt(c, path.length)];
+  /// [power] を省くと枚数そのものを威力として扱う。
+  List<bool> clearMaskFor(List<Cell> path, {int? power}) {
+    final p = power ?? path.length;
+    return [for (final c in path) fells(c, p)];
+  }
 
   /// 隣接と偶奇だけを見た、パスとしての正しさ。
   bool isConnected(List<Cell> path) {
@@ -225,45 +319,90 @@ class Board {
 
   /// チェインとして成立するか。
   ///
-  /// 何ひとつ消えないチェインは成立させない。通常ブロックが1枚でも
-  /// 混じっていれば必ず何か消えるので、これに当たるのは「全部が要求未達の
-  /// 目標ブロック」という稀な場合だけ。手数を丸損させないための例外。
-  bool isValidPath(List<Cell> path) {
+  /// 何ひとつ起きないチェインは成立させない。マナのマスが1枚でも混じって
+  /// いれば必ず何か消えるので、これに当たるのは「全部が弾かれる敵」という
+  /// 稀な場合だけ。手数を丸損させないための例外。
+  bool isValidPath(List<Cell> path, {int? power}) {
     if (!isConnected(path)) return false;
-    return clearMaskFor(path).any((x) => x);
+    final p = power ?? path.length;
+    for (final c in path) {
+      final t = tileAt(c)!;
+      if (!t.isFoe || t.damageFrom(p) > 0) return true;
+    }
+    return false;
   }
 
-  /// 長さ [length]、目標を [clearedTargets] 個消したチェインの得点。
-  static int scoreFor(int length, int clearedTargets) {
-    final multiplier = length - minPathLength + 1;
-    return length * multiplier * 10 + clearedTargets * 100;
+  /// 威力 [power]、敵を [felled] 体討った鎖の得点。
+  static int scoreFor(int power, int felled) {
+    final multiplier = power - minPathLength + 1;
+    return power * multiplier * 10 + felled * 100;
   }
 
   /// パスを適用する。重力と補充は呼び出し側で行う。
-  ClearResult applyPath(List<Cell> path) {
-    assert(isValidPath(path));
-    final mask = clearMaskFor(path);
-    final requiredLengths = <int?>[];
+  /// [power] を省くと枚数そのものを威力として扱う。
+  ClearResult applyPath(List<Cell> path, {int? power}) {
+    final p = power ?? path.length;
+    assert(isValidPath(path, power: p));
+    final wards = <int?>[];
+    final damages = <int>[];
     final isOdds = <bool>[];
-    var clearedTargets = 0;
-    for (var i = 0; i < path.length; i++) {
-      final t = tileAt(path[i])!;
-      requiredLengths.add(t.requiredLength);
+    final cleared = <bool>[];
+    var felled = 0;
+    for (final cell in path) {
+      final t = tileAt(cell)!;
+      wards.add(t.ward);
       isOdds.add(t.isOdd);
-      if (mask[i] && t.isTarget) clearedTargets++;
+      if (!t.isFoe) {
+        damages.add(0);
+        cleared.add(true);
+        continue;
+      }
+      final d = t.damageFrom(p);
+      damages.add(d);
+      final down = d >= t.hp;
+      cleared.add(down);
+      if (down) felled++;
     }
     for (var i = 0; i < path.length; i++) {
-      if (mask[i]) grid[path[i].row][path[i].col] = null;
+      final cell = path[i];
+      if (cleared[i]) {
+        grid[cell.row][cell.col] = null;
+      } else if (damages[i] > 0) {
+        grid[cell.row][cell.col] = grid[cell.row][cell.col]!.hurt(damages[i]);
+      }
     }
     return ClearResult(
       cells: List.unmodifiable(path),
-      cleared: List.unmodifiable(mask),
-      requiredLengths: List.unmodifiable(requiredLengths),
+      cleared: List.unmodifiable(cleared),
+      wards: List.unmodifiable(wards),
+      damages: List.unmodifiable(damages),
       isOdds: List.unmodifiable(isOdds),
-      clearedTargets: clearedTargets,
-      gained: scoreFor(path.length, clearedTargets),
+      power: p,
+      felled: felled,
+      gained: scoreFor(p, felled),
       endCell: path.last,
     );
+  }
+
+  /// 盤面に残っている敵全員に [damage] を通す。守りは無視する。
+  /// 鎖の外からの追撃用。討ち取った敵を返す。
+  List<FoeFall> strike(int damage) {
+    final fallen = <FoeFall>[];
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final t = grid[r][c];
+        if (t == null || !t.isFoe) continue;
+        if (damage >= t.hp) {
+          grid[r][c] = null;
+          fallen.add(
+            FoeFall(cell: Cell(r, c), ward: t.ward!, isOdd: t.isOdd),
+          );
+        } else {
+          grid[r][c] = t.hurt(damage);
+        }
+      }
+    }
+    return fallen;
   }
 
   void applyGravity() {
@@ -280,7 +419,7 @@ class Board {
   }
 
   /// 空きマスを上から補充する。戻り値は新しく生まれたブロックの id 集合。
-  /// 補充されるのは通常ブロックだけ。目標ブロックは降ってこない。
+  /// 補充されるのはマナのマスだけ。敵は降ってこない。
   Set<int> refill() {
     final added = <int>{};
     for (var c = 0; c < cols; c++) {
@@ -295,18 +434,37 @@ class Board {
     return added;
   }
 
-  /// 盤面に残っている目標ブロック。
-  List<Cell> get targetCells {
+  /// 盤面に残っている敵。
+  List<Cell> get foeCells {
     final list = <Cell>[];
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        if (grid[r][c]?.isTarget ?? false) list.add(Cell(r, c));
+        if (grid[r][c]?.isFoe ?? false) list.add(Cell(r, c));
       }
     }
     return list;
   }
 
-  int get remainingTargets => targetCells.length;
+  int get remainingFoes => foeCells.length;
+
+  /// 残っている敵の体力の合計。階層の手数はこれで決まる。
+  int get totalFoeHp {
+    var n = 0;
+    for (final cell in foeCells) {
+      n += tileAt(cell)!.hp;
+    }
+    return n;
+  }
+
+  /// 討ち漏らしたまま階層を落としたときに受ける痛手。
+  /// 守りが厚い敵を残すほど高くつく。
+  int get foeThreat {
+    var n = 0;
+    for (final cell in foeCells) {
+      n += tileAt(cell)!.ward!;
+    }
+    return n;
+  }
 
   /// [through] を通る、長さ [need] 以上の成立パスを1本返す。無ければ空。
   ///
@@ -355,11 +513,15 @@ class Board {
     return isValidPath(found) ? found : const [];
   }
 
-  /// [cell] の目標ブロックを、いまの盤面で消せるか。
-  bool canClearTarget(Cell cell) {
+  /// [cell] の敵を、いまの盤面で1本の鎖で討ち取れるか。
+  ///
+  /// 魔導士の威力補正は数に入れない。入れると「補正が乗る鎖が組めるか」まで
+  /// 探すことになり、探索が跳ね上がる。見落とす側に倒しても、実際より
+  /// 厳しく答えるだけなので嘘にはならない。
+  bool canFell(Cell cell) {
     final t = tileAt(cell);
-    if (t == null || !t.isTarget) return false;
-    return findPathThrough(cell, t.requiredLength!).isNotEmpty;
+    if (t == null || !t.isFoe) return false;
+    return findPathThrough(cell, t.powerToFell).isNotEmpty;
   }
 
   /// 成立する手が1つでも残っているか。無ければ手詰まり。
@@ -372,11 +534,16 @@ class Board {
     return false;
   }
 
-  /// ヒント。目標ブロックを消せる手があればそれを、無ければ適当な成立手を返す。
+  /// ヒント。討ち取れる敵があればその手を、無ければ傷をつけられる手を、
+  /// それも無ければ適当な成立手を返す。
   List<Cell> findHint() {
-    for (final cell in targetCells) {
-      final t = tileAt(cell)!;
-      final p = findPathThrough(cell, t.requiredLength!);
+    final foes = foeCells;
+    for (final cell in foes) {
+      final p = findPathThrough(cell, tileAt(cell)!.powerToFell);
+      if (p.isNotEmpty) return p;
+    }
+    for (final cell in foes) {
+      final p = findPathThrough(cell, tileAt(cell)!.powerToHurt);
       if (p.isNotEmpty) return p;
     }
     for (var r = 0; r < rows; r++) {

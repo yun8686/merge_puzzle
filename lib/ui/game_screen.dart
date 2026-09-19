@@ -3,11 +3,16 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../game/game_controller.dart';
+import '../game/party.dart';
 import 'board_view.dart';
 import 'theme.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+  const GameScreen({super.key, this.controller});
+
+  /// 差し込むと、画面が自前で作る代わりにこれを使う。
+  /// 決着画面のように、特定の局面から始めたいテスト用。
+  final GameController? controller;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -16,21 +21,27 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   late GameController _controller;
 
+  /// 差し込まれたものは差し込んだ側が畳む。
+  bool _ownsController = false;
+
   @override
   void initState() {
     super.initState();
-    _controller = GameController();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? GameController();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
   void _restart() => _controller.restart();
 
-  void _nextStage() => _controller.nextStage();
+  void _nextStage(Blessing blessing) => _controller.nextStage(blessing);
+
+  void _retryFloor() => _controller.retryFloor();
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +78,7 @@ class _GameScreenState extends State<GameScreen> {
                           oddCount: board.oddCount,
                           evenCount: board.evenCount,
                           movesLeft: _controller.movesLeft,
-                          remainingTargets: _controller.remainingTargets,
+                          remainingFoes: _controller.remainingFoes,
                         ),
                         Expanded(
                           child: Padding(
@@ -78,16 +89,25 @@ class _GameScreenState extends State<GameScreen> {
                             child: BoardView(controller: _controller),
                           ),
                         ),
+                        _PartyBar(
+                          party: _controller.party,
+                          healed: _controller.lastHealed,
+                        ),
                         _Footer(controller: _controller, onRestart: _restart),
                       ],
                     ),
                     if (_controller.phase == GamePhase.stageCleared)
                       _StageClearOverlay(
                         controller: _controller,
-                        onNext: _nextStage,
+                        onChoose: _nextStage,
                       ),
-                    if (_controller.phase == GamePhase.failed)
-                      _GameOverOverlay(
+                    if (_controller.phase == GamePhase.floorLost)
+                      _FloorLostOverlay(
+                        controller: _controller,
+                        onRetry: _retryFloor,
+                      ),
+                    if (_controller.phase == GamePhase.defeated)
+                      _DefeatOverlay(
                         controller: _controller,
                         onRestart: _restart,
                       ),
@@ -217,13 +237,13 @@ class _StatusBar extends StatelessWidget {
     required this.oddCount,
     required this.evenCount,
     required this.movesLeft,
-    required this.remainingTargets,
+    required this.remainingFoes,
   });
 
   final int oddCount;
   final int evenCount;
   final int movesLeft;
-  final int remainingTargets;
+  final int remainingFoes;
 
   @override
   Widget build(BuildContext context) {
@@ -253,7 +273,7 @@ class _StatusBar extends StatelessWidget {
               label: 'FOES',
               accent: Palette.gold,
               value: Text(
-                '$remainingTargets',
+                '$remainingFoes',
                 style: AppFont.number(24, color: Palette.gold),
               ),
             ),
@@ -383,13 +403,17 @@ class _ParityBar extends StatelessWidget {
 }
 
 /// いま指を離すとどうなるかを一言で。
-/// 敵を巻き込んでいるときは、その守りを破るまでの残りを優先して出す。
+/// 敵を巻き込んでいるときは、討ち取るまでの残りを優先して出す。
 String _pendingLabel(GameController controller) {
   if (controller.missingTiles > 0) {
     return 'あと ${controller.missingTiles} 継げば鎖になる';
   }
-  final toTarget = controller.tilesToNextTarget;
-  if (toTarget > 0) return 'あと $toTarget 継げば守りを破れる';
+  final toFoe = controller.tilesToNextFoe;
+  if (toFoe > 0) {
+    return controller.pathIsValid
+        ? 'あと $toFoe 継げば討ち取れる'
+        : 'あと $toFoe 継げば届く';
+  }
   if (controller.pathIsValid) return '+${controller.pendingScore}';
   return '守りに弾かれる';
 }
@@ -435,13 +459,25 @@ class _Footer extends StatelessWidget {
                           Text('威力', style: AppFont.label(10)),
                           const SizedBox(width: 6),
                           Text(
-                            '${controller.pathLength}',
+                            '${controller.power}',
                             style: AppFont.number(
                               26,
                               color: valid ? Palette.gold : Palette.textMuted,
                             ),
                           ),
-                          if (controller.pendingClearedTargets > 0) ...[
+                          // 魔導士が乗せた分は、枚数と区別できるように別に出す。
+                          if (controller.powerBonus > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Text(
+                                '+${controller.powerBonus}',
+                                style: AppFont.number(
+                                  14,
+                                  color: Palette.mageColor(MageKind.ember),
+                                ),
+                              ),
+                            ),
+                          if (controller.pendingFelled > 0) ...[
                             const SizedBox(width: 12),
                             const Icon(
                               Icons.shield,
@@ -449,7 +485,7 @@ class _Footer extends StatelessWidget {
                               color: Palette.gold,
                             ),
                             Text(
-                              ' ×${controller.pendingClearedTargets}',
+                              ' ×${controller.pendingFelled}',
                               style: AppFont.number(16, color: Palette.gold),
                             ),
                           ],
@@ -537,11 +573,12 @@ class _IconAction extends StatelessWidget {
   }
 }
 
-class _GameOverOverlay extends StatelessWidget {
-  const _GameOverOverlay({required this.controller, required this.onRestart});
+/// 決着画面の共通の器。暗幕と、その中央のパネル。
+/// 中身が縦に伸びても画面から溢れないように、常にスクロールできるようにしてある。
+class _Curtain extends StatelessWidget {
+  const _Curtain({required this.children});
 
-  final GameController controller;
-  final VoidCallback onRestart;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
@@ -550,53 +587,31 @@ class _GameOverOverlay extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: ColoredBox(
           color: const Color(0xCC07070F),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: DecoratedBox(
-                decoration: panelDecoration(radius: 26),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '力尽きた',
-                        style: AppFont.number(30, color: Palette.danger),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        controller.movesLeft <= 0
-                            ? 'ターンを使い切った'
-                            : '継げる相がなくなった',
-                        style: const TextStyle(
-                          color: Palette.textMuted,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+          // 中身が短いときは中央に置き、伸びたときだけスクロールさせる。
+          // 素の SingleChildScrollView では高さが無制限になり、Center が
+          // 縮んで上に張り付いてしまう。
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 20,
+                    ),
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: panelDecoration(radius: 26),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: children,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 22),
-                      Text('SCORE', style: AppFont.label(10)),
-                      const SizedBox(height: 8),
-                      Text('${controller.score}', style: AppFont.number(56)),
-                      const SizedBox(height: 18),
-                      _ResultRow(
-                        label: '到達',
-                        value: 'B${controller.stage}F',
-                      ),
-                      const SizedBox(height: 8),
-                      _ResultRow(
-                        label: '最大威力',
-                        value: '${controller.bestChain}',
-                      ),
-                      const SizedBox(height: 8),
-                      _ResultRow(
-                        label: '討ち漏らし',
-                        value: '${controller.remainingTargets} 体',
-                      ),
-                      const SizedBox(height: 26),
-                      _PrimaryButton(label: 'やり直す', onTap: onRestart),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -608,67 +623,342 @@ class _GameOverOverlay extends StatelessWidget {
   }
 }
 
-/// 階層の制圧。その階の敵を全部討ったときだけ出る。
-class _StageClearOverlay extends StatelessWidget {
-  const _StageClearOverlay({required this.controller, required this.onNext});
+/// 階層を落とした。ターン切れか手詰まり。
+/// 討ち漏らした敵の反撃を受けるが、一党が立っている限り編み直せる。
+class _FloorLostOverlay extends StatelessWidget {
+  const _FloorLostOverlay({required this.controller, required this.onRetry});
 
   final GameController controller;
-  final VoidCallback onNext;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: ColoredBox(
-          color: const Color(0xCC07070F),
-          child: Center(
+    return _Curtain(
+      children: [
+        Text(
+          'B${controller.stage}F を落とした',
+          style: AppFont.number(26, color: Palette.danger),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          controller.movesLeft <= 0 ? 'ターンを使い切った' : '継げる相がなくなった',
+          style: const TextStyle(
+            color: Palette.textMuted,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 22),
+        Text('討ち漏らした敵の反撃', style: AppFont.label(10)),
+        const SizedBox(height: 8),
+        Text(
+          '-${controller.lastBacklash}',
+          style: AppFont.number(48, color: Palette.danger),
+        ),
+        const SizedBox(height: 18),
+        _ResultRow(
+          label: '残り体力',
+          value: '${controller.party.hp} / ${controller.party.maxHp}',
+        ),
+        const SizedBox(height: 8),
+        _ResultRow(
+          label: '討ち漏らし',
+          value: '${controller.remainingFoes} 体',
+        ),
+        const SizedBox(height: 26),
+        _PrimaryButton(label: 'この階層を編み直す', onTap: onRetry),
+      ],
+    );
+  }
+}
+
+/// 一党が倒れた。ここだけが本当の終わり。
+class _DefeatOverlay extends StatelessWidget {
+  const _DefeatOverlay({required this.controller, required this.onRestart});
+
+  final GameController controller;
+  final VoidCallback onRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Curtain(
+      children: [
+        Text('一党は倒れた', style: AppFont.number(30, color: Palette.danger)),
+        const SizedBox(height: 6),
+        Text(
+          'B${controller.stage}F の反撃で体力が尽きた',
+          style: const TextStyle(
+            color: Palette.textMuted,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 22),
+        Text('SCORE', style: AppFont.label(10)),
+        const SizedBox(height: 8),
+        Text('${controller.score}', style: AppFont.number(56)),
+        const SizedBox(height: 18),
+        _ResultRow(label: '到達', value: 'B${controller.stage}F'),
+        const SizedBox(height: 8),
+        _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
+        const SizedBox(height: 8),
+        _ResultRow(
+          label: '討ち漏らし',
+          value: '${controller.remainingFoes} 体',
+        ),
+        const SizedBox(height: 26),
+        _PrimaryButton(label: 'やり直す', onTap: onRestart),
+      ],
+    );
+  }
+}
+
+/// 階層の制圧。その階の敵を全部討ったときだけ出る。
+/// ここで祝福を1つ選ぶ。階層をまたいで残るものが増えるのはこの瞬間だけ。
+class _StageClearOverlay extends StatelessWidget {
+  const _StageClearOverlay({required this.controller, required this.onChoose});
+
+  final GameController controller;
+  final void Function(Blessing) onChoose;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Curtain(
+      children: [
+        Text(
+          'B${controller.stage}F 制圧',
+          style: AppFont.number(26, color: Palette.gold),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'この階層の敵を討ち果たした',
+          style: TextStyle(
+            color: Palette.textMuted,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text('SCORE', style: AppFont.label(10)),
+        const SizedBox(height: 8),
+        Text('${controller.score}', style: AppFont.number(44)),
+        const SizedBox(height: 14),
+        _ResultRow(label: '残ったターン', value: '${controller.movesLeft}'),
+        const SizedBox(height: 8),
+        _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
+        const SizedBox(height: 22),
+        Text('祝福を1つ選ぶ', style: AppFont.label(10, color: Palette.life)),
+        const SizedBox(height: 10),
+        for (final offer in controller.party.offers())
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _BlessingCard(
+              offer: offer,
+              onTap: () => onChoose(offer.blessing),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 祝福の1択。押した瞬間に次の階層が始まる。
+class _BlessingCard extends StatelessWidget {
+  const _BlessingCard({required this.offer, required this.onTap});
+
+  final BlessingOffer offer;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = switch (offer.blessing) {
+      Blessing.heal => Palette.life,
+      Blessing.vigor => Palette.gold,
+      Blessing.companion => Palette.evenA,
+    };
+    return SizedBox(
+      width: 260,
+      child: DecoratedBox(
+        decoration: panelDecoration(
+          color: Color.alphaBlend(
+            tint.withValues(alpha: 0.12),
+            Palette.surface,
+          ),
+          border: tint.withValues(alpha: 0.5),
+          radius: 16,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: DecoratedBox(
-                decoration: panelDecoration(radius: 26),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'B${controller.stage}F 制圧',
-                        style: AppFont.number(26, color: Palette.gold),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'この階層の敵を討ち果たした',
-                        style: TextStyle(
-                          color: Palette.textMuted,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(offer.title, style: AppFont.number(18, color: tint)),
+                  const SizedBox(height: 6),
+                  Text(
+                    offer.detail,
+                    style: const TextStyle(
+                      color: Palette.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 一党。階層をまたいで残る唯一の資源なので、盤面の外に常に出しておく。
+/// 体力が減るのは階層を落としたときだけなので、普段は動かない目盛りになる。
+class _PartyBar extends StatelessWidget {
+  const _PartyBar({required this.party, required this.healed});
+
+  final Party party;
+
+  /// 直近の鎖で戻した体力。0 なら何も出さない。
+  final int healed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = party.maxHp == 0 ? 0.0 : party.hp / party.maxHp;
+    final low = ratio < 0.3;
+    final tint = low ? Palette.danger : Palette.life;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+      child: DecoratedBox(
+        decoration: panelDecoration(radius: 16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text('PARTY', style: AppFont.label(10, color: tint)),
+                        if (healed > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              '+$healed',
+                              style: AppFont.number(
+                                12,
+                                color: Palette.mageColor(MageKind.rime),
+                              ),
+                            ),
+                          ),
+                        const Spacer(),
+                        Text(
+                          '${party.hp}',
+                          style: AppFont.number(14, color: tint),
                         ),
+                        Text(
+                          ' / ${party.maxHp}',
+                          style: AppFont.label(10, color: Palette.textDim),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    _LifeBar(ratio: ratio.clamp(0.0, 1.0), tint: tint),
+                  ],
+                ),
+              ),
+              for (final mage in party.members)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _MageChip(mage: mage),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 一党の体力。盤面の2色とぶつからない緑で、別の資源だと分かるようにする。
+class _LifeBar extends StatelessWidget {
+  const _LifeBar({required this.ratio, required this.tint});
+
+  final double ratio;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: SizedBox(
+        height: 8,
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: ColoredBox(color: Color(0xFF241B33)),
+            ),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: ratio),
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: value.clamp(0.0, 1.0),
+                  heightFactor: 1,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [tint.withValues(alpha: 0.7), tint],
                       ),
-                      const SizedBox(height: 22),
-                      Text('SCORE', style: AppFont.label(10)),
-                      const SizedBox(height: 8),
-                      Text('${controller.score}', style: AppFont.number(52)),
-                      const SizedBox(height: 18),
-                      _ResultRow(
-                        label: '残ったターン',
-                        value: '${controller.movesLeft}',
-                      ),
-                      const SizedBox(height: 8),
-                      _ResultRow(
-                        label: '最大威力',
-                        value: '${controller.bestChain}',
-                      ),
-                      const SizedBox(height: 26),
-                      _PrimaryButton(
-                        label: '次の階層へ',
-                        onTap: onNext,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 一党に並ぶ魔導士。色はその魔導士が見ている相。
+class _MageChip extends StatelessWidget {
+  const _MageChip({required this.mage});
+
+  final Mage mage;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = Palette.mageColor(mage.kind);
+    return Tooltip(
+      message: '${mage.name}／${mage.effect}',
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(tint.withValues(alpha: 0.18), Palette.panel),
+          shape: BoxShape.circle,
+          border: Border.all(color: tint.withValues(alpha: 0.6)),
+        ),
+        child: Text(
+          mage.sigil,
+          style: TextStyle(
+            color: tint,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ),

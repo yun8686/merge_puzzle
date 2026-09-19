@@ -37,10 +37,14 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 |---|---|
 | `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
+| `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
-| `lib/ui/game_screen.dart` | 画面全体。SCORE / TARGET / 偶奇バー |
+| `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 偶奇バー / 一党 / 決着画面 |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
 | `test/` | `board_test.dart` / `game_controller_test.dart` / `board_view_test.dart` |
+
+`party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（枚数と熱冷の内訳）
+だけを見る。ここを繋ぐと、README に書いてある検証済みの数値が意味を失う。
 
 ## 消える演出のテンポ
 
