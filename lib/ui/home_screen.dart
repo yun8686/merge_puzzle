@@ -40,7 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    final progress = await widget.store.load();
+    // 置き場所が何を投げてきても拠点は開く。読めないまま止まると、
+    // ぐるぐる回る輪を見せたまま何もできなくなる。
+    Progress progress;
+    try {
+      progress = await widget.store.load();
+    } catch (_) {
+      progress = Progress();
+    }
     if (!mounted) return;
     setState(() => _progress = progress);
   }

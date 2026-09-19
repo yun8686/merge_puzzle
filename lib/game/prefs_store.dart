@@ -7,6 +7,10 @@ import 'progress.dart';
 /// 読み書きに失敗しても投げない。**保存が効かないだけで遊べなくなるのは
 /// 割に合わない**ので、失敗したときはまっさらな記録として扱い、書き込みは
 /// 黙って捨てる。プライベートウィンドウや保存を塞いだブラウザで起きる。
+///
+/// Exception だけでなく Error も飲む。プラグインが載っていない環境では
+/// MissingPluginException ではなく型の Error で抜けてくることがあり、
+/// そこで投げると画面が読み込み中のまま止まる。
 class PrefsProgressStore implements ProgressStore {
   const PrefsProgressStore();
 
@@ -17,7 +21,7 @@ class PrefsProgressStore implements ProgressStore {
     try {
       final prefs = await SharedPreferences.getInstance();
       return Progress.decode(prefs.getString(_key));
-    } on Exception {
+    } catch (_) {
       return Progress();
     }
   }
@@ -27,7 +31,7 @@ class PrefsProgressStore implements ProgressStore {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_key, progress.encode());
-    } on Exception {
+    } catch (_) {
       // 書けないだけ。次に開いたときに最初からになるが、遊びは続けられる。
     }
   }

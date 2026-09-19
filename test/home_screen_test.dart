@@ -20,7 +20,11 @@ Future<MemoryProgressStore> openBase(
   Progress? progress,
 }) async {
   final store = MemoryProgressStore(progress?.encode());
-  await tester.pumpWidget(MaterialApp(home: HomeScreen(store: store)));
+  // 鍵を変えないと、同じテストで開き直したときに State が使い回されて
+  // initState が走らず、前の記録が残ったままになる。
+  await tester.pumpWidget(
+    MaterialApp(home: HomeScreen(key: UniqueKey(), store: store)),
+  );
   await tester.pumpAndSettle();
   return store;
 }
