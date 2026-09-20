@@ -32,16 +32,30 @@ class TutorialScreen extends StatefulWidget {
   /// テスト用（`GameScreen` と同じ約束）。
   final GameController? controller;
 
-  /// 稽古場。敵は2体だけで、手数はたっぷり取ってある。
+  /// 稽古場。敵は3体で、手数はたっぷり取ってある。
   ///
-  /// 攻撃力を1ずつに抑えてあるのは、覚えるより先に倒されないため。40手を
-  /// 使い切っても 80 で、初期体力 120 には届かない。
+  /// 攻撃力を1ずつに抑えてあるのは、覚えるより先に倒されないため。3体とも
+  /// 生かしたまま40手を使い切ってようやく 120 で、初期体力とちょうど同じ。
+  /// 討つたびに減るので、普通に進めればそこまで届かない（倒れたところで
+  /// 稽古場は黙って組み直す）。
+  ///
+  /// **置く場所は決め打ち**（[FoeSpec.at]）。散らすと隣り合って出ることが
+  /// あり、最初の稽古で「敵と敵を繋いでいる」ように見えてしまう。3体とも
+  /// 4マス以上離しつつ、下の2体は1本の鎖で通せる間合いに置いてある
+  /// （「まとめて当てる」の稽古で通る道が要る）。
+  ///
+  /// 3体居るのは、「守りを破る」で1体討ったあとにも2体残すため。2体だけだと
+  /// まとめて当てる稽古が試しようがなくなる。
   static const Dungeon dungeon = Dungeon(
     id: 'tutorial',
     name: '稽古場',
     floors: [
       FloorSpec(
-        [FoeSpec(3, atk: 1), FoeSpec(5, hp: 2, atk: 1)],
+        [
+          FoeSpec(3, atk: 1, at: Cell(1, 1)),
+          FoeSpec(3, atk: 1, at: Cell(5, 1)),
+          FoeSpec(5, hp: 2, atk: 1, at: Cell(4, 4)),
+        ],
         moves: 40,
       ),
     ],
@@ -57,7 +71,12 @@ class _Lesson {
     required this.label,
     required this.text,
     required this.done,
+    this.pairHint = false,
   });
+
+  /// お手本に、2体の敵を通る道を出すか。まとめて当てる稽古だけが立てる。
+  /// 普段の道を出してしまうと、示した手では課題が進まない。
+  final bool pairHint;
 
   /// 終いの振り返りに並べる短い名札。
   final String label;
@@ -97,6 +116,16 @@ class _TutorialScreenState extends State<TutorialScreen> {
           '下の帯の威力がその数に届けば、傷がつく。\n'
           '守り3の敵を討ち取ろう。',
       done: (c) => c.felledWards.isNotEmpty,
+    ),
+    _Lesson(
+      label: 'まとめて当てる',
+      text: '1本の鎖は、**通った敵すべて**に当たる。\n'
+          '離れた敵どうしも、道でつなげば一度に狙える。\n'
+          '2体の敵を通る鎖を編もう。',
+      // 残り1体になったら試しようがないので、そこで畳む。稽古場で
+      // 詰ませない。
+      done: (c) => c.lastFoesHit >= 2 || c.remainingFoes < 2,
+      pairHint: true,
     ),
     _Lesson(
       label: '毎ターンの反撃',
@@ -156,7 +185,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     if (!_controller.acceptsInput || _controller.path.isNotEmpty) return;
     if (_controller.hintPath.isNotEmpty) return;
     _showingHint = true;
-    _controller.showHint();
+    _controller.showHint(pair: _lessons[_at].pairHint);
     _showingHint = false;
   }
 
@@ -391,17 +420,45 @@ class _Reach extends StatelessWidget {
     return best ?? first;
   }
 
+  /// 帯の下に添える一言。**数字だけ出しても読み方は伝わらない。**
+  /// いまの状態に合わせて、何と何を見比べているのかを言葉で置く。
+  String get _caption {
+    if (controller.path.isEmpty) {
+      return 'マスの数字は敵の守り。鎖の威力がその数に届けば傷がつく';
+    }
+    if (_focus == null) {
+      return '敵のマスを通すと、その敵の守りと、届いているかが出る';
+    }
+    return '威力が守りの数字に届けば傷がつく。上回るほど深く削れる';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
+      height: 62,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
         child: DecoratedBox(
           decoration: panelDecoration(radius: 12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: controller.path.isEmpty ? _idle() : _tracing(),
+            padding: const EdgeInsets.fromLTRB(12, 5, 12, 5),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  height: 26,
+                  child: controller.path.isEmpty ? _idle() : _tracing(),
+                ),
+                // 狭い端末では縮めて収める。折り返すと帯の高さを越える。
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    _caption,
+                    style: AppFont.label(9, color: Palette.textDim),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -409,12 +466,11 @@ class _Reach extends StatelessWidget {
   }
 
   Widget _idle() => Center(
-    // 狭い端末では縮めて収める。折り返すと帯の高さを越える。
     child: FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(
-        'マスの数字は敵の守り。鎖の威力が届けば傷がつく',
-        style: AppFont.label(9, color: Palette.textDim),
+        '鎖をなぞると、ここに威力が出る',
+        style: AppFont.label(10, color: Palette.textMuted),
       ),
     ),
   );
@@ -638,7 +694,7 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                       label: widget.learned[i],
                       // 1つずつ順に点く。全部まとめて出すと、何を覚えたのか
                       // 目が追えないまま終わる。
-                      at: _stage(0.30 + i * 0.08, 0.42 + i * 0.08),
+                      at: _stage(0.30 + i * 0.07, 0.42 + i * 0.07),
                     ),
                   const SizedBox(height: 26),
                   Opacity(

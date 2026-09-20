@@ -38,6 +38,12 @@ void paintCheckerboard(Board board, {int ward = 8}) {
   );
 }
 
+/// 市松に塗った盤面の1マスを敵にする。稽古の筋書きを作るのに使う。
+void setFoe(Board board, Cell at, int ward) {
+  final base = board.grid[at.row][at.col]!;
+  board.grid[at.row][at.col] = Tile(id: base.id, phase: base.phase, ward: ward);
+}
+
 /// なぞって離して、盤面が詰むまで。
 void play(GameController c, List<Cell> path) {
   c.beginPath(path.first);
@@ -118,7 +124,13 @@ void main() {
     expect(find.text('拠点へ'), findsOneWidget);
 
     // 覚えたことが順に並ぶ。あっさり閉じると何も残らない。
-    for (final label in ['鎖を編む', '長いほど強い', '守りを破る', '毎ターンの反撃']) {
+    for (final label in [
+      '鎖を編む',
+      '長いほど強い',
+      '守りを破る',
+      'まとめて当てる',
+      '毎ターンの反撃',
+    ]) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
 
@@ -160,6 +172,54 @@ void main() {
     play(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     await tester.pump();
     expect(controller.hintPath, isNotEmpty);
+  });
+
+  testWidgets('1本の鎖で2体に当てると、まとめて当てる稽古が片付く', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    paintCheckerboard(controller.board);
+    // 上の段に守り3を2体。1本の鎖で両方を通せる間合い。
+    setFoe(controller.board, const Cell(0, 0), 3);
+    setFoe(controller.board, const Cell(0, 2), 3);
+    await tester.pump();
+
+    // 6枚で両方を通る。ここまでの課題もまとめて片付く。
+    play(controller, const [
+      Cell(0, 0),
+      Cell(0, 1),
+      Cell(0, 2),
+      Cell(0, 3),
+      Cell(0, 4),
+      Cell(0, 5),
+    ]);
+    await tester.pump();
+
+    expect(controller.lastFoesHit, 2);
+    expect(find.textContaining('残りの敵も討ち取ろう'), findsOneWidget);
+  });
+
+  testWidgets('敵が1体しか残っていなければ、まとめて当てる稽古は飛ばす', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    // 隅に1体だけ。まとめて当てようがない。
+    paintCheckerboard(controller.board);
+    await tester.pump();
+
+    play(controller, const [
+      Cell(0, 0),
+      Cell(0, 1),
+      Cell(0, 2),
+      Cell(0, 3),
+      Cell(0, 4),
+      Cell(0, 5),
+    ]);
+    // 守りを破る課題も片付けておく。
+    setFoe(controller.board, const Cell(2, 0), 3);
+    await tester.pump();
+    play(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
+    await tester.pump();
+
+    expect(find.textContaining('残りの敵も討ち取ろう'), findsOneWidget);
   });
 
   testWidgets('なぞると、いまの威力と敵の守りが並ぶ', (tester) async {

@@ -1052,4 +1052,40 @@ void main() {
       }
     });
   });
+
+  group('1本の鎖が当てた敵の数', () {
+    test('通った敵すべてに当たり、その数を控える', () {
+      final c = newController();
+      paintCheckerboard(c.board);
+      // 1マス空けて守り3を2体。3枚の鎖で両方を通る。
+      for (final at in const [Cell(0, 0), Cell(0, 2)]) {
+        final base = c.board.grid[at.row][at.col]!;
+        c.board.grid[at.row][at.col] =
+            Tile(id: base.id, phase: base.phase, ward: 3);
+      }
+
+      c.beginPath(const Cell(0, 0));
+      c.extendPath(const Cell(0, 1));
+      c.extendPath(const Cell(0, 2));
+      c.commitPath();
+
+      expect(c.lastFoesHit, 2);
+      expect(c.felledWards, [3, 3]);
+    });
+
+    test('弾かれた敵は数に入らない', () {
+      final c = newController();
+      paintCheckerboard(c.board);
+      final base = c.board.grid[0][2]!;
+      // 守り8。3枚では届かない。
+      c.board.grid[0][2] = Tile(id: base.id, phase: base.phase, ward: 8);
+
+      c.beginPath(const Cell(0, 0));
+      c.extendPath(const Cell(0, 1));
+      c.extendPath(const Cell(0, 2));
+      c.commitPath();
+
+      expect(c.lastFoesHit, 0);
+    });
+  });
 }

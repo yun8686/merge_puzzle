@@ -95,6 +95,11 @@ class GameController extends ChangeNotifier {
 
   List<Cell> hintPath = <Cell>[];
 
+  /// 直前の**1本の鎖**が傷をつけた敵の数。累計ではない（累計は [felledWards]）。
+  /// 「1本の鎖は通った敵すべてに当たる」を課題にするために持っている。
+  /// 鎖の外の追撃（雷）は数えない。
+  int lastFoesHit = 0;
+
   /// 消した直後、重力と補充を当てるまでの間。なぞった順に1枚ずつ消える様子を
   /// 見せたいので、その間は盤面を凍らせて穴が開いたままにしておく。
   bool isSettling = false;
@@ -124,6 +129,7 @@ class GameController extends ChangeNotifier {
     movesLeft = dungeon.floorAt(floor).moveLimit;
     path.clear();
     hintPath = const [];
+    lastFoesHit = 0;
     freshTileIds = const <int>{};
     isSettling = false;
     isStriking = false;
@@ -312,10 +318,14 @@ class GameController extends ChangeNotifier {
       result = result.withBolt(board.strike(boltDamage), struck);
     }
 
+    var hit = 0;
     for (var i = 0; i < result.cells.length; i++) {
       final ward = result.wards[i];
-      if (result.cleared[i] && ward != null) felledWards.add(ward);
+      if (ward == null) continue;
+      if (result.damages[i] > 0) hit++;
+      if (result.cleared[i]) felledWards.add(ward);
     }
+    lastFoesHit = hit;
     for (final fall in result.bolt) {
       felledWards.add(fall.ward);
     }
@@ -380,9 +390,12 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void showHint() {
+  /// お手本を出す。[pair] を立てると、2体の敵を通る手を先に探す
+  /// （見つからなければ普段の手）。稽古場の「まとめて当てる」が使う。
+  void showHint({bool pair = false}) {
     if (!acceptsInput) return;
-    hintPath = board.findHint();
+    hintPath = pair ? board.findPairHint() : const [];
+    if (hintPath.isEmpty) hintPath = board.findHint();
     notifyListeners();
   }
 
