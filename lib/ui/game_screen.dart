@@ -130,7 +130,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _leaveDefeated() => _finish(cleared: false);
 
-  void _nextFloor(Blessing blessing) => _controller.nextFloor(blessing);
+  void _nextFloor() => _controller.nextFloor();
 
   void _retryFloor() => _controller.retryFloor();
 
@@ -197,7 +197,7 @@ class _GameScreenState extends State<GameScreen> {
                         !_holdingClear)
                       _StageClearOverlay(
                         controller: _controller,
-                        onChoose: _nextFloor,
+                        onNext: _nextFloor,
                       ),
                     if (_controller.phase == GamePhase.dungeonCleared &&
                         !_holdingClear)
@@ -830,12 +830,14 @@ class _DefeatOverlay extends StatelessWidget {
 }
 
 /// 階層の制圧。その階の敵を全部討ったときだけ出る。
-/// ここで祝福を1つ選ぶ。階層をまたいで残るものが増えるのはこの瞬間だけ。
+///
+/// **ここでは何も選ばせない。** 道中で増えるものは無く、体力もそのまま
+/// 持ち越すので、戦果を見せて次の階層へ送るだけ。
 class _StageClearOverlay extends StatelessWidget {
-  const _StageClearOverlay({required this.controller, required this.onChoose});
+  const _StageClearOverlay({required this.controller, required this.onNext});
 
   final GameController controller;
-  final void Function(Blessing) onChoose;
+  final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
@@ -864,26 +866,19 @@ class _StageClearOverlay extends StatelessWidget {
         _ResultRow(label: '残ったターン', value: '${controller.movesLeft}'),
         const SizedBox(height: 8),
         _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
-        const SizedBox(height: 22),
-        Text('祝福を1つ選ぶ', style: AppFont.label(10, color: Palette.life)),
-        const SizedBox(height: 10),
-        for (final offer in controller.party.offers())
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _BlessingCard(
-              offer: offer,
-              onTap: () => onChoose(offer.blessing),
-            ),
-          ),
+        const SizedBox(height: 8),
+        _ResultRow(
+          label: '残った体力',
+          value: '${controller.party.hp} / ${controller.party.maxHp}',
+        ),
+        const SizedBox(height: 26),
+        _PrimaryButton(label: 'B${controller.floor + 1}F へ降りる', onTap: onNext),
       ],
     );
   }
 }
 
 /// ダンジョンの踏破。最下層を制圧したときだけ出る。
-///
-/// ここでは祝福を選ばせない。持ち越す先が無いのと、踏破の瞬間に選択を挟むと
-/// 「終わった」という区切りがぼやけるため。
 class _DungeonClearOverlay extends StatelessWidget {
   const _DungeonClearOverlay({
     required this.controller,
@@ -938,61 +933,6 @@ class _DungeonClearOverlay extends StatelessWidget {
           onTap: onNext,
         ),
       ],
-    );
-  }
-}
-
-/// 祝福の1択。押した瞬間に次の階層が始まる。
-class _BlessingCard extends StatelessWidget {
-  const _BlessingCard({required this.offer, required this.onTap});
-
-  final BlessingOffer offer;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = switch (offer.blessing) {
-      Blessing.heal => Palette.life,
-      Blessing.vigor => Palette.gold,
-    };
-    return SizedBox(
-      width: 260,
-      child: DecoratedBox(
-        decoration: panelDecoration(
-          color: Color.alphaBlend(
-            tint.withValues(alpha: 0.12),
-            Palette.surface,
-          ),
-          border: tint.withValues(alpha: 0.5),
-          radius: 16,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 13),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(offer.title, style: AppFont.number(18, color: tint)),
-                  const SizedBox(height: 6),
-                  Text(
-                    offer.detail,
-                    style: const TextStyle(
-                      color: Palette.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

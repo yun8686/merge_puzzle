@@ -381,7 +381,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
-  testWidgets('階層を制圧すると祝福を選ばされ、選ぶと次の階層に進む', (tester) async {
+  testWidgets('階層を制圧すると戦果が出て、押せば次の階層に進む', (tester) async {
     final controller = newController(5);
     // 威力3で討てる敵を1体だけ置く。1手で制圧できる。
     var id = 0;
@@ -409,10 +409,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('祝福を1つ選ぶ'), findsOneWidget);
-    expect(find.text('癒やし'), findsOneWidget);
-    expect(find.text('加護'), findsOneWidget);
-    expect(find.text('同行'), findsNothing, reason: '仲間は道中で増えない');
     // 討ち果たした敵の姿と呼び名。守り3は小鬼。
     expect(find.text('討ち果たした'), findsOneWidget);
     expect(find.text(foeNameFor(Board.minWard)), findsOneWidget);
@@ -424,15 +420,20 @@ void main() {
       findsOneWidget,
     );
 
-    // 祝福で仲間は増えない。増えるのは体力と最大体力だけ。
+    // **ここでは何も選ばせない。** 道中で増えるものは無く、体力もそのまま
+    // 持ち越す。押せば次の階層が始まるだけ。
+    final hpBefore = controller.party.hp;
     final maxHpBefore = controller.party.maxHp;
-    await tester.ensureVisible(find.text('加護'));
+    final next = find.text('B2F へ降りる');
+    expect(next, findsOneWidget);
+    await tester.ensureVisible(next);
     await tester.pump();
-    await tester.tap(find.text('加護'));
+    await tester.tap(next);
     await tester.pump();
 
     expect(controller.floor, 2);
-    expect(controller.party.maxHp, maxHpBefore + Party.vigorGain);
+    expect(controller.party.hp, hpBefore);
+    expect(controller.party.maxHp, maxHpBefore);
     expect(controller.party.members.length, twoPhases.length);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -634,7 +635,7 @@ void main() {
       MaterialApp(home: GameScreen(controller: controller)),
     );
     await tester.pump();
-    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+    expect(find.text('B2F へ降りる'), findsNothing);
 
     // 目の前で討ち果たす。
     controller.beginPath(const Cell(0, 0));
@@ -646,13 +647,13 @@ void main() {
 
     // 局面は制圧に移っているが、まだ盤面を覆わない。
     expect(controller.phase, GamePhase.stageCleared);
-    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+    expect(find.text('B2F へ降りる'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.text('祝福を1つ選ぶ'), findsNothing);
+    expect(find.text('B2F へ降りる'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 150));
-    expect(find.text('祝福を1つ選ぶ'), findsOneWidget);
+    expect(find.text('B2F へ降りる'), findsOneWidget);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });

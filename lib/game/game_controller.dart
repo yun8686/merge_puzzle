@@ -9,7 +9,7 @@ import 'party.dart';
 
 /// 階層の決着。
 ///
-///  - [stageCleared] … その階層の敵を討ち果たした。祝福を1つ選んで次の階層へ
+///  - [stageCleared] … その階層の敵を討ち果たした。そのまま次の階層へ
 ///  - [dungeonCleared] … 最下層まで討ち果たした。ダンジョンの踏破
 ///  - [floorLost] … ターン切れか手詰まり。討ち漏らした敵の反撃を受けて編み直す
 ///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
@@ -20,8 +20,9 @@ enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 /// ダンジョン制。[dungeon] の階層を1階層目から順に降り、最下層を制圧すれば踏破。
 /// 体力が尽きたらそのダンジョンは失敗で、**1階層目からやり直す**。
 ///
-/// 一党は潜る前に決めて、道中では増えない。増えるのは体力と最大体力だけ
-/// （制圧のたびの祝福）。誰を連れていくかは編成の側の判断に閉じている。
+/// 一党は潜る前に決めて、**道中では何も増えない**。体力は潜り1本を通した
+/// 資源で、階層をまたいでも戻らない。誰を連れていくかは編成の側の判断に
+/// 閉じている。
 class GameController extends ChangeNotifier {
   GameController({
     Random? rng,
@@ -145,10 +146,12 @@ class GameController extends ChangeNotifier {
     phase = GamePhase.playing;
   }
 
-  /// 祝福を受け取って次の階層へ。最下層では何もしない。
-  void nextFloor([Blessing? blessing]) {
+  /// 次の階層へ。最下層では何もしない。
+  ///
+  /// **体力はそのまま持ち越す。** 階層をまたいで戻る手立ては無い
+  /// （氷雨の回復だけが鎖のたびに効く）。
+  void nextFloor() {
     if (isLastFloor) return;
-    if (blessing != null) party.grant(blessing);
     _startFloor(floor + 1);
     notifyListeners();
   }

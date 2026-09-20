@@ -1324,7 +1324,7 @@ class _DiveNote extends StatelessWidget {
             const SizedBox(height: 14),
             const _Body(
               'ダンジョンは階層が続く。**体力は持ち越し**で、\n'
-              '制圧するたび祝福をひとつ選んで戻せる。\n'
+              '削られたぶんは戻らない。早く討つほど楽になる。\n'
               '手数が尽きると、討ち漏らした敵の守りぶんを浴びる。',
             ),
           ],

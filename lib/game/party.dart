@@ -378,25 +378,6 @@ const int stormChain = 8;
 /// 8枚編む」ための報酬で、2色の編成に入れても一度も落ちない。
 const int stormPhases = 3;
 
-/// 階層を制圧したときに選ぶ祝福。
-///
-/// 仲間は増えない。誰を連れていくかは潜る前の編成で決まっていて、道中で
-/// 変わらない。ここで増えるのは体力と最大体力だけ。
-enum Blessing { heal, vigor }
-
-/// 祝福の1択ぶん。中身は選ぶ時点の一党によって変わる。
-class BlessingOffer {
-  const BlessingOffer({
-    required this.blessing,
-    required this.title,
-    required this.detail,
-  });
-
-  final Blessing blessing;
-  final String title;
-  final String detail;
-}
-
 /// 一党。階層をまたいで持ち越す。
 class Party {
   Party({required this.members, required this.hp, required this.maxHp});
@@ -414,14 +395,12 @@ class Party {
   /// 積み上がり、体力は1本の潜りを通した資源になる。
   ///
   /// 竜の巣（守り6〜8＝攻撃力2が3体）を通すと、素で 200 前後は浴びる。
-  /// 120 で始めて、階層のあいだの祝福（癒やしは最大体力の4割）と氷雨の
-  /// 回復で足していく勘定（README 第9段階）。
+  /// **道中で戻る手立ては氷雨の回復だけ**（制圧のたびの祝福は無くした）。
+  /// 深いダンジョンは、その前提で見直すこと（README 第9段階の見積もりは
+  /// 祝福があった頃のもの）。
   ///
   /// [Board.attackFor] を動かすときは、ここも一緒に動かすこと。
   static const int startingHp = 120;
-
-  /// 加護1回で増える最大体力。
-  static const int vigorGain = 16;
 
   final List<Mage> members;
   int hp;
@@ -514,29 +493,5 @@ class Party {
   void takeDamage(int amount) {
     hp -= amount;
     if (hp < 0) hp = 0;
-  }
-
-  /// いま選べる祝福。仲間が揃っていれば「同行」は出ない。
-  List<BlessingOffer> offers() => [
-    BlessingOffer(
-      blessing: Blessing.heal,
-      title: '癒やし',
-      detail: '体力を ${(maxHp * 0.4).round()} 戻す',
-    ),
-    BlessingOffer(
-      blessing: Blessing.vigor,
-      title: '加護',
-      detail: '最大体力 +$vigorGain',
-    ),
-  ];
-
-  void grant(Blessing blessing) {
-    switch (blessing) {
-      case Blessing.heal:
-        heal((maxHp * 0.4).round());
-      case Blessing.vigor:
-        maxHp += vigorGain;
-        heal(vigorGain);
-    }
   }
 }

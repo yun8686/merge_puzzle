@@ -510,7 +510,7 @@ void main() {
       controller.strike();
       expect(controller.felledWards, [3]);
 
-      controller.nextFloor(Blessing.heal);
+      controller.nextFloor();
       expect(controller.felledWards, isEmpty);
     });
 
@@ -698,28 +698,19 @@ void main() {
       expect(party.nextRecruit, isNull, reason: '全員揃えば返らない');
     });
 
-    test('加護は最大体力を増やす', () {
-      final party = Party.initial();
-      party.hp = 10;
-      party.grant(Blessing.vigor);
-      expect(party.maxHp, Party.startingHp + Party.vigorGain);
-      expect(party.hp, 10 + Party.vigorGain);
-    });
-
-    test('制圧の祝福は次の階層に持ち越される', () {
+    test('階層をまたいでも、増えるものは何も無い', () {
       final controller = newController();
-      controller.nextFloor(Blessing.vigor);
-      expect(controller.floor, 2);
-      expect(controller.party.maxHp, Party.startingHp + Party.vigorGain);
-    });
+      final before = controller.party.members.length;
+      controller.party.takeDamage(30);
+      final hp = controller.party.hp;
 
-    test('祝福で仲間は増えない', () {
-      final party = Party.initial();
-      final before = party.members.length;
-      for (final offer in party.offers()) {
-        party.grant(offer.blessing);
-      }
-      expect(party.members.length, before);
+      controller.nextFloor();
+
+      expect(controller.floor, 2);
+      // 体力はそのまま持ち越す。戻る手立ては道中に無い。
+      expect(controller.party.hp, hp);
+      expect(controller.party.maxHp, Party.startingHp);
+      expect(controller.party.members.length, before);
     });
   });
 
@@ -744,7 +735,7 @@ void main() {
     controller.commitPath();
     controller.settle();
     controller.strike();
-    controller.nextFloor(Blessing.vigor);
+    controller.nextFloor();
     controller.party.hp = 3;
     expect(controller.floor, 2);
 
@@ -833,9 +824,8 @@ void main() {
         roster: twoPhases,
         startFloor: dungeon.depth,
       );
-      controller.nextFloor(Blessing.vigor);
+      controller.nextFloor();
       expect(controller.floor, dungeon.depth);
-      expect(controller.party.maxHp, Party.startingHp, reason: '祝福も乗らない');
     });
 
     test('別のダンジョンに入り直すと1階層目から始まる', () {
