@@ -1053,39 +1053,49 @@ void main() {
     });
   });
 
-  group('1本の鎖が当てた敵の数', () {
-    test('通った敵すべてに当たり、その数を控える', () {
+  group('なぞれる道を縛る', () {
+    test('決めた道の外はなぞれず、途中で離しても何も起きない', () {
       final c = newController();
       paintCheckerboard(c.board);
-      // 1マス空けて守り3を2体。3枚の鎖で両方を通る。
-      for (final at in const [Cell(0, 0), Cell(0, 2)]) {
-        final base = c.board.grid[at.row][at.col]!;
-        c.board.grid[at.row][at.col] =
-            Tile(id: base.id, phase: base.phase, ward: 3);
-      }
+      c.lockedPath = const [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
+      final moves = c.movesLeft;
 
+      // 始まりも1つに決まる。
+      c.beginPath(const Cell(3, 3));
+      expect(c.path, isEmpty);
+
+      c.beginPath(const Cell(0, 0));
+      expect(c.path.length, 1);
+
+      // 隣で相も繋がるマスでも、道から外れていれば継げない。
+      expect(c.extendPath(const Cell(1, 0)), isFalse);
+      expect(c.isCandidate(const Cell(1, 0)), isFalse);
+      expect(c.isCandidate(const Cell(0, 1)), isTrue);
+
+      // 途中で離しても成立しない。手数も減らない。
+      expect(c.extendPath(const Cell(0, 1)), isTrue);
+      expect(c.commitPath(), isNull);
+      expect(c.path, isEmpty);
+      expect(c.chains, 0);
+      expect(c.movesLeft, moves);
+
+      // 全部なぞれば通る。
       c.beginPath(const Cell(0, 0));
       c.extendPath(const Cell(0, 1));
       c.extendPath(const Cell(0, 2));
-      c.commitPath();
-
-      expect(c.lastFoesHit, 2);
-      expect(c.felledWards, [3, 3]);
+      expect(c.commitPath(), isNotNull);
+      expect(c.chains, 1);
     });
 
-    test('弾かれた敵は数に入らない', () {
+    test('縛っていなければこれまで通り', () {
       final c = newController();
       paintCheckerboard(c.board);
-      final base = c.board.grid[0][2]!;
-      // 守り8。3枚では届かない。
-      c.board.grid[0][2] = Tile(id: base.id, phase: base.phase, ward: 8);
 
-      c.beginPath(const Cell(0, 0));
-      c.extendPath(const Cell(0, 1));
-      c.extendPath(const Cell(0, 2));
-      c.commitPath();
-
-      expect(c.lastFoesHit, 0);
+      c.beginPath(const Cell(3, 3));
+      expect(c.path.length, 1);
+      expect(c.extendPath(const Cell(3, 4)), isTrue);
+      expect(c.extendPath(const Cell(3, 5)), isTrue);
+      expect(c.commitPath(), isNotNull);
     });
   });
 }

@@ -17,27 +17,28 @@ import 'theme.dart';
 /// 計算も、毎ターンの反撃も本番と同じものが動く。絵で説明してから本番で
 /// 学び直させるより、最初から本物を触らせるほうが速いし、嘘が混ざらない。
 ///
-/// 課題は**盤面の状態だけ**で判定する（何枚継いだか、討ったか）。なぞる道を
-/// 指定しないので、詰まっても自分で見つけた手で先へ進める。迷ったときのため
-/// に、通る道がずっと光っている。
+/// **稽古はひとつずつ筋書きになっている。** 盤面を組み、なぞらせる道を1本
+/// 用意し、その道以外はなぞれないようにする（[GameController.lockedPath]）。
+/// 始まりのマスも次の1マスも決まっていて、全部なぞり切るまで鎖にならない。
+/// 自由になぞらせていた頃は、たとえば「2体を通る鎖」を課題にしても、その形の
+/// 道が盤面に無いことがあった。**教えたい形は、出してやらないと出ない。**
 ///
 /// ## 稽古の筋書き
 ///
 /// 目指すのは「1回目の潜りで、何が起きているか分かる」ところまで。
-/// **覚えることを1つずつ積む**。前の課題で作った盤面が、次の課題の材料に
+/// **覚えることを1つずつ積む**。前の稽古で作った盤面が、次の稽古の材料に
 /// なるように並べてある。
 ///
-/// 1. **鎖を編む** … 指でなぞって継ぐ。同じ相は続けて継げない。3枚で成立
-/// 2. **長いほど強い** … 枚数がそのまま威力。まず6枚
+/// 1. **鎖を編む** … 指でなぞって継ぐ。3枚で成立
+/// 2. **長いほど強い** … 枚数がそのまま威力。6枚
 /// 3. **守りを破る** … マスの数字は越えるべき線。守り3を討つ
 /// 4. **まとめて当てる** … 1本の鎖は通った敵すべてに当たる。2体を通す
 /// 5. **削って討つ** … 1本で討てない敵が居る。傷は残るので、もう一度当てる
 /// 6. **毎ターンの反撃** … 敵は毎手殴ってくる。残りを討ち果たす
 ///
-/// 4 が 5 を用意する。2体を通した鎖は、厚いほうを討ち切れずに傷だけ残す
-/// ことが多い。**その傷ついた敵がそのまま 5 の教材になる**ので、「傷は
-/// 残る」を言葉ではなく盤面で見せられる。3 で1体討ったあとにも2体残る
-/// よう、敵は3体置いてある。
+/// 4 が 5 を用意する。2体を通る道は、手前の守り3を討ち取り、奥の守り5には
+/// 傷だけを残す。**その傷ついた敵がそのまま 5 の教材になる**ので、「傷は
+/// 残る」を言葉ではなく盤面で見せられる。
 ///
 /// 盤面で試せないことだけ、終いの画面で言い添える（[_DiveNote] は階層と
 /// 手数、[_PartyNote] は編成）。手数切れの痛手は**わざと味わわせない**。
@@ -58,32 +59,16 @@ class TutorialScreen extends StatefulWidget {
   /// 討ち取るには威力5の鎖を2本（または威力6以上の1本）要る。
   static const int toughWard = 5;
 
-  /// 稽古場。敵は3体で、手数はたっぷり取ってある。
+  /// 稽古場の階層。**ここに書いた敵は始まりの姿でしかない。**
   ///
-  /// 攻撃力を1ずつに抑えてあるのは、覚えるより先に倒されないため。3体とも
-  /// 生かしたまま40手を使い切ってようやく 120 で、初期体力とちょうど同じ。
-  /// 討つたびに減るので、普通に進めればそこまで届かない（倒れたところで
-  /// 稽古場は黙って組み直す）。
-  ///
-  /// **置く場所は決め打ち**（[FoeSpec.at]）。散らすと隣り合って出ることが
-  /// あり、最初の稽古で「敵と敵を繋いでいる」ように見えてしまう。3体とも
-  /// 4マス以上離しつつ、下の2体は1本の鎖で通せる間合いに置いてある
-  /// （「まとめて当てる」の稽古で通る道が要る）。
-  ///
-  /// 3体居るのは、「守りを破る」で1体討ったあとにも2体残すため。2体だけだと
-  /// まとめて当てる稽古が試しようがなくなる。
+  /// 稽古はひとつずつ盤面を組み直す（[_TutorialScreenState._paint]）ので、
+  /// 置かれる敵も相の並びも稽古の側が決める。ここで要るのは手数だけ。
+  /// たっぷり取ってあるのは、覚えるより先に手数で詰まらせないため。
   static const Dungeon dungeon = Dungeon(
     id: 'tutorial',
     name: '稽古場',
     floors: [
-      FloorSpec(
-        [
-          FoeSpec(3, atk: 1, at: Cell(1, 1)),
-          FoeSpec(3, atk: 1, at: Cell(5, 1)),
-          FoeSpec(toughWard, hp: 2, atk: 1, at: Cell(4, 4)),
-        ],
-        moves: 40,
-      ),
+      FloorSpec([FoeSpec(3, atk: 1)], moves: 40),
     ],
   );
 
@@ -91,18 +76,27 @@ class TutorialScreen extends StatefulWidget {
   State<TutorialScreen> createState() => _TutorialScreenState();
 }
 
-/// 課題ひとつ。盤面の状態だけで「できた」を決める。
+/// 稽古ひとつぶんに置く敵。
+class _Foe {
+  const _Foe(this.at, this.ward, {this.hp = 1});
+
+  final Cell at;
+  final int ward;
+  final int hp;
+}
+
+/// 稽古ひとつ。**盤面を組み、なぞらせる道を1本だけ用意する。**
+///
+/// 道を決め打ちにしているので、教えたい形の鎖が必ず編まれる。自由になぞらせ
+/// ていた頃は、たとえば「2体を通る鎖」を課題にしても、その形の道が盤面に
+/// 無いことがあった。
 class _Lesson {
   const _Lesson({
     required this.label,
     required this.text,
-    required this.done,
-    this.pairHint = false,
+    required this.route,
+    this.foes,
   });
-
-  /// お手本に、2体の敵を通る道を出すか。まとめて当てる稽古だけが立てる。
-  /// 普段の道を出してしまうと、示した手では課題が進まない。
-  final bool pairHint;
 
   /// 終いの振り返りに並べる短い名札。
   final String label;
@@ -110,7 +104,13 @@ class _Lesson {
   /// 上に出す一言。`**` で挟んだところだけ明るくする。
   final String text;
 
-  final bool Function(GameController) done;
+  /// この稽古で置く敵。**null なら盤面の敵をそのまま引き継ぐ。**
+  /// 前の稽古でつけた傷を持ち越すのに使う。
+  final List<_Foe>? foes;
+
+  /// なぞらせる道。敵は前の稽古の重力で落ちていることがあるので、
+  /// マスを直に書くのではなく盤面から作る。
+  final List<Cell> Function(Board) route;
 }
 
 class _TutorialScreenState extends State<TutorialScreen> {
@@ -119,60 +119,91 @@ class _TutorialScreenState extends State<TutorialScreen> {
   Timer? _cheer;
   int _at = 0;
 
+  /// この稽古に入った時点の鎖の本数。増えたら道を辿り終えたということ。
+  int _chainsAtEntry = 0;
+
   /// 課題が変わった直後だけ出す「できた」。
   bool _cheering = false;
+
+  /// 横に1列ぶんの道。盤面は市松に敷き直してあるので、まっすぐでも折れても
+  /// 隣どうしで相が入れ替わり、必ず成立する。
+  static List<Cell> _row(int r, int from, int to) => [
+    for (var c = from; c <= to; c++) Cell(r, c),
+  ];
+
+  /// 傷ついた敵を討ち切る道。
+  ///
+  /// その敵は前の稽古で落ちてきているので、位置は盤面に訊く。列は6つ、道は
+  /// 5枚なので、窓をどちらかに寄せれば必ずその敵を含められる。
+  static List<Cell> _finishOff(Board board) {
+    final at = board.foeCells.firstWhere(
+      (c) => board.tileAt(c)!.maxHp > 1,
+      orElse: () => board.foeCells.first,
+    );
+    final from = (at.col - 2).clamp(0, board.cols - 5);
+    return _row(at.row, from, from + 4);
+  }
 
   static final List<_Lesson> _lessons = [
     _Lesson(
       label: '鎖を編む',
       text: '隣り合うマスを指でなぞって継ぐ。\n'
           '**同じ相（色）は続けて継げない。**\n'
-          '3枚つなげば鎖になる。',
-      done: (c) => c.bestChain >= 3,
+          '光っている道を3枚なぞろう。',
+      foes: const [_Foe(Cell(1, 4), 3)],
+      route: (b) => _row(5, 1, 3),
     ),
     _Lesson(
       label: '長いほど強い',
       text: '継いだ枚数が、そのまま鎖の**威力**になる。\n'
-          '遠回りしてでも、6枚つないでみよう。',
-      done: (c) => c.bestChain >= 6,
+          '下の帯に出ているのが、いまの威力。\n'
+          '今度は6枚つないでみよう。',
+      foes: const [_Foe(Cell(1, 4), 3)],
+      route: (b) => _row(5, 0, 5),
     ),
     _Lesson(
       label: '守りを破る',
       text: 'マスに書かれた数字は、その敵の**守り**。\n'
-          '下の帯の威力がその数に届けば、傷がつく。\n'
-          '守り3の敵を討ち取ろう。',
-      done: (c) => c.felledWards.isNotEmpty,
+          '威力がその数に届けば、傷がつく。\n'
+          '守り3の敵を、3枚の鎖で討ち取ろう。',
+      foes: const [_Foe(Cell(5, 3), 3), _Foe(Cell(1, 1), 3)],
+      route: (b) => _row(5, 1, 3),
     ),
     _Lesson(
       label: 'まとめて当てる',
       text: '1本の鎖は、**通った敵すべて**に当たる。\n'
           '離れた敵どうしも、道でつなげば一度に狙える。\n'
-          '2体の敵を通る鎖を編もう。',
-      // 残り1体になったら試しようがないので、そこで畳む。稽古場で
-      // 詰ませない。
-      done: (c) => c.lastFoesHit >= 2 || c.remainingFoes < 2,
-      pairHint: true,
+          '2体を通る道をなぞろう。',
+      // 手前の守り3は討ち取れ、奥の守り5には傷だけが残る。その傷が次の
+      // 稽古の教材になる。控えの1体は、盤面を空にしないために置いてある。
+      foes: const [
+        _Foe(Cell(6, 1), 3),
+        _Foe(Cell(4, 3), TutorialScreen.toughWard, hp: 2),
+        _Foe(Cell(0, 0), 3),
+      ],
+      route: (b) => const [
+        Cell(6, 1),
+        Cell(6, 2),
+        Cell(6, 3),
+        Cell(5, 3),
+        Cell(4, 3),
+      ],
     ),
     _Lesson(
       label: '削って討つ',
       text: '守りの厚い敵は、1本では討ち切れない。\n'
           '**つけた傷はそのまま残る。**粒が残りの体力。\n'
           'もう一度当てて、削り切ろう。',
-      // 前の課題（まとめて当てる）で傷だけ残っていることが多い。その敵が
-      // そのまま教材になる。先に討ててしまっていれば、ここは素通りする。
-      //
-      // 体力を持つ敵が盤面から居なくなったら畳む。討ち取ったのなら覚えた
-      // ことだし、そうでなくても、もう試しようがない。
-      done: (c) =>
-          c.felledWards.contains(TutorialScreen.toughWard) ||
-          !c.board.foeCells.any((at) => c.board.tileAt(at)!.maxHp > 1),
+      // 敵は置き直さない。さっき傷をつけた敵が、そのまま教材になる。
+      route: _finishOff,
     ),
     _Lesson(
       label: '毎ターンの反撃',
       text: '**敵は毎ターン殴ってくる。**\n'
           '体力が減るのはそのため。早く討つほど楽になる。\n'
-          '残りの敵も討ち取ろう。',
-      done: (c) => c.remainingFoes == 0,
+          '残った敵を討ち取ろう。',
+      foes: const [_Foe(Cell(3, 2), 3)],
+      route: (b) => _row(3, 0, 2),
     ),
   ];
 
@@ -192,9 +223,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
           roster: const [Mage.squireHeat, Mage.squireCold],
         );
     _controller.addListener(_check);
-    // 開いた瞬間から出す。盤面が組み上がってからでないと道が引けないので、
-    // 最初の1枚を描き終えてから。
-    WidgetsBinding.instance.addPostFrameCallback((_) => _keepHint());
+    // 最初の稽古の盤面をここで組む。描く前なので知らせる必要はない。
+    _enterScene();
   }
 
   @override
@@ -205,66 +235,105 @@ class _TutorialScreenState extends State<TutorialScreen> {
     super.dispose();
   }
 
-  /// 稽古場ではお手本を出しっぱなしにする。ここは覚えるための場所なので、
-  /// 道を隠して考えさせる理由がない。なぞり始めれば消え（`beginPath`）、
-  /// 指が離れてまた打てるようになれば戻る。
+  /// 稽古の盤面を組む。マナは市松に敷き直し、[foes] があれば敵を置き直す。
   ///
-  /// 1度の通知につき1回しか出し直さない。[GameController.showHint] は道が
-  /// 見つからなくても知らせるので、見つからないまま呼び続けると止まらなく
-  /// なる。[_showingHint] はそのための歯止め。
-  bool _showingHint = false;
+  /// **市松なので、上下左右どちらへ進んでも相が入れ替わる。** 決めた道が
+  /// 必ず成立するのはこのため。鎖を1本編むたびに重力と補充で並びが崩れる
+  /// ので、稽古ごとに敷き直す。
+  ///
+  /// [foes] が null なら敵はそのまま残す。**前の稽古でつけた傷を持ち越す**
+  /// ための逃げ道で、「削って討つ」がこれを使う。
+  void _paint(List<_Foe>? foes) {
+    final board = _controller.board;
+    final phases = board.phases;
+    for (var r = 0; r < board.rows; r++) {
+      for (var c = 0; c < board.cols; c++) {
+        final tile = board.grid[r][c];
+        if (tile == null) continue;
+        if (foes == null && tile.isFoe) continue;
+        board.grid[r][c] = Tile(
+          id: tile.id,
+          phase: (r + c).isEven ? phases.first : phases[1],
+        );
+      }
+    }
+    if (foes == null) return;
+    for (final foe in foes) {
+      final base = board.grid[foe.at.row][foe.at.col]!;
+      board.grid[foe.at.row][foe.at.col] = Tile(
+        id: base.id,
+        phase: base.phase,
+        ward: foe.ward,
+        hp: foe.hp,
+      );
+    }
+  }
 
+  /// いまの稽古の盤面と道を用意する。**知らせない**――呼ぶのは組み上がる前
+  /// か、誰かの通知の途中なので、そのまま描き直される。
+  void _enterScene() {
+    final lesson = _lessons[_at];
+    _paint(lesson.foes);
+    final route = lesson.route(_controller.board);
+    _controller.lockedPath = route;
+    // お手本は決めた道そのもの。探すまでもない。
+    _controller.hintPath = route;
+    _chainsAtEntry = _controller.chains;
+  }
+
+  /// お手本は出しっぱなし。ここは覚えるための場所なので、道を隠して
+  /// 考えさせる理由がない。なぞり始めれば消え（`beginPath`）、指が離れて
+  /// また打てるようになれば戻る。
   void _keepHint() {
-    if (_showingHint || !mounted) return;
-    // 通し終えたら片付ける。終いの言葉の裏で指が回り続ける理由はない。
     if (_finished) {
-      _controller.clearHint();
+      _controller.hintPath = const [];
       return;
     }
     // なぞっている最中に出すと、自分の指と重なって読めない。
     if (!_controller.acceptsInput || _controller.path.isNotEmpty) return;
-    if (_controller.hintPath.isNotEmpty) return;
-    _showingHint = true;
-    _controller.showHint(pair: _lessons[_at].pairHint);
-    _showingHint = false;
+    _controller.hintPath = _controller.lockedPath;
   }
 
   void _check() {
-    if (!mounted) return;
+    if (!mounted || _finished) return;
     // 倒れても手数が尽きても、稽古場なので黙って組み直す。ここで躓かせると
     // 覚える前に投げられる。
     if (_controller.phase == GamePhase.floorLost ||
         _controller.phase == GamePhase.defeated) {
       _controller.enterDungeon(TutorialScreen.dungeon);
+      _enterScene();
       return;
     }
-    // 最後の課題（敵を討ち切る）が片付いたら、途中が残っていても終い。
-    // 盤面から敵が居なくなると、残した課題はもう試しようがない。
-    final int i;
-    if (_lessons.last.done(_controller)) {
-      i = _lessons.length;
-    } else {
-      var n = _at;
-      while (n < _lessons.length && _lessons[n].done(_controller)) {
-        n++;
-      }
-      i = n;
-    }
-    if (i != _at) {
-      final finished = i >= _lessons.length;
-      setState(() {
-        _at = i;
-        // 終いの言葉が出るところでは重ねない。
-        _cheering = !finished;
-      });
+    // 盤面から敵が居なくなったら終い。最後の稽古で討ち果たしたところ。
+    if (_controller.remainingFoes == 0) {
       _cheer?.cancel();
-      if (!finished) {
-        _cheer = Timer(const Duration(milliseconds: 1400), () {
-          if (mounted) setState(() => _cheering = false);
-        });
-      }
+      setState(() {
+        _at = _lessons.length;
+        _cheering = false;
+      });
+      return;
+    }
+    // 決めた道を辿り終えたら次の稽古へ。盤面を組み直すのは、反撃まで
+    // 終わって手が戻ってきてから（[GameController.acceptsInput]）。
+    if (_controller.chains > _chainsAtEntry && _controller.acceptsInput) {
+      _advance();
+      return;
     }
     _keepHint();
+  }
+
+  void _advance() {
+    _cheer?.cancel();
+    setState(() {
+      _at++;
+      // 終いの言葉が出るところでは重ねない。
+      _cheering = !_finished;
+    });
+    if (_finished) return;
+    _cheer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _cheering = false);
+    });
+    _enterScene();
   }
 
   @override

@@ -95,10 +95,15 @@ class GameController extends ChangeNotifier {
 
   List<Cell> hintPath = <Cell>[];
 
-  /// 直前の**1本の鎖**が傷をつけた敵の数。累計ではない（累計は [felledWards]）。
-  /// 「1本の鎖は通った敵すべてに当たる」を課題にするために持っている。
-  /// 鎖の外の追撃（雷）は数えない。
-  int lastFoesHit = 0;
+  /// なぞれる道を1本に縛る。空なら自由（本番はいつも空）。
+  ///
+  /// **稽古場のためにある。** 決めた道の通りにしかなぞれなくなるので、
+  /// 教えたい形の鎖が必ず編まれる。始まりのマスも、次に継げるマスも1つに
+  /// 決まり、全部なぞり切るまで[commitPath]も通らない。
+  List<Cell> lockedPath = const [];
+
+  /// 編んだ鎖の本数。稽古場が「決めた道はもう辿られた」と知るのに使う。
+  int chains = 0;
 
   /// 消した直後、重力と補充を当てるまでの間。なぞった順に1枚ずつ消える様子を
   /// 見せたいので、その間は盤面を凍らせて穴が開いたままにしておく。
@@ -129,7 +134,8 @@ class GameController extends ChangeNotifier {
     movesLeft = dungeon.floorAt(floor).moveLimit;
     path.clear();
     hintPath = const [];
-    lastFoesHit = 0;
+    lockedPath = const [];
+    chains = 0;
     freshTileIds = const <int>{};
     isSettling = false;
     isStriking = false;
@@ -203,7 +209,13 @@ class GameController extends ChangeNotifier {
   int get power => path.length + powerBonus;
 
   /// 今離したらチェインが成立するか。
-  bool get pathIsValid => board.isValidPath(path, power: power);
+  ///
+  /// 道を縛っているあいだは、なぞり切るまで成立しない（[commitPath] が
+  /// 通さない）。威力の色も「いま離せば鎖になる」を指したままになる。
+  bool get pathIsValid {
+    if (lockedPath.isNotEmpty && path.length != lockedPath.length) return false;
+    return board.isValidPath(path, power: power);
+  }
 
   /// 成立まであと何枚必要か（長さが足りているときは 0）。
   int get missingTiles =>
@@ -257,12 +269,17 @@ class GameController extends ChangeNotifier {
   bool isCandidate(Cell c) {
     if (path.isEmpty || !acceptsInput) return false;
     if (path.contains(c)) return false;
+    if (lockedPath.isNotEmpty) {
+      return path.length < lockedPath.length && c == lockedPath[path.length];
+    }
     return board.canExtendPath(path, c);
   }
 
   void beginPath(Cell c) {
     if (!acceptsInput) return;
     if (board.tileAt(c) == null) return;
+    // 縛られているときは、決めた道の始まりからしか引けない。
+    if (lockedPath.isNotEmpty && c != lockedPath.first) return;
     hintPath = const [];
     path
       ..clear()
@@ -280,6 +297,11 @@ class GameController extends ChangeNotifier {
       return true;
     }
     if (path.contains(c)) return false;
+    // 縛られているときに継げるのは、決めた道の次の1マスだけ。
+    if (lockedPath.isNotEmpty &&
+        (path.length >= lockedPath.length || c != lockedPath[path.length])) {
+      return false;
+    }
     if (!board.canExtendPath(path, c)) return false;
     path.add(c);
     notifyListeners();
@@ -299,6 +321,12 @@ class GameController extends ChangeNotifier {
   /// 演出が終わったら [settle] を呼ぶこと。
   ClearResult? commitPath() {
     if (!acceptsInput) return null;
+    // 縛られているときは、途中で離しても何も起きない。手数も減らない。
+    // もう一度なぞればよい。
+    if (lockedPath.isNotEmpty && path.length != lockedPath.length) {
+      cancelPath();
+      return null;
+    }
     // 戦果は盤面を崩す前に数える。
     final tally = _tally;
     final p = path.length + party.powerBonusFor(tally);
@@ -318,14 +346,11 @@ class GameController extends ChangeNotifier {
       result = result.withBolt(board.strike(boltDamage), struck);
     }
 
-    var hit = 0;
     for (var i = 0; i < result.cells.length; i++) {
       final ward = result.wards[i];
-      if (ward == null) continue;
-      if (result.damages[i] > 0) hit++;
-      if (result.cleared[i]) felledWards.add(ward);
+      if (result.cleared[i] && ward != null) felledWards.add(ward);
     }
-    lastFoesHit = hit;
+    chains++;
     for (final fall in result.bolt) {
       felledWards.add(fall.ward);
     }
@@ -390,12 +415,9 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// お手本を出す。[pair] を立てると、2体の敵を通る手を先に探す
-  /// （見つからなければ普段の手）。稽古場の「まとめて当てる」が使う。
-  void showHint({bool pair = false}) {
+  void showHint() {
     if (!acceptsInput) return;
-    hintPath = pair ? board.findPairHint() : const [];
-    if (hintPath.isEmpty) hintPath = board.findHint();
+    hintPath = board.findHint();
     notifyListeners();
   }
 

@@ -5,54 +5,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
 import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
-import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/tutorial.dart';
 
 import 'home_screen_test.dart' show openBase;
 
-/// 稽古場と同じ顔ぶれ・同じ階層で組む。差し込めるので、課題が進むところを
-/// 盤面から直に作れる。
+/// 稽古場と同じ顔ぶれ・同じ階層で組む。差し込めるので、どの稽古まで進んだ
+/// ところからでも見られる。
 GameController newController() => GameController(
   rng: Random(4),
   dungeon: TutorialScreen.dungeon,
   roster: const [Mage.squireHeat, Mage.squireCold],
 );
 
-/// 盤面を市松に塗る。敵は隅に1体だけ残す（制圧扱いにならないように）。
-void paintCheckerboard(Board board, {int ward = 8}) {
-  var id = 0;
-  for (var r = 0; r < board.rows; r++) {
-    for (var c = 0; c < board.cols; c++) {
-      board.grid[r][c] = Tile(
-        id: id++,
-        phase: (r + c).isEven ? Phase.heat : Phase.cold,
-      );
-    }
-  }
-  final corner = board.grid[board.rows - 1][board.cols - 1]!;
-  board.grid[board.rows - 1][board.cols - 1] = Tile(
-    id: corner.id,
-    phase: corner.phase,
-    ward: ward,
-  );
-}
-
-/// 市松に塗った盤面の1マスを敵にする。稽古の筋書きを作るのに使う。
-void setFoe(Board board, Cell at, int ward) {
-  final base = board.grid[at.row][at.col]!;
-  board.grid[at.row][at.col] = Tile(id: base.id, phase: base.phase, ward: ward);
-}
-
-/// なぞって離して、盤面が詰むまで。
-void play(GameController c, List<Cell> path) {
-  c.beginPath(path.first);
-  for (final cell in path.skip(1)) {
+/// いま決められている道をそのままなぞって離す。盤面が詰んで、反撃まで済む。
+void traceRoute(GameController c) {
+  final route = List<Cell>.of(c.lockedPath);
+  c.beginPath(route.first);
+  for (final cell in route.skip(1)) {
     c.extendPath(cell);
   }
   c.commitPath();
   c.settle();
   c.strike();
+}
+
+/// 盤面に残っている、体力を持つ敵（＝「削って討つ」の教材）。
+Cell? toughFoe(Board board) {
+  for (final at in board.foeCells) {
+    if (board.tileAt(at)!.maxHp > 1) return at;
+  }
+  return null;
 }
 
 Future<void> open(WidgetTester tester, GameController controller) async {
@@ -65,58 +48,127 @@ Future<void> open(WidgetTester tester, GameController controller) async {
 }
 
 void main() {
-  testWidgets('本物の盤面をなぞって進む', (tester) async {
+  testWidgets('本物の盤面と、なぞる道が用意されている', (tester) async {
     final controller = newController();
     await open(tester, controller);
 
     expect(find.byType(BoardView), findsOneWidget, reason: '本物の盤面');
-    expect(find.textContaining('3枚つなげば鎖になる'), findsOneWidget);
+    expect(find.textContaining('光っている道を3枚なぞろう'), findsOneWidget);
     // 下の目盛りは盤面の画面と同じ読み方。
     expect(find.text('体力'), findsOneWidget);
     expect(find.text('残り手数'), findsOneWidget);
+
+    // 道は決まっていて、お手本はその道そのもの。
+    expect(controller.lockedPath.length, 3);
+    expect(controller.hintPath, controller.lockedPath);
   });
 
-  testWidgets('3枚つなぐと次の課題に移る', (tester) async {
+  testWidgets('決めた道の外はなぞれない', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    paintCheckerboard(controller.board);
+    final route = controller.lockedPath;
 
-    play(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+    // 始まりも1つに決まっている。
+    controller.beginPath(const Cell(0, 0));
+    expect(controller.path, isEmpty);
+
+    controller.beginPath(route.first);
+    expect(controller.path.length, 1);
+
+    // 隣で、相も繋がるマスでも、道から外れていれば継げない。
+    final off = Cell(route.first.row - 1, route.first.col);
+    expect(controller.extendPath(off), isFalse);
+    expect(controller.isCandidate(off), isFalse);
+    expect(controller.path.length, 1);
+
+    // 次の1マスだけが継げる。
+    expect(controller.isCandidate(route[1]), isTrue);
+    expect(controller.extendPath(route[1]), isTrue);
+  });
+
+  testWidgets('途中で離しても何も起きない', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    final moves = controller.movesLeft;
+
+    controller.beginPath(controller.lockedPath.first);
+    controller.extendPath(controller.lockedPath[1]);
+    expect(controller.commitPath(), isNull);
+
+    expect(controller.path, isEmpty);
+    expect(controller.chains, 0);
+    expect(controller.movesLeft, moves, reason: '手数も減らない');
+  });
+
+  testWidgets('なぞり切ると次の稽古に移る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+
+    traceRoute(controller);
     await tester.pump();
 
-    expect(find.textContaining('3枚つなげば鎖になる'), findsNothing);
+    expect(find.textContaining('光っている道を3枚なぞろう'), findsNothing);
     expect(find.textContaining('6枚つないでみよう'), findsOneWidget);
+    expect(controller.lockedPath.length, 6);
     // 片付いた手応えが一度だけ出る。
     expect(find.text('できた'), findsOneWidget);
   });
 
-  testWidgets('長い鎖なら課題を飛び越えて進む', (tester) async {
+  testWidgets('まとめて当てる稽古では、2体を通る道が出る', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    paintCheckerboard(controller.board);
 
-    // 6枚。1つ目と2つ目の課題が同時に片付く。
-    play(controller, const [
-      Cell(0, 0),
-      Cell(0, 1),
-      Cell(0, 2),
-      Cell(0, 3),
-      Cell(0, 4),
-      Cell(0, 5),
-    ]);
+    // 鎖を編む → 長いほど強い → 守りを破る。
+    for (var i = 0; i < 3; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
+
+    expect(find.textContaining('2体を通る道をなぞろう'), findsOneWidget);
+    final onRoute = controller.lockedPath
+        .where((c) => controller.board.tileAt(c)!.isFoe)
+        .length;
+    expect(onRoute, 2, reason: '道が敵を2体通っている');
+
+    traceRoute(controller);
     await tester.pump();
 
-    expect(find.textContaining('守り3の敵を討ち取ろう'), findsOneWidget);
+    // 手前の守り3は討ち取れ、奥の守り5には傷が残る。
+    expect(controller.felledWards, contains(3));
+    final tough = toughFoe(controller.board);
+    expect(tough, isNotNull);
+    expect(controller.board.tileAt(tough!)!.hp, 1);
   });
 
-  testWidgets('敵を討ち切ると終いの言葉が出る', (tester) async {
+  testWidgets('残った傷を次の稽古で削り切る', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    // 盤面から敵を消して、討ち切った状態を作る。
-    paintCheckerboard(controller.board, ward: 3);
+    for (var i = 0; i < 4; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
 
-    play(controller, const [Cell(7, 3), Cell(7, 4), Cell(7, 5)]);
+    expect(find.textContaining('削り切ろう'), findsOneWidget);
+    // 道は、傷ついた敵を通る。
+    final tough = toughFoe(controller.board);
+    expect(tough, isNotNull);
+    expect(controller.lockedPath, contains(tough));
+
+    traceRoute(controller);
     await tester.pump();
+
+    expect(toughFoe(controller.board), isNull, reason: '削り切った');
+    expect(controller.felledWards, contains(TutorialScreen.toughWard));
+    expect(find.textContaining('残った敵を討ち取ろう'), findsOneWidget);
+  });
+
+  testWidgets('通しでなぞると終いの言葉が出る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    for (var i = 0; i < 6; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
 
     expect(controller.remainingFoes, 0);
     expect(find.text('ひととおり覚えた'), findsOneWidget);
@@ -138,170 +190,45 @@ void main() {
     }
 
     // 出そろうまで描き続けても例外が出ないこと。
-    for (var i = 0; i < 12; i++) {
+    for (var i = 0; i < 16; i++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('開いた瞬間にお手本の指が出る', (tester) async {
+  testWidgets('お手本の指は、なぞっている間だけ引っ込む', (tester) async {
     final controller = newController();
     await open(tester, controller);
-
-    // 1手目は何をどうなぞるのかが分からない。ここで待たせない。
     expect(controller.hintPath, isNotEmpty);
 
-    // 指が道を辿り続けても例外が出ないこと。
-    for (var i = 0; i < 20; i++) {
-      await tester.pump(const Duration(milliseconds: 150));
-    }
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('なぞっている間だけ消え、離せばまた出る', (tester) async {
-    final controller = newController();
-    await open(tester, controller);
-    paintCheckerboard(controller.board);
-    await tester.pump();
-    expect(controller.hintPath, isNotEmpty);
-
-    // 自分の指と重なると読めないので、なぞっている間は引っ込む。
-    controller.beginPath(const Cell(0, 0));
-    expect(controller.hintPath, isEmpty);
-    controller.extendPath(const Cell(0, 1));
+    controller.beginPath(controller.lockedPath.first);
     expect(controller.hintPath, isEmpty);
 
     // 離せば戻る。稽古場は覚えるための場所なので、待たせない。
-    play(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
-    await tester.pump();
-    expect(controller.hintPath, isNotEmpty);
-  });
-
-  testWidgets('1本の鎖で2体に当てると、まとめて当てる稽古が片付く', (tester) async {
-    final controller = newController();
-    await open(tester, controller);
-    paintCheckerboard(controller.board);
-    // 上の段に守り3を2体。1本の鎖で両方を通せる間合い。
-    setFoe(controller.board, const Cell(0, 0), 3);
-    setFoe(controller.board, const Cell(0, 2), 3);
-    await tester.pump();
-
-    // 6枚で両方を通る。ここまでの課題もまとめて片付く。
-    play(controller, const [
-      Cell(0, 0),
-      Cell(0, 1),
-      Cell(0, 2),
-      Cell(0, 3),
-      Cell(0, 4),
-      Cell(0, 5),
-    ]);
-    await tester.pump();
-
-    expect(controller.lastFoesHit, 2);
-    expect(find.textContaining('残りの敵も討ち取ろう'), findsOneWidget);
-  });
-
-  testWidgets('敵が1体しか残っていなければ、まとめて当てる稽古は飛ばす', (tester) async {
-    final controller = newController();
-    await open(tester, controller);
-    // 隅に1体だけ。まとめて当てようがない。
-    paintCheckerboard(controller.board);
-    await tester.pump();
-
-    play(controller, const [
-      Cell(0, 0),
-      Cell(0, 1),
-      Cell(0, 2),
-      Cell(0, 3),
-      Cell(0, 4),
-      Cell(0, 5),
-    ]);
-    // 守りを破る課題も片付けておく。
-    setFoe(controller.board, const Cell(2, 0), 3);
-    await tester.pump();
-    play(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
-    await tester.pump();
-
-    expect(find.textContaining('残りの敵も討ち取ろう'), findsOneWidget);
-  });
-
-  testWidgets('1本で討てない敵は、傷が残る', (tester) async {
-    final controller = newController();
-    await open(tester, controller);
-    paintCheckerboard(controller.board);
-
-    // まず6枚。1つ目と2つ目の課題が片付く。
-    play(controller, const [
-      Cell(0, 0),
-      Cell(0, 1),
-      Cell(0, 2),
-      Cell(0, 3),
-      Cell(0, 4),
-      Cell(0, 5),
-    ]);
-    await tester.pump();
-
-    // 削る稽古の局面を作る。隅の敵を退かし、体力2・守り5の敵を1体だけ置く。
-    // 敵が1体なら「まとめて当てる」は試しようがないので畳まれ、
-    // 「削って討つ」が出る。
-    final corner = controller.board.grid[7][5]!;
-    controller.board.grid[7][5] = Tile(id: corner.id, phase: corner.phase);
-    final base = controller.board.grid[2][2]!;
-    controller.board.grid[2][2] = Tile(
-      id: base.id,
-      phase: base.phase,
-      ward: TutorialScreen.toughWard,
-      hp: 2,
-    );
-    controller.felledWards.add(3);
-
-    // 5枚で守り5に届く。傷は1つぶんで、まだ討ち切れない。
-    play(controller, const [
-      Cell(2, 0),
-      Cell(2, 1),
-      Cell(2, 2),
-      Cell(2, 3),
-      Cell(2, 4),
-    ]);
-    await tester.pump();
-
-    expect(controller.felledWards, isNot(contains(TutorialScreen.toughWard)));
-    expect(find.textContaining('削り切ろう'), findsOneWidget);
-
-    // 傷は盤面に残る。同じ威力でもう一度当てれば討てる。
-    final hurt = controller.board.foeCells.firstWhere(
-      (c) => controller.board.tileAt(c)!.ward == TutorialScreen.toughWard,
-    );
-    expect(controller.board.tileAt(hurt)!.hp, 1);
+    controller.cancelPath();
+    expect(controller.hintPath, controller.lockedPath);
   });
 
   testWidgets('なぞると、いまの威力と敵の守りが並ぶ', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    // 隅に守り3の敵を1体だけ残す。
-    paintCheckerboard(controller.board, ward: 3);
-    await tester.pump();
+    // 守りを破る稽古まで進める。道の終わりが守り3の敵。
+    for (var i = 0; i < 2; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
 
-    // なぞっていない間は、数字の読み方だけを置いておく。
-    expect(find.textContaining('マスの数字は敵の守り'), findsOneWidget);
-
-    // 敵を通していない鎖では、威力だけ。
-    controller.beginPath(const Cell(0, 0));
-    controller.extendPath(const Cell(0, 1));
+    // 敵を通す前は威力だけ。
+    controller.beginPath(controller.lockedPath.first);
+    controller.extendPath(controller.lockedPath[1]);
     await tester.pump();
     expect(find.text('威力'), findsOneWidget);
     expect(find.text('守り'), findsNothing);
 
-    // 敵のマスを通すと、その守りと、いま届いているかが並ぶ。
-    controller.beginPath(const Cell(7, 3));
-    controller.extendPath(const Cell(7, 4));
-    await tester.pump();
-    expect(find.text('守り'), findsNothing);
-
-    controller.extendPath(const Cell(7, 5));
+    // 敵のマスまで継ぐと、その守りと、届いているかが並ぶ。
+    controller.extendPath(controller.lockedPath[2]);
     await tester.pump();
     expect(find.text('守り'), findsOneWidget);
-    // 従者だけの一党なので威力＝枚数。3枚で守り3に届く。
     expect(controller.power, 3);
     expect(find.text('討ち取れる'), findsOneWidget);
   });
@@ -309,15 +236,16 @@ void main() {
   testWidgets('威力が守りに届かないうちは、あと何枚かを言う', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    paintCheckerboard(controller.board, ward: 6);
+    // まとめて当てる稽古。道の1枚目が守り3の敵。
+    for (var i = 0; i < 3; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
+
+    controller.beginPath(controller.lockedPath.first);
     await tester.pump();
 
-    controller.beginPath(const Cell(7, 3));
-    controller.extendPath(const Cell(7, 4));
-    controller.extendPath(const Cell(7, 5));
-    await tester.pump();
-
-    expect(find.text('あと 3 枚で届く'), findsOneWidget);
+    expect(find.text('あと 2 枚で届く'), findsOneWidget);
   });
 
   testWidgets('とばせる', (tester) async {

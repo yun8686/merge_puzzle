@@ -100,7 +100,7 @@ class Tile {
 /// 薄く」という縛りを掛けているが、こちらは掛けない。手で書く以上、厚い守りと
 /// 厚い体力を重ねてよいのはボスだけ、という判断は書く側の責任になる。
 class FoeSpec {
-  const FoeSpec(this.ward, {this.hp = 1, this.atk, this.at});
+  const FoeSpec(this.ward, {this.hp = 1, this.atk});
 
   final int ward;
   final int hp;
@@ -108,13 +108,6 @@ class FoeSpec {
   /// 攻撃力。省くと守りの厚さから決まる（[Board.attackFor]）。
   /// **盤面には出さない隠し値。** 手で強くしたい敵だけここで上書きする。
   final int? atk;
-
-  /// 置くマス。省くと毎回どこかに散る。
-  ///
-  /// **稽古場のためにある。** 教える順に合わせて、隣り合わないところや、
-  /// 1本の鎖で両方を通れるところに据える必要がある。本番の階層で据えると、
-  /// 毎回同じ場所に同じ敵が出ることになる。
-  final Cell? at;
 }
 
 /// 鎖の外で討ち取られた敵。いまは雷の魔導士の追撃だけがこれを作る。
@@ -359,42 +352,19 @@ class Board {
   }
 
   /// 指定された敵をそのまま置く。守りも体力も曲げない。
-  ///
-  /// 置く場所は毎回変える（同じ階層でも盤面は編み直されるため）が、
-  /// [FoeSpec.at] があるものだけはそこに据える。**稽古場が使う。**
-  /// 本番の階層で据えると、毎回同じ場所に同じ敵が出ることになる。
+  /// 置く場所だけは毎回変える。同じ階層でも盤面は編み直されるため。
   void _placeGiven(List<FoeSpec> foes) {
-    // 指定は並びの位置で引く。同じ守りの敵を2体書くと const が畳まれて
-    // 同じ [FoeSpec] になるので、指定を敵そのもので引くと取り違える。
-    final taken = <Cell>{};
-    final fixed = List<Cell?>.filled(foes.length, null);
-    for (var i = 0; i < foes.length; i++) {
-      final at = foes[i].at;
-      if (at == null) continue;
-      if (at.row < 0 || at.row >= rows || at.col < 0 || at.col >= cols) {
-        continue;
-      }
-      // 同じマスを二度は使わない。後から書いたほうは散らす側に回る。
-      if (!taken.add(at)) continue;
-      fixed[i] = at;
-    }
-    final free = <Cell>[];
+    final cells = <Cell>[];
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        final cell = Cell(r, c);
-        if (!taken.contains(cell)) free.add(cell);
+        cells.add(Cell(r, c));
       }
     }
-    free.shuffle(_rng);
-    var next = 0;
-    for (var i = 0; i < foes.length; i++) {
-      var cell = fixed[i];
-      if (cell == null) {
-        if (next >= free.length) break;
-        cell = free[next++];
-      }
-      final spec = foes[i];
+    cells.shuffle(_rng);
+    for (var i = 0; i < foes.length && i < cells.length; i++) {
+      final cell = cells[i];
       final base = grid[cell.row][cell.col]!;
+      final spec = foes[i];
       grid[cell.row][cell.col] = Tile(
         id: base.id,
         phase: base.phase,
@@ -715,25 +685,14 @@ class Board {
   /// 自動的に成り立ったが、3つ以上ではそうならない。
   ///
   /// 相の制約が強い枝刈りになるので、盤面が枯れているほど速く終わる。
-  ///
-  /// [also] を渡すと、そのマスも通る道だけを探す。長さが足りただけでは
-  /// 止まらなくなるので、[cap] で伸ばす上限を必ず押さえること（既定は
-  /// [need] ちょうど＝足りた時点で止まる、これまでの動き）。上限が無いと
-  /// 見つからない盤面で盤面いっぱいまで伸ばし続ける。
-  List<Cell> findPathThrough(Cell through, int need, {Cell? also, int? cap}) {
+  List<Cell> findPathThrough(Cell through, int need) {
     if (tileAt(through) == null) return const [];
-    if (also != null && tileAt(also) == null) return const [];
-    final limit = cap ?? need;
     final seen = <Cell>{through};
     final path = <Cell>[through];
 
-    bool enough() =>
-        path.length >= need && (also == null || seen.contains(also));
-
-    // 前（先頭側）へ伸ばす。ここまで来たら足りているかを見る。
+    // 前（先頭側）へ伸ばす。ここまで来たら長さが足りているかを見る。
     bool growFront() {
-      if (enough()) return true;
-      if (path.length >= limit) return false;
+      if (path.length >= need) return true;
       for (final n in neighborsOf(path.first)) {
         if (seen.contains(n) || !_fits(path, n, atFront: true)) continue;
         seen.add(n);
@@ -748,7 +707,6 @@ class Board {
     // 後ろ（末尾側）へ伸ばす。伸ばしきったところで前側に切り替える。
     bool growBack() {
       if (growFront()) return true;
-      if (path.length >= limit) return false;
       for (final n in neighborsOf(path.last)) {
         if (seen.contains(n) || !_fits(path, n, atFront: false)) continue;
         seen.add(n);
@@ -801,36 +759,6 @@ class Board {
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         final p = findPathThrough(Cell(r, c), minPathLength);
-        if (p.isNotEmpty) return p;
-      }
-    }
-    return const [];
-  }
-
-  /// 2体を結ぶのに許す隔たり（マス数）。これより離れた組は探さない。
-  static const int _pairReach = 9;
-
-  /// 2体の敵を通る手。どちらにも傷がつく長さを探す。無ければ空。
-  ///
-  /// 1本の鎖は通った敵すべてに当たる、というのは言葉より道を見たほうが早い。
-  /// 稽古場の「まとめて当てる」が使う。
-  List<Cell> findPairHint() {
-    final foes = foeCells;
-    for (var i = 0; i < foes.length; i++) {
-      for (var j = i + 1; j < foes.length; j++) {
-        final a = foes[i];
-        final b = foes[j];
-        // 両方に傷がつく長さと、2体を結ぶのに要る枚数の、大きいほう。
-        final reach = (a.row - b.row).abs() + (a.col - b.col).abs() + 1;
-        // 離れすぎた2体は探さない。道が無いことを確かめるのに時間が掛かる
-        // わりに、見つかっても長すぎて稽古にならない。
-        if (reach > _pairReach) continue;
-        var need = tileAt(a)!.powerToHurt;
-        if (tileAt(b)!.powerToHurt > need) need = tileAt(b)!.powerToHurt;
-        if (reach > need) need = reach;
-        // 遠回りの余地を少しだけ残す。広げるほど探索が伸びる（枝は1枚
-        // 伸ばすごとに増えるので、上限は効き目が大きい）。
-        final p = findPathThrough(a, need, also: b, cap: need + 3);
         if (p.isNotEmpty) return p;
       }
     }
