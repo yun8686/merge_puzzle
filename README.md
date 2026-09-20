@@ -768,7 +768,7 @@ flutter run
 | `lib/ui/title_screen.dart` | タイトル。題の上で鎖が編まれる。記録は読まない |
 | `lib/ui/tutorial.dart` | 遊び方。本物の盤面をなぞらせる稽古場。初回だけ拠点の上に出す |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択 |
-| `lib/ui/game_screen.dart` | 残りターン・残りの敵・相のゲージ、一党の体力、ヒント、制圧／踏破／陥落／全滅画面 |
+| `lib/ui/game_screen.dart` | 残りターン・残りの敵・相のゲージ、一党の体力、ヒント、中断の確かめ、制圧／踏破／陥落／全滅画面 |
 | `lib/ui/foe_art.dart` | 敵の姿。守り3〜8に1体ずつ。盤面の敵マスと決着画面の両方で使う。`tools/foe/shapes.py` からの生成物で、手で直さない |
 | `lib/ui/mage_art.dart` | 魔導士の姿。名簿の10人ぶん。編成の枠・名簿の札・一党の帯で使う。`tools/mage/shapes.py` からの生成物で、手で直さない |
 | `tools/sim/chain_length.py` | 継ぎ方の決まりの難易度を測る。第8段階の数字はこれで出した |

@@ -615,6 +615,53 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
+  testWidgets('中断は確かめてから、拠点へ戻す', (tester) async {
+    final controller = newController(3);
+    DungeonOutcome? outcome;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameScreen(
+          controller: controller,
+          onFinished: (o) => outcome = o,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // **押してすぐには帰さない。** 取り返しが付かない側なので一度訊く。
+    await tester.tap(find.byIcon(Icons.logout));
+    await tester.pump();
+    expect(find.text('中断する'), findsOneWidget);
+    expect(find.text('B${controller.floor}F'), findsWidgets);
+    expect(outcome, isNull);
+
+    // 続ければ盤面に戻る。
+    await tester.tap(find.text('続ける'));
+    await tester.pump();
+    expect(find.text('中断する'), findsNothing);
+    expect(outcome, isNull);
+
+    await tester.tap(find.byIcon(Icons.logout));
+    await tester.pump();
+    await tester.tap(find.text('中断して拠点へ'));
+    await tester.pump();
+
+    // 討ち果たしてはいないので、失敗として拠点に返す。
+    expect(outcome, isNotNull);
+    expect(outcome!.cleared, isFalse);
+    expect(outcome!.floor, controller.floor);
+    expect(outcome!.dungeonId, controller.dungeon.id);
+  });
+
+  testWidgets('戻る先が無ければ中断の札は出ない', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: newController(3))),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.logout), findsNothing);
+  });
+
   testWidgets('制圧の画面は、最後の敵を討ってから少し待って出る', (tester) async {
     final controller = newController(5);
     // 威力3で討てる敵を1体だけ置く。1手で制圧できる。

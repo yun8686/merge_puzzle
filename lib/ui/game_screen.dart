@@ -104,6 +104,23 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() => _controller.restart();
 
+  /// 中断の確かめを出しているか。
+  ///
+  /// **押してすぐには帰さない。** 潜っている途中の体力も戦果もここで打ち切られ、
+  /// 次は1階層目からになる。取り返しが付かない側なので、一度止めて訊く。
+  bool _confirmingAbort = false;
+
+  void _askAbort() => setState(() => _confirmingAbort = true);
+
+  void _cancelAbort() => setState(() => _confirmingAbort = false);
+
+  void _abort() {
+    setState(() => _confirmingAbort = false);
+    // 途中で切り上げただけなので、討ち果たしてはいない。降りた階層のぶんを
+    // どう扱うかは拠点の仕事（この画面は記録を読まない）。
+    _finish(cleared: false);
+  }
+
   /// 拠点を持っているか。持っていれば、決着したら呼び出し側に返す。
   bool get _reportsHome => widget.onFinished != null;
 
@@ -186,7 +203,11 @@ class _GameScreenState extends State<GameScreen> {
                           hit: _controller.lastHit,
                           hitTick: _controller.hitTick,
                         ),
-                        _Footer(controller: _controller, onRestart: _restart),
+                        _Footer(
+                          controller: _controller,
+                          // 戻る先が無い差し込み（テストなど）では出さない。
+                          onAbort: _reportsHome ? _askAbort : null,
+                        ),
                       ],
                     ),
                     _HurtFlash(
@@ -210,6 +231,13 @@ class _GameScreenState extends State<GameScreen> {
                       _FloorLostOverlay(
                         controller: _controller,
                         onRetry: _retryFloor,
+                      ),
+                    if (_confirmingAbort &&
+                        _controller.phase == GamePhase.playing)
+                      _AbortOverlay(
+                        controller: _controller,
+                        onCancel: _cancelAbort,
+                        onLeave: _abort,
                       ),
                     if (_controller.phase == GamePhase.defeated)
                       _DefeatOverlay(
@@ -519,10 +547,12 @@ String _pendingLabel(GameController controller) {
 }
 
 class _Footer extends StatelessWidget {
-  const _Footer({required this.controller, required this.onRestart});
+  const _Footer({required this.controller, this.onAbort});
 
   final GameController controller;
-  final VoidCallback onRestart;
+
+  /// 潜りを中断して拠点へ戻る。戻る先が無いときは null で、札も出さない。
+  final VoidCallback? onAbort;
 
   @override
   Widget build(BuildContext context) {
@@ -626,12 +656,14 @@ class _Footer extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(width: 8),
-          _IconAction(
-            icon: Icons.refresh,
-            tint: Palette.evenA,
-            onTap: onRestart,
-          ),
+          if (onAbort != null) ...[
+            const SizedBox(width: 8),
+            _IconAction(
+              icon: Icons.logout,
+              tint: Palette.danger,
+              onTap: onAbort!,
+            ),
+          ],
         ],
       ),
     );
@@ -824,6 +856,53 @@ class _DefeatOverlay extends StatelessWidget {
           const SizedBox(height: 10),
           _PlainButton(label: '拠点へ戻る', onTap: onLeave!),
         ],
+      ],
+    );
+  }
+}
+
+/// 中断の確かめ。**押してすぐには帰さない。**
+///
+/// 潜っている途中の体力も戦果もここで打ち切られる。取り返しが付かない側なので、
+/// 何が失われるかを出したうえで訊く。既定（目立つほう）は「続ける」。
+class _AbortOverlay extends StatelessWidget {
+  const _AbortOverlay({
+    required this.controller,
+    required this.onCancel,
+    required this.onLeave,
+  });
+
+  final GameController controller;
+  final VoidCallback onCancel;
+  final VoidCallback onLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    final party = controller.party;
+    return _Curtain(
+      children: [
+        Text('中断する', style: AppFont.number(26, color: Palette.danger)),
+        const SizedBox(height: 10),
+        const Text(
+          'この潜りをここで切り上げて拠点へ戻る。\n'
+          '体力も戦果も残らず、次は1階層目から。\n'
+          '降りた階層のぶんは持ち帰る。',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Palette.textMuted,
+            fontSize: 13,
+            height: 1.6,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 20),
+        _ResultRow(label: '到達', value: 'B${controller.floor}F'),
+        const SizedBox(height: 8),
+        _ResultRow(label: '残った体力', value: '${party.hp} / ${party.maxHp}'),
+        const SizedBox(height: 26),
+        _PrimaryButton(label: '続ける', onTap: onCancel),
+        const SizedBox(height: 10),
+        _PlainButton(label: '中断して拠点へ', onTap: onLeave),
       ],
     );
   }
