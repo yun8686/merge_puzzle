@@ -185,13 +185,15 @@ final class Strike extends Boon {
   String describe() => 'は階層の敵すべてに $amount ダメージ';
 }
 
-/// 階層を落としたときの痛手を半分にする（切り上げ）。
-/// 重ねれば重ねただけ半分になっていく。
+/// 受ける痛手を半分にする（切り上げ）。重ねれば重ねただけ半分になっていく。
+///
+/// 敵が毎ターン殴ってくるようになってから、痛手の大半はそちらで積み上がる。
+/// 階層を落としたときの反撃だけに効かせると、盾がほとんど死に札になる。
 final class Guard extends Boon {
   const Guard();
 
   @override
-  String describe() => '階層を落としたときの痛手が半分になる';
+  String describe() => '受ける痛手が半分になる';
 }
 
 /// 能力ひとつ。**条件と効き目の組でしか書けない。**
@@ -296,7 +298,7 @@ class Mage {
     MageKind.rime,
     Phase.cold,
     '氷雨の魔導士',
-    Ability(SamePhase(rimeSame), Mend(1)),
+    Ability(SamePhase(rimeSame), Mend(rimeMend)),
   );
   static const frost = Mage._(
     MageKind.frost,
@@ -346,6 +348,12 @@ const int emberSame = 3;
 
 /// 氷雨が応える、自分の相の枚数。
 const int rimeSame = 3;
+
+/// 氷雨が1本の鎖で戻す体力。
+///
+/// 毎ターンの反撃が 2〜6 なので、条件を満たした手では半分ほど打ち消す。
+/// 全部打ち消すと敵を放置して延々と編めてしまい、討ち急ぐ理由が消える。
+const int rimeMend = 3;
 
 /// 烈火が応える、自分の相の枚数。焔の上に重ねて乗る。
 const int blazeSame = 5;
@@ -401,14 +409,19 @@ class Party {
 
   /// 初期体力。
   ///
-  /// 体力が減るのは階層を落としたときだけで、その痛手は討ち漏らした敵の
-  /// 守りの合計。守り 5 の敵を2体残せば 10 なので、30 あれば2〜4回の
-  /// 取りこぼしに耐える。README のクリア率（階層あたり 78〜93%）と合わせると、
-  /// 何度か落としながらじわじわ削られていく速さになる。
-  static const int startingHp = 30;
+  /// **敵は毎ターン殴ってくる。** 残っている敵の攻撃力の合計だけ、1手ごとに
+  /// 削れる。だから階層あたりの痛手は「攻撃力の合計 × その階層に使った手数」で
+  /// 積み上がり、体力は1本の潜りを通した資源になる。
+  ///
+  /// 竜の巣（守り6〜8＝攻撃力2が3体）を通すと、素で 200 前後は浴びる。
+  /// 120 で始めて、階層のあいだの祝福（癒やしは最大体力の4割）と氷雨の
+  /// 回復で足していく勘定（README 第9段階）。
+  ///
+  /// [Board.attackFor] を動かすときは、ここも一緒に動かすこと。
+  static const int startingHp = 120;
 
   /// 加護1回で増える最大体力。
-  static const int vigorGain = 4;
+  static const int vigorGain = 16;
 
   final List<Mage> members;
   int hp;
@@ -479,10 +492,12 @@ class Party {
   /// 見るのは威力ではなく継いだ枚数（[ChainLength]）。
   int boltFor(ChainTally tally) => _total<Strike>(tally, (b) => b.amount);
 
-  /// 階層を落としたときに実際に受ける痛手。[Guard] ひとつにつき半分
-  /// （切り上げ）になる。鎖を見ない能力なので [ChainTally.none] で数える。
-  int backlashFor(int threat) {
-    var taken = threat;
+  /// [raw] の痛手を実際に受ける量。[Guard] ひとつにつき半分（切り上げ）に
+  /// なる。鎖を見ない能力なので [ChainTally.none] で数える。
+  ///
+  /// 毎ターンの反撃にも、階層を落としたときの痛手にも同じものを通す。
+  int damageFor(int raw) {
+    var taken = raw;
     for (var i = _boons<Guard>(ChainTally.none).length; i > 0; i--) {
       taken = (taken + 1) ~/ 2;
     }

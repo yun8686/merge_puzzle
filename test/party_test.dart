@@ -19,10 +19,15 @@ void main() {
       expect(Mage.ember.effect, '熱を3枚以上継いだ鎖は威力 +1');
       expect(Mage.blaze.effect, '熱を5枚以上継いだ鎖は威力 +2');
       expect(Mage.gale.effect, '7枚以上継いだ鎖はターンを 1 返す');
-      expect(Mage.rime.effect, '冷を3枚以上継いだ鎖で体力を 1 戻す');
+      expect(Mage.rime.effect, '冷を3枚以上継いだ鎖で体力を 3 戻す');
       expect(Mage.frost.effect, '冷から継ぎ始めた鎖は威力 +1');
       expect(Mage.storm.effect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
-      expect(Mage.aegis.effect, '階層を落としたときの痛手が半分になる');
+      expect(Mage.aegis.effect, '受ける痛手が半分になる');
+    });
+
+    test('説明文には効き目の数値もそのまま出る', () {
+      // 定数を動かしたのに文が古いまま、という食い違いが起きない。
+      expect(Mage.rime.effect, contains('体力を $rimeMend 戻す'));
     });
 
     test('説明文には条件の枚数がそのまま出る', () {
@@ -170,7 +175,10 @@ void main() {
       final party = partyOf([Mage.gale, Mage.rime, Mage.storm]);
       expect(party.turnGainFor(tally(length: galeChain)), 1);
       expect(party.turnGainFor(tally(length: galeChain - 1)), 0);
-      expect(party.healFor(tally(length: 6, counts: {Phase.cold: rimeSame})), 1);
+      expect(
+        party.healFor(tally(length: 6, counts: {Phase.cold: rimeSame})),
+        rimeMend,
+      );
       const threeColors = {Phase.heat: 3, Phase.cold: 3, Phase.bolt: 2};
       expect(party.boltFor(tally(length: stormChain, counts: threeColors)), 1);
       expect(
@@ -188,8 +196,9 @@ void main() {
     });
 
     test('盾は鎖と関係なく効く', () {
-      expect(partyOf([Mage.aegis]).backlashFor(9), 5, reason: '切り上げて半分');
-      expect(partyOf([Mage.squireHeat]).backlashFor(9), 9);
+      // 毎ターンの反撃にも、階層を落としたときの痛手にも同じものが通る。
+      expect(partyOf([Mage.aegis]).damageFor(9), 5, reason: '切り上げて半分');
+      expect(partyOf([Mage.squireHeat]).damageFor(9), 9);
     });
   });
 }

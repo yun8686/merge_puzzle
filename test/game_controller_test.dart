@@ -184,7 +184,101 @@ void main() {
     expect(controller.phase, GamePhase.floorLost);
     // 反撃は討ち漏らした敵の守りの合計。
     expect(controller.lastBacklash, 6);
-    expect(controller.party.hp, hpBefore - 6);
+    // この手ぶんの毎ターンの攻撃（守り6なら攻撃力2）も乗る。
+    expect(controller.lastHit, Board.attackFor(6));
+    expect(controller.party.hp, hpBefore - 6 - Board.attackFor(6));
+  });
+
+  group('毎ターンの反撃', () {
+    test('残っている敵の攻撃力ぶんだけ毎ターン削られる', () {
+      final controller = newController();
+      // 守り6（攻撃力2）の敵を、鎖から離れた隅に置く。
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      final hpBefore = controller.party.hp;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      expect(controller.party.hp, hpBefore, reason: '殴られるのは settle のとき');
+
+      controller.settle();
+      expect(controller.lastHit, 2);
+      expect(controller.party.hp, hpBefore - 2);
+      expect(controller.phase, GamePhase.playing);
+
+      // 次の手でも同じだけ削られる。
+      trace(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
+      controller.commitPath();
+      controller.settle();
+      expect(controller.party.hp, hpBefore - 4);
+    });
+
+    test('攻撃力は守りの厚さから決まる', () {
+      expect(Board.attackFor(3), 1);
+      expect(Board.attackFor(5), 1);
+      expect(Board.attackFor(6), 2);
+      expect(Board.attackFor(8), 2);
+    });
+
+    test('攻撃力は盤面から合計で読める', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 8);
+      expect(controller.board.foeAttack, 2);
+      // 守りと違って、攻撃力は手で上書きできる。
+      final board = Board(
+        phases: const [Phase.heat, Phase.cold],
+        rng: Random(1),
+      );
+      board.buildStage(foes: const [FoeSpec(3, atk: 9), FoeSpec(3)]);
+      expect(board.foeAttack, 9 + 1);
+    });
+
+    test('討ち果たした手は殴られない', () {
+      final controller = newController();
+      // 威力3で討てる敵を1体だけ。討った瞬間に制圧になる。
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      final hpBefore = controller.party.hp;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.remainingFoes, 0);
+      expect(controller.lastHit, 0);
+      expect(controller.party.hp, hpBefore, reason: '制圧した手で減らない');
+    });
+
+    test('毎ターンの反撃だけでも全滅する', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      controller.party.hp = 2;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.party.hp, 0);
+      expect(controller.phase, GamePhase.defeated);
+      expect(controller.lastBacklash, 0, reason: '階層を落とす前に倒れている');
+    });
+
+    test('敵を討つほど毎ターンの痛手が減る', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      // 守り6の敵をもう1体、鎖から離して置く。
+      controller.board.grid[7][5] = Tile(
+        id: 999,
+        phase: controller.board.grid[7][5]!.phase,
+        ward: 6,
+      );
+      expect(controller.board.foeAttack, 1 + 2);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.remainingFoes, 1, reason: '守り3の方を討った');
+      expect(controller.lastHit, 2, reason: '討った敵のぶんはもう来ない');
+    });
   });
 
   test('落とした階層は同じ深さで編み直す', () {
@@ -208,6 +302,7 @@ void main() {
   test('反撃で体力が尽きると全滅する', () {
     final controller = newController();
     paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+    // 毎ターンの攻撃 2 を受けてもまだ立っていて、反撃の 6 で倒れる高さ。
     controller.party.hp = 4;
     controller.movesLeft = 1;
 
@@ -384,8 +479,8 @@ void main() {
         Cell(0, 5),
       ]);
       controller.commitPath();
-      expect(controller.lastHealed, 1);
-      expect(controller.party.hp, 11);
+      expect(controller.lastHealed, rimeMend);
+      expect(controller.party.hp, 10 + rimeMend);
     });
 
     test('体力は最大を超えない', () {
@@ -814,7 +909,7 @@ void main() {
       expect(controller.movesLeft, 4);
     });
 
-    test('盾は階層を落としたときの痛手を半分にする', () {
+    test('盾は受ける痛手を半分にする', () {
       final controller = withRoster(const [Mage.aegis]);
       paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 7);
       controller.movesLeft = 1;
@@ -827,7 +922,9 @@ void main() {
       expect(controller.phase, GamePhase.floorLost);
       // 守り7の敵を討ち漏らした。半分にして切り上げで4。
       expect(controller.lastBacklash, 4);
-      expect(controller.party.hp, hpBefore - 4);
+      // 毎ターンの攻撃も半分になる。守り7の攻撃力2が1に。
+      expect(controller.lastHit, 1);
+      expect(controller.party.hp, hpBefore - 4 - 1);
     });
 
     test('名簿は従者3人と招ける7人で、印は全員ちがう', () {

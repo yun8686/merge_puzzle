@@ -68,6 +68,9 @@ class GameController extends ChangeNotifier {
   /// 直近の鎖で氷雨が戻した体力。0 なら何も起きていない。
   int lastHealed = 0;
 
+  /// 直近の1手で敵から受けた痛手。0 なら何も起きていない。
+  int lastHit = 0;
+
   /// この階層で討ち取った敵の守り。討った順に積む。制圧画面に姿を並べるのに使う。
   /// 敵は盤面から消えてしまうので、ここに控えておかないと何を討ったか分からない。
   final List<int> felledWards = <int>[];
@@ -109,6 +112,7 @@ class GameController extends ChangeNotifier {
     freshTileIds = const <int>{};
     isSettling = false;
     lastHealed = 0;
+    lastHit = 0;
     felledWards.clear();
     phase = GamePhase.playing;
   }
@@ -320,11 +324,28 @@ class GameController extends ChangeNotifier {
     freshTileIds = board.refill();
 
     if (board.remainingFoes == 0) {
+      // 討ち果たした手は殴られない。最後の1体を討った瞬間に反撃が来ると、
+      // 制圧したのに体力が減る、という腑に落ちない目に遭う。
+      lastHit = 0;
       phase = isLastFloor ? GamePhase.dungeonCleared : GamePhase.stageCleared;
-    } else if (movesLeft <= 0 || !board.hasAnyChain()) {
-      // 討ち漏らした敵の反撃。守りが厚い敵を残すほど高くつく。
-      // 盾が居れば半分に減る。
-      lastBacklash = party.backlashFor(board.foeThreat);
+      notifyListeners();
+      return;
+    }
+
+    // 生き残った敵が毎ターン殴ってくる。討ち取れば減るので、早く討つほど
+    // 後が楽になる。盾が居れば半分。
+    lastHit = party.damageFor(board.foeAttack);
+    party.takeDamage(lastHit);
+    if (party.isDown) {
+      phase = GamePhase.defeated;
+      notifyListeners();
+      return;
+    }
+
+    if (movesLeft <= 0 || !board.hasAnyChain()) {
+      // 落とした階層の締め。討ち漏らした敵の守りぶんをまとめて浴びる。
+      // 守りが厚い敵を残すほど高くつく。
+      lastBacklash = party.damageFor(board.foeThreat);
       party.takeDamage(lastBacklash);
       phase = party.isDown ? GamePhase.defeated : GamePhase.floorLost;
     }

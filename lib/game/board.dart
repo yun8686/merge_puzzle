@@ -35,7 +35,9 @@ class Tile {
     this.ward,
     this.hp = 1,
     int? maxHp,
-  }) : maxHp = maxHp ?? hp;
+    int? atk,
+  }) : maxHp = maxHp ?? hp,
+       _atk = atk;
 
   final int id;
   /// このマスの相。同じ相は近くに二度継げない。
@@ -49,6 +51,22 @@ class Tile {
 
   /// 敵の最大体力。減り具合を見せるために持っている。
   final int maxHp;
+
+  /// 手で指定された攻撃力。省かれていれば守りの厚さから決める。
+  ///
+  /// [Tile] は const で作るので、ここで [Board.attackFor] を呼べない
+  /// （定数式にならない）。[atk] で引くときに求める。
+  final int? _atk;
+
+  /// 敵の攻撃力。**盤面には出さない隠し値。** 毎ターン、残っている敵の
+  /// 合計だけ一党の体力が削れる。
+  ///
+  /// マスに出ているのは守りだけで、これは鎖の長さを決める唯一の値だから
+  /// 見せている。攻撃力まで並べると 40〜50px のマスが読めなくなるし、
+  /// 「厚い敵ほど痛い」という対応さえ付いていれば、数字を見なくても
+  /// 何ターンで落ちるかは体力バーの減り方で分かる。
+  int get atk =>
+      _atk ?? (ward == null ? 0 : Board.attackFor(ward!));
 
   bool get isFoe => ward != null;
 
@@ -66,8 +84,14 @@ class Tile {
   int get powerToFell => ward! + hp - 1;
 
   /// ダメージを受けて残った姿。id を引き継ぐので演出は同じブロックとして追う。
-  Tile hurt(int damage) =>
-      Tile(id: id, phase: phase, ward: ward, hp: hp - damage, maxHp: maxHp);
+  Tile hurt(int damage) => Tile(
+    id: id,
+    phase: phase,
+    ward: ward,
+    hp: hp - damage,
+    maxHp: maxHp,
+    atk: _atk,
+  );
 }
 
 /// 階層に置く敵1体ぶんの指定。ダンジョンの階層を手で書くのに使う。
@@ -76,10 +100,14 @@ class Tile {
 /// 薄く」という縛りを掛けているが、こちらは掛けない。手で書く以上、厚い守りと
 /// 厚い体力を重ねてよいのはボスだけ、という判断は書く側の責任になる。
 class FoeSpec {
-  const FoeSpec(this.ward, {this.hp = 1});
+  const FoeSpec(this.ward, {this.hp = 1, this.atk});
 
   final int ward;
   final int hp;
+
+  /// 攻撃力。省くと守りの厚さから決まる（[Board.attackFor]）。
+  /// **盤面には出さない隠し値。** 手で強くしたい敵だけここで上書きする。
+  final int? atk;
 }
 
 /// 鎖の外で討ち取られた敵。いまは雷の魔導士の追撃だけがこれを作る。
@@ -233,6 +261,17 @@ class Board {
   /// 数える。全員の体力が 1 なら体数で数えていた頃と同じ値になる。
   static int movesFor(int totalFoeHp) => totalFoeHp * 3 + 2;
 
+  /// 守り [ward] の敵の攻撃力。**盤面には出さない隠し値。**
+  ///
+  /// 守り 3〜5 が 1、6〜8 が 2。守りは鎖の長さを決める値なのでマスに出すが、
+  /// 攻撃力まで並べると狭いマスが読めなくなる。「厚い敵ほど痛い」という
+  /// 対応さえ付いていれば、数字を見せなくても手触りで伝わる。
+  ///
+  /// ここを上げるときは [Party.startingHp] と一緒に動かすこと。毎ターン
+  /// 全員ぶん削られるので、階層あたりの痛手は「攻撃力の合計 × 使った手数」で
+  /// 効いてくる（README 第9段階）。
+  static int attackFor(int ward) => 1 + (ward - minWard) ~/ 3;
+
   final int rows;
   final int cols;
 
@@ -331,6 +370,7 @@ class Board {
         phase: base.phase,
         ward: spec.ward.clamp(minWard, maxWard),
         hp: spec.hp < 1 ? 1 : spec.hp,
+        atk: spec.atk,
       );
     }
   }
@@ -623,6 +663,16 @@ class Board {
     var n = 0;
     for (final cell in foeCells) {
       n += tileAt(cell)!.ward!;
+    }
+    return n;
+  }
+
+  /// 残っている敵が毎ターン浴びせてくるダメージの合計。
+  /// **討ち取れば減る。** 早く討つほど後が楽になる。
+  int get foeAttack {
+    var n = 0;
+    for (final cell in foeCells) {
+      n += tileAt(cell)!.atk;
     }
     return n;
   }

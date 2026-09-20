@@ -183,6 +183,7 @@ class _GameScreenState extends State<GameScreen> {
                         _PartyBar(
                           party: _controller.party,
                           healed: _controller.lastHealed,
+                          hit: _controller.lastHit,
                         ),
                         _Footer(controller: _controller, onRestart: _restart),
                       ],
@@ -1092,12 +1093,20 @@ class FoeChip extends StatelessWidget {
 /// 一党。階層をまたいで残る唯一の資源なので、盤面の外に常に出しておく。
 /// 体力が減るのは階層を落としたときだけなので、普段は動かない目盛りになる。
 class _PartyBar extends StatelessWidget {
-  const _PartyBar({required this.party, required this.healed});
+  const _PartyBar({
+    required this.party,
+    required this.healed,
+    required this.hit,
+  });
 
   final Party party;
 
   /// 直近の鎖で戻した体力。0 なら何も出さない。
   final int healed;
+
+  /// 直近の1手で敵から受けた痛手。敵は毎ターン殴ってくるので、これを
+  /// 出さないと体力がひとりでに減っているように見える。
+  final int hit;
 
   @override
   Widget build(BuildContext context) {
@@ -1120,6 +1129,14 @@ class _PartyBar extends StatelessWidget {
                     Row(
                       children: [
                         Text('PARTY', style: AppFont.label(10, color: tint)),
+                        if (hit > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              '-$hit',
+                              style: AppFont.number(12, color: Palette.danger),
+                            ),
+                          ),
                         if (healed > 0)
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
