@@ -271,15 +271,22 @@ void main() {
     expect(still, isNotNull, reason: '弾かれたので残る');
     expect(controller.felledWards.length, felled);
 
-    // 次の稽古では、同じ敵に8枚で届く。
+    // 次の稽古では、同じ敵に8枚で届く。**崩した並びのまま**通る。
     expect(find.textContaining('今度は8枚つなげる'), findsOneWidget);
     expect(
       controller.board.findPathThrough(still!, 8),
       isNotEmpty,
-      reason: '並びが変わって通るようになった',
+      reason: '崩して並びが変わったから通る',
     );
     expect(controller.lockedPath.length, 8);
     expect(controller.lockedPath, contains(still));
+    // 盤面は敷き直していない。市松に戻っていれば、下の塞ぎは相が変わって
+    // いるはず。崩れた並びがそのまま残っていることを、そこで見る。
+    expect(
+      controller.board.tileAt(Cell(still.row + 1, still.col - 1))!.phase,
+      controller.board.tileAt(Cell(still.row, still.col - 1))!.phase,
+      reason: '下の塞ぎは残ったまま',
+    );
 
     traceRoute(controller);
     await tester.pump();

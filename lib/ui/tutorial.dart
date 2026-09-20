@@ -157,7 +157,12 @@ class _Lesson {
     required this.route,
     this.foes,
     this.shape,
+    this.keepBoard = false,
   });
+
+  /// 盤面をそのまま使う。**崩した結果を見せる稽古**だけが立てる。
+  /// 敷き直すと、崩して並びが変わったことが伝わらない。
+  final bool keepBoard;
 
   /// 終いの振り返りに並べる短い名札。
   final String label;
@@ -251,17 +256,24 @@ class _TutorialScreenState extends State<TutorialScreen> {
     return _row(at.row, from, from + 2);
   }
 
-  /// 同じ敵を通る**8枚**（「並びを変えて討つ」）。列ぜんぶを使って、足りない
-  /// ぶんは端から縦に折る。市松なので折れても成立する。
-  static List<Cell> _longRun(Board board) {
+  /// 崩したあとの盤面で、同じ敵を通る**8枚**（「並びを変えて討つ」）。
+  ///
+  /// 左右の列が1枚ぶん落ちて、敵の行から上へ折れられるようになっている。
+  /// **盤面を敷き直さずに通る道**なので、崩して並びが変わったことがそのまま
+  /// 手になる（[_pocket] が仕込んだ形）。
+  static List<Cell> _aroundThick(Board board) {
     final at = _thickFoe(board);
-    final edge = board.cols - 1;
-    // 端から離れる向きは、盤面からはみ出さないほうを選ぶ。
-    final up = at.row >= 2;
+    final r = at.row;
+    final c = at.col;
     return [
-      ..._row(at.row, 0, edge),
-      Cell(up ? at.row - 1 : at.row + 1, edge),
-      Cell(up ? at.row - 2 : at.row + 2, edge),
+      Cell(r - 2, c - 2),
+      Cell(r - 2, c - 1),
+      Cell(r - 1, c - 1),
+      Cell(r, c - 1),
+      at,
+      Cell(r, c + 1),
+      Cell(r - 1, c + 1),
+      Cell(r - 2, c + 1),
     ];
   }
 
@@ -282,9 +294,12 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 塞ぐのは敵のまわりだけ。ほかの場所は市松のままにしておく。盤面ぜんぶを
   /// 手詰まりにすると、1手のあとに階層が落ちて稽古がやり直しになる。
   static void _pocket(Board board) {
-    final row = _thickFoe(board).row;
+    final at = _thickFoe(board);
+    final row = at.row;
     final phases = board.phases;
     Phase along(int c) => phases[(row + c) % phases.length];
+    Phase other(int c) => phases[(row + c + 1) % phases.length];
+
     // 通り道は行の端まで。最後の1列は塞ぐのに使う。
     final last = board.cols - 2;
     for (var c = 0; c <= last; c++) {
@@ -292,6 +307,16 @@ class _TutorialScreenState extends State<TutorialScreen> {
       _repaintAt(board, row + 1, c, along(c));
     }
     _repaintAt(board, row, board.cols - 1, along(last));
+
+    // 崩したあとに降りてくる2列ぶんを仕込む。
+    //
+    // **塞ぎを消しただけでは、上から同じ相が降りてきて塞がったままになる。**
+    // 敵の左右の列だけ、上2枚を先に入れ替えておく。1枚ぶん落ちると、そこに
+    // 上へ折れる道ができて、[_aroundThick] の8枚が通るようになる。
+    for (final c in [at.col - 1, at.col + 1]) {
+      _repaintAt(board, row - 2, c, other(c));
+      _repaintAt(board, row - 3, c, along(c));
+    }
   }
 
   late final List<_Lesson> _lessons = switch (widget.course) {
@@ -397,8 +422,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
       text: '降りてきたマスで、並びが変わった。\n'
           '**今度は8枚つなげる。**\n'
           '威力8なら守り8に届く。討ち取ろう。',
-      // 敵は置き直さない。さっき弾かれた敵が、そのまま相手。
-      route: _longRun,
+      // **盤面は敷き直さない。** 崩した並びをそのまま使う。敷き直すと、
+      // 崩して変わったことが伝わらない。
+      keepBoard: true,
+      route: _aroundThick,
     ),
     _Lesson(
       label: '毎ターンの反撃',
@@ -530,8 +557,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// か、誰かの通知の途中なので、そのまま描き直される。
   void _enterScene() {
     final lesson = _lessons[_at];
-    _paint(lesson.foes);
-    lesson.shape?.call(_controller.board);
+    if (!lesson.keepBoard) {
+      _paint(lesson.foes);
+      lesson.shape?.call(_controller.board);
+    }
     final route = lesson.route(_controller.board);
     _controller.lockedPath = route;
     // お手本は決めた道そのもの。探すまでもない。
