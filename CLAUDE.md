@@ -41,6 +41,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵と手数を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
+| `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択。記録を持つのはここだけ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
 | `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 相の割合 / 一党 / 決着画面 |
@@ -50,7 +51,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
 | `tools/sim/` | 継ぎ方の決まりの難易度を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
-| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
@@ -131,6 +132,15 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 `game_screen.dart` は記録（`Progress`）を読まない。潜るときは「どのダンジョンを、誰を
 連れて」だけを受け取り、帰るときは `DungeonOutcome` を返す。魔晶を足して保存するのは
 拠点の仕事。ここを繋ぐと、盤面の画面が保存の都合を持ち込むことになる。
+
+**タイトルは記録を読まない。** 押されたら拠点に渡すだけ（`main.dart` の `_Entry`）。
+ここが保存の都合を持つと、タイトルを出すのに読み込みを待つことになる。
+
+**タイトルは Navigator で積まない。** 戻る道が無いのに積むと、端末の「戻る」で
+拠点が消えてタイトルに落ちる。`AnimatedSwitcher` で入れ替える。
+
+**タイトルのアニメは `repeat` なので `pumpAndSettle` が止まらない。** タイトルを
+含むテストは `pump(Duration)` で送ること。
 
 ## 消える演出のテンポ
 

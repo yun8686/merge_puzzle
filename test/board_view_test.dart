@@ -273,12 +273,27 @@ void main() {
     expect(controller.score, 0);
   });
 
-  testWidgets('アプリが起動する', (tester) async {
-    // 拠点が出る。保存が使えない環境でも落ちないこと（テストには
-    // shared_preferences のプラグインが居ないので、毎回この経路を通る）。
+  testWidgets('アプリを開くとタイトルが出て、押すと拠点に入る', (tester) async {
     await tester.pumpWidget(const ParityChainApp());
-    await tester.pumpAndSettle();
+    await tester.pump();
+
+    expect(find.text('氷炎の鎖'), findsOneWidget);
+    expect(find.text('はじめる'), findsOneWidget);
+    expect(find.text('ダンジョン'), findsNothing, reason: 'まだ拠点は出ない');
+
+    await tester.tap(find.text('はじめる'));
+    await tester.pump();
+    // 入れ替えの尺。
+    await tester.pump(const Duration(milliseconds: 500));
+    // 記録の読み込みの時間切れぶん。保存が使えない環境でも落ちないこと
+    // （テストには shared_preferences のプラグインが居ないので、毎回この
+    // 経路を通る）。タイトルには repeat のアニメがあるので pumpAndSettle は
+    // 使えない――止まらないまま待ち続けることになる。
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+
     expect(find.text('ダンジョン'), findsOneWidget);
+    expect(find.text('氷炎の鎖'), findsNothing);
   });
 
   testWidgets('盤面の画面に階層と敵の数が表示される', (tester) async {

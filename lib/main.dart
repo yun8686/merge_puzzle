@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'game/prefs_store.dart';
 import 'ui/home_screen.dart';
 import 'ui/theme.dart';
+import 'ui/title_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +32,38 @@ class ParityChainApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const HomeScreen(store: PrefsProgressStore()),
+      home: const _Entry(),
+    );
+  }
+}
+
+/// タイトルと拠点の入れ替え。
+///
+/// Navigator で積まない。タイトルへ戻る道は無いので、積むと端末の「戻る」で
+/// 拠点が消えてタイトルに落ちる。入れ替えなら、そこに戻り道は生まれない。
+class _Entry extends StatefulWidget {
+  const _Entry();
+
+  @override
+  State<_Entry> createState() => _EntryState();
+}
+
+class _EntryState extends State<_Entry> {
+  bool _started = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 420),
+      child: _started
+          ? const HomeScreen(
+              key: ValueKey('home'),
+              store: PrefsProgressStore(),
+            )
+          : TitleScreen(
+              key: const ValueKey('title'),
+              onStart: () => setState(() => _started = true),
+            ),
     );
   }
 }
