@@ -237,7 +237,7 @@ enum MageKind {
 /// 冷から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
-  const Mage._(this.kind, this.phase, this.name, [this.ability]);
+  const Mage._(this.kind, this.phase, this.name, this.hp, [this.ability]);
 
   final MageKind kind;
 
@@ -247,6 +247,13 @@ class Mage {
   final Phase phase;
 
   final String name;
+
+  /// この魔導士の体力。**一党の体力は連れていく面々の合計**（[Party.poolFor]）。
+  ///
+  /// **強い力を持つ者ほど薄い。** 能力を持たない従者がいちばん厚く、盤面を
+  /// ひっくり返す力（威力+2、階層の敵すべてに一撃）を持つ者は薄い。連れて
+  /// いく顔ぶれが、そのまま「何手ぶん耐えられるか」になる。
+  final int hp;
 
   /// この魔導士の能力。持たない者は null。
   ///
@@ -258,58 +265,71 @@ class Mage {
   /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
   String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
 
+  /// 従者の体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
+  /// 始まりの2人で 90 あり、1本目のダンジョンはこれで通る。
+  static const int squireHp = 45;
+
   /// 始まりの3人。相を1つ持つだけで、特殊な力は無い。
   /// 3人とも別の相なので、開幕から盤面は3色になる。
   static const squireHeat = Mage._(
     MageKind.squireHeat,
     Phase.heat,
     '熱の従者',
+    squireHp,
   );
   static const squireCold = Mage._(
     MageKind.squireCold,
     Phase.cold,
     '冷の従者',
+    squireHp,
   );
   static const squireBolt = Mage._(
     MageKind.squireBolt,
     Phase.bolt,
     '雷の従者',
+    squireHp,
   );
 
   static const ember = Mage._(
     MageKind.ember,
     Phase.heat,
     '焔の魔導士',
+    40,
     Ability(SamePhase(emberSame), PowerUp(1)),
   );
   static const blaze = Mage._(
     MageKind.blaze,
     Phase.heat,
     '烈火の魔導士',
+    30,
     Ability(SamePhase(blazeSame), PowerUp(2)),
   );
   static const gale = Mage._(
     MageKind.gale,
     Phase.heat,
     '風の魔導士',
+    35,
     Ability(ChainLength(galeChain), TurnBack(1)),
   );
   static const rime = Mage._(
     MageKind.rime,
     Phase.cold,
     '氷雨の魔導士',
+    45,
     Ability(SamePhase(rimeSame), Mend(rimeMend)),
   );
   static const frost = Mage._(
     MageKind.frost,
     Phase.cold,
     '霜の魔導士',
+    40,
     Ability(StartsWith(), PowerUp(1)),
   );
   static const storm = Mage._(
     MageKind.storm,
     Phase.bolt,
     '雷の魔導士',
+    30,
     Ability(
       Every([DistinctPhases(stormPhases), ChainLength(stormChain)]),
       Strike(1),
@@ -319,6 +339,7 @@ class Mage {
     MageKind.aegis,
     Phase.bolt,
     '盾の魔導士',
+    40,
     Ability(Always(), Guard()),
   );
 
@@ -382,25 +403,31 @@ const int stormPhases = 3;
 class Party {
   Party({required this.members, required this.hp, required this.maxHp});
 
-  /// 始まりは相を1つずつ持つ従者3人。3色の盤面になる。
-  Party.initial()
-    : members = List<Mage>.of(Mage.squires),
-      hp = startingHp,
-      maxHp = startingHp;
+  /// 連れていく面々から組む。**体力は顔ぶれの合計。**
+  Party.of(Iterable<Mage> members)
+    : members = List<Mage>.of(members),
+      hp = poolFor(members),
+      maxHp = poolFor(members);
 
-  /// 初期体力。
+  /// 始まりは相を1つずつ持つ従者3人。3色の盤面になる。
+  Party.initial() : this.of(Mage.squires);
+
+  /// 一党の体力。**連れていく魔導士の体力の合計**（[Mage.hp]）。
+  ///
+  /// 潜る前の編成が、そのまま「何手ぶん耐えられるか」になる。力のある者ほど
+  /// 薄いので、**厚さを取るか力を取るか**が編成の判断に乗る。人数でも変わる
+  /// （3人目を入れれば厚くなるが、盤面は3色になって継ぎ方の決まりが変わる）。
   ///
   /// **敵は毎ターン殴ってくる。** 残っている敵の攻撃力の合計だけ、1手ごとに
   /// 削れる。だから階層あたりの痛手は「攻撃力の合計 × その階層に使った手数」で
   /// 積み上がり、体力は1本の潜りを通した資源になる。
   ///
   /// 竜の巣を通すと、手探りで打てば 165、最短で打っても 114 は浴びる
-  /// （`python3 tools/sim/damage.py`。階層の中身から出すので、階層をいじれば
-  /// 数字も動く）。**道中で戻る手立ては氷雨の回復だけ**なので、深いところは
-  /// ここを上げるか `Board.attackFor` を下げるかで詰め直すことになる。
-  ///
-  /// [Board.attackFor] を動かすときは、ここも一緒に動かすこと。
-  static const int startingHp = 120;
+  /// （`python3 tools/sim/damage.py`。名簿と階層の中身から出すので、どちらを
+  /// いじっても数字が動く）。**道中で戻る手立ては氷雨の回復だけ**なので、
+  /// 深いところは名簿の体力か `Board.attackFor` で詰め直すことになる。
+  static int poolFor(Iterable<Mage> members) =>
+      members.fold(0, (sum, mage) => sum + mage.hp);
 
   final List<Mage> members;
   int hp;

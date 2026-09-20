@@ -522,10 +522,34 @@ void main() {
   });
 
   group('一党', () {
+    test('体力は連れていく顔ぶれの合計', () {
+      // 力のある者ほど薄い。厚さを取るか力を取るかが編成の判断に乗る。
+      expect(Mage.squireHeat.hp, greaterThan(Mage.blaze.hp));
+      expect(Mage.squireHeat.hp, greaterThan(Mage.storm.hp));
+
+      expect(
+        Party.poolFor(const [Mage.squireHeat, Mage.squireCold]),
+        Mage.squireHp * 2,
+      );
+      // 3人目を入れれば厚くなる（そのぶん盤面は3色になる）。
+      expect(
+        Party.poolFor(Mage.squires),
+        greaterThan(Party.poolFor(const [Mage.squireHeat, Mage.squireCold])),
+      );
+
+      final controller = GameController(
+        rng: Random(1),
+        roster: const [Mage.aegis, Mage.rime],
+      );
+      expect(controller.party.maxHp, Mage.aegis.hp + Mage.rime.hp);
+    });
+
     test('一党は連れてきた顔ぶれそのままで始まる', () {
       final controller = newController();
       expect(controller.party.members, twoPhases);
-      expect(controller.party.hp, Party.startingHp);
+      // 体力は連れてきた顔ぶれの合計。従者2人なら 45 + 45。
+      expect(controller.party.hp, Party.poolFor(twoPhases));
+      expect(controller.party.hp, Mage.squireHp * 2);
     });
 
     test('焔は熱を3枚以上継いだ鎖に威力を1足す', () {
@@ -583,7 +607,7 @@ void main() {
     test('体力は最大を超えない', () {
       final party = Party.initial();
       expect(party.heal(5), 0);
-      expect(party.hp, Party.startingHp);
+      expect(party.hp, Party.poolFor(Mage.squires));
     });
 
     test('雷は3色の盤面で8枚継いだ鎖で階層の敵すべてを削る', () {
@@ -709,7 +733,7 @@ void main() {
       expect(controller.floor, 2);
       // 体力はそのまま持ち越す。戻る手立ては道中に無い。
       expect(controller.party.hp, hp);
-      expect(controller.party.maxHp, Party.startingHp);
+      expect(controller.party.maxHp, Party.poolFor(twoPhases));
       expect(controller.party.members.length, before);
     });
   });
@@ -742,8 +766,8 @@ void main() {
     controller.restart();
     expect(controller.floor, 1);
     expect(controller.score, 0);
-    expect(controller.party.hp, Party.startingHp);
-    expect(controller.party.maxHp, Party.startingHp, reason: '加護も戻る');
+    expect(controller.party.hp, Party.poolFor(twoPhases));
+    expect(controller.party.maxHp, Party.poolFor(twoPhases));
     expect(controller.party.members, twoPhases);
     expect(controller.movesLeft, controller.dungeon.floorAt(1).moveLimit);
     expect(controller.phase, GamePhase.playing);
@@ -838,7 +862,7 @@ void main() {
       expect(controller.dungeon.id, Dungeons.all[1].id);
       expect(controller.floor, 1);
       expect(controller.score, 0);
-      expect(controller.party.hp, Party.startingHp);
+      expect(controller.party.hp, Party.poolFor(twoPhases));
       expect(controller.movesLeft, Dungeons.all[1].floorAt(1).moveLimit);
     });
 
@@ -851,7 +875,7 @@ void main() {
 
       controller.restart();
       expect(controller.party.members, [Mage.ember, Mage.storm]);
-      expect(controller.party.hp, Party.startingHp);
+      expect(controller.party.hp, Mage.ember.hp + Mage.storm.hp);
     });
 
     test('ダンジョンは3本あって、どれも7階層', () {

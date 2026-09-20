@@ -66,9 +66,12 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 増やしても `Party` は変わらない**。
 
 1. `MageKind` に1つ足す
-2. `Mage` に `static const` を1つ足し、`Ability(条件, 効き目)` を渡す
+2. `Mage` に `static const` を1つ足し、**体力**と `Ability(条件, 効き目)` を渡す
 3. `Mage.summonable` に並べる
 4. `tools/mage/shapes.py` に姿を足して `emit_dart.py` を走らせる
+
+体力は**力の強さと引き換え**にする（30〜45 が今の幅）。強い能力に厚い体力を
+重ねると、その1人を入れるだけの編成になる。
 
 説明文（`Mage.effect`）は組から作られるので書かない。数値を変えれば文も動く。
 
@@ -124,7 +127,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 守りの厚さから決まる（`Board.attackFor`：守り3〜5が1、6〜8が2）。`FoeSpec` で
 1体ずつ上書きできる。
 
-**`Board.attackFor` と `Party.startingHp` は対で動かすこと。** 階層あたりの痛手は
+**`Board.attackFor` と名簿の体力（`Mage.hp`）は対で動かすこと。** 階層あたりの痛手は
 「攻撃力の合計 × その階層に使った手数」で積み上がるので、片方だけ変えると桁が
 合わなくなる。**見積もりは手で書かない。** `python3 tools/sim/damage.py` が
 `dungeon.dart` を読んで出す（README 第9段階の表はこれ）。いま道中で戻る手立ては
@@ -133,6 +136,13 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 一党は**潜る前に決まり、道中では何も増えない**。制圧しても増えるものは無く、
 体力も階層をまたいで戻らない（戻すのは氷雨の回復だけ）。ここを緩めると編成が
 判断にならなくなる（README 第5・第10段階）。
+
+**一党の体力は、連れていく魔導士の体力の合計**（`Party.poolFor`）。名簿は1人ずつ
+`Mage.hp` を持ち、**力のある者ほど薄い**（従者45／氷雨45／焔・霜・盾40／風35／
+烈火・雷30）。始まりの2人で 90、厚い3人で 135。厚さを取るか力を取るかが編成の
+判断になる。**魔導士を増やすときは体力も決めること**――強い能力に厚い体力を重ねると、
+その1人を入れるだけの編成になる。名簿を動かしたら `python3 tools/sim/damage.py`
+（名簿と階層の両方を読む）で見直す。
 
 `game_screen.dart` は記録（`Progress`）を読まない。潜るときは「どのダンジョンを、誰を
 連れて」だけを受け取り、帰るときは `DungeonOutcome` を返す。魔晶を足して保存するのは

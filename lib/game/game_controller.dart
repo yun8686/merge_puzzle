@@ -117,11 +117,7 @@ class GameController extends ChangeNotifier {
   List<Mage> get roster => List.unmodifiable(_roster);
 
   /// 潜り始めの一党。体力は毎回満タンから。
-  Party _freshParty() => Party(
-    members: List.of(_roster),
-    hp: Party.startingHp,
-    maxHp: Party.startingHp,
-  );
+  Party _freshParty() => Party.of(_roster);
 
   void _startFloor(int n) {
     floor = n.clamp(1, dungeon.depth);

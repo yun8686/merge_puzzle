@@ -784,6 +784,15 @@ class _PartyStrip extends StatelessWidget {
                 const SizedBox(width: 7),
               ],
               const Spacer(),
+              // 一党の体力は顔ぶれの合計。潜る前に見えていないと、厚さを
+              // 取るか力を取るかの判断ができない。
+              Text('体力', style: AppFont.label(9, color: Palette.life)),
+              const SizedBox(width: 6),
+              Text(
+                '${Party.poolFor(progress.partyMages)}',
+                style: AppFont.number(15, color: Palette.life),
+              ),
+              const SizedBox(width: 10),
               const Icon(
                 Icons.chevron_right,
                 size: 20,
@@ -1076,6 +1085,13 @@ class _MageCard extends StatelessWidget {
                         ),
                       ),
                       if (owned) ...[
+                        const SizedBox(height: 3),
+                        // 体力は名簿ごとに違う。力のある者ほど薄いので、
+                        // ここに出しておかないと編成の判断ができない。
+                        Text(
+                          '体力 ${mage.hp}',
+                          style: AppFont.label(8, color: Palette.life),
+                        ),
                         const SizedBox(height: 3),
                         Text(
                           mage.effect,

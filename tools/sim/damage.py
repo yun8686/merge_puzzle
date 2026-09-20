@@ -59,15 +59,36 @@ def parse_dungeons(source: str):
     return out
 
 
-def starting_hp(source: str) -> int:
-    return int(re.search(r"startingHp = (\d+)", source).group(1))
+def parse_mages(source: str) -> list[tuple[str, int]]:
+    """`party.dart` から（魔導士の名前, 体力）を読む。
+
+    一党の体力は**連れていく顔ぶれの合計**なので、初期体力という1つの数字は
+    もう無い。名簿を読んで、組み方ごとの厚さを出す。
+    """
+    squire = int(re.search(r"squireHp = (\d+)", source).group(1))
+    out = []
+    for m in re.finditer(
+        r"Mage\._\(\s*MageKind\.\w+,\s*Phase\.\w+,\s*'([^']*)',\s*(\w+)",
+        source,
+    ):
+        hp = squire if m.group(2) == "squireHp" else int(m.group(2))
+        out.append((m.group(1), hp))
+    return out
 
 
 def main() -> int:
     dungeons = parse_dungeons((ROOT / "lib/game/dungeon.dart").read_text())
-    hp = starting_hp((ROOT / "lib/game/party.dart").read_text())
+    mages = parse_mages((ROOT / "lib/game/party.dart").read_text())
 
-    print(f"初期体力 {hp}\n")
+    print("名簿の体力")
+    for name, hp in mages:
+        print(f"   {name} {hp}")
+    hps = sorted((hp for _, hp in mages), reverse=True)
+    print("\n一党の体力＝連れていく顔ぶれの合計")
+    print(f"   始まりの2人（従者2人） {mages[0][1] + mages[1][1]}")
+    print(f"   3人で厚いほう         {sum(hps[:3])}")
+    print(f"   3人で薄いほう         {sum(hps[-3:])}")
+    print()
     print("| ダンジョン | ゆるい（手数の6割） | きつい（最短） |")
     print("|---|---|---|")
     totals = []
