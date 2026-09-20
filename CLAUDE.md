@@ -49,6 +49,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
+| `tools/sim/` | 継ぎ方の決まりの難易度を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
 | `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
@@ -97,13 +98,14 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 相が2つなら前者が常に成り立つので、「交互」1本と完全に同じ意味になる。
 
 ここは両側から締まっている。**緩めすぎ**（「隣と違えばよい」）にすると敵マスを通る
-最長パスが 14.7 枚まで伸び、希少な相のジレンマも雷の8枚条件も意味を失う。
-**締めすぎ**（巡回だけに縛る）にすると 6.3 枚まで落ち、2色だった頃の 8.3 枚に
-届かず目に見えて詰まる。2本立てで 7.7 枚。README 第7・第8段階に測った数字がある。
+最長パスが 11.2 枚まで伸び、希少な相のジレンマも雷の8枚条件も意味を失う。
+**締めすぎ**（巡回だけに縛る）にすると 6.1 枚まで落ち、2色だった頃の 7.4 枚に
+届かず目に見えて詰まる。2本立てで 7.4 枚。README 第7・第8段階に測った数字がある。
 
-**難易度は「敵マスを通る最長パスの平均」で測る。** 「継げる隣マスの割合」では
-差が出ない。どちらのモードも次に置ける相は1種類だが、**選べること自体が長さを
-押し上げる**ため。
+**難易度は「ランダムに置いた敵1体のマスを通る最長パスの平均」で測る。**
+`python3 tools/sim/chain_length.py` で出せる。「継げる隣マスの割合」では差が
+出ない。どちらのモードも次に置ける相は1種類だが、**選べること自体が長さを
+押し上げる**ため。この取り違えで一度決まりを緩めすぎている。
 
 **決まりは並び全体の性質。** 2色で往復してきた鎖に3色目を継ぐと、それまでの往復が
 後から無効になる。端だけ見る実装にしないこと。
