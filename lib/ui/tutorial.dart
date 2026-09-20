@@ -78,7 +78,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 課題が変わった直後だけ出す「できた」。
   bool _cheering = false;
 
-  /// 手が止まってから道を光らせるまで。すぐ出すと自分で探す気が失せる。
+  /// 手が止まってから道を光らせるまで。**開いた直後だけは待たない。**
+  /// 1手目は何をどうなぞるのかが分からないので、探す気が失せるより先に
+  /// 手が止まる。2手目からは、止まったときだけ出す。
   static const Duration _hintAfter = Duration(seconds: 6);
 
   static final List<_Lesson> _lessons = [
@@ -127,6 +129,12 @@ class _TutorialScreenState extends State<TutorialScreen> {
           roster: const [Mage.squireHeat, Mage.squireCold],
         );
     _controller.addListener(_check);
+    // 開いた瞬間にお手本を出す。盤面が組み上がってからでないと道が引けない
+    // ので、最初の1枚を描き終えてから。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _finished) return;
+      _controller.showHint();
+    });
     _restartIdle();
   }
 

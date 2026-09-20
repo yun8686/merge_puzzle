@@ -129,15 +129,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('手が止まるとお手本の指が出る', (tester) async {
+  testWidgets('開いた瞬間にお手本の指が出る', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    paintCheckerboard(controller.board);
-    await tester.pump();
 
-    expect(controller.hintPath, isEmpty);
-    // 手が止まってから出る。すぐ出すと自分で探す気が失せる。
-    await tester.pump(const Duration(seconds: 7));
+    // 1手目は何をどうなぞるのかが分からない。ここで待たせない。
     expect(controller.hintPath, isNotEmpty);
 
     // 指が道を辿り続けても例外が出ないこと。
@@ -145,6 +141,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 150));
     }
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('なぞり始めると消え、手が止まるとまた出る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    paintCheckerboard(controller.board);
+    await tester.pump();
+
+    controller.beginPath(const Cell(0, 0));
+    expect(controller.hintPath, isEmpty);
+
+    // 2手目からは手が止まってから。すぐ出し直すと自分で探す気が失せる。
+    await tester.pump(const Duration(seconds: 3));
+    expect(controller.hintPath, isEmpty);
+    await tester.pump(const Duration(seconds: 4));
+    expect(controller.hintPath, isNotEmpty);
   });
 
   testWidgets('とばせる', (tester) async {
