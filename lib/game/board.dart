@@ -244,12 +244,26 @@ class Board {
   /// 偶奇だった頃の 65:35 とほぼ同じ手触りになる。
   final List<int> _weights;
 
-  /// 同じ相を継げない範囲。相の数から決まる。
+  /// 継ぎ方の窓。相の数そのもの。
   ///
-  /// 相が2つなら1＝「直前1枚と違う」＝交互。3つなら2＝「直前2枚と違う」。
-  /// 素直に「隣と違えばよい」にすると、3つ相があればほぼ全部の盤面で
-  /// 12枚編めてしまい、希少な相のジレンマも雷の8枚条件も意味を失う。
-  int get window => phases.length < 2 ? 1 : phases.length - 1;
+  /// 決まりは **「隣り合う2枚は違う相。かつ、どの [window] + 1 枚を取っても
+  /// 相が全部出る」**。
+  ///
+  /// 相が2つなら後半は隣り合う2枚が違えば自動的に満たされるので、「交互」と
+  /// **完全に同じ意味**になる。3つなら「同じ2色の往復は3枚まで」で、
+  /// A→B→A は継げるが、その次の B は継げない。
+  ///
+  /// 「直前 N−1 枚と違う」だった頃は、3色では次に置ける相が**常に1種類**
+  /// しか無かった。盤面の 1/3 しか候補が無いので、2色だった頃（1種類だが
+  /// 盤面の半分）より明確に詰まる。**2色の交互を混ぜられるようにしても
+  /// これは直らない**：2色に絞っても次に置ける相はやはり1種類で、その相は
+  /// 盤面の 1/3 のままだから。効くのは「置ける相を2種類にする手を混ぜる」
+  /// ことだけで、この決まりだと平均 1.6 種類になり、継げる隣マスの割合が
+  /// 2色だった頃とほぼ同じに戻る（README 第8段階）。
+  ///
+  /// 逆に「隣と違えばよい」まで緩めると常に2種類になり、ほぼ全部の盤面で
+  /// 12枚編めてしまう。希少な相のジレンマも雷の8枚条件も意味を失う。
+  int get window => phases.length < 2 ? 1 : phases.length;
 
   final Random _rng;
   late final List<List<Tile?>> grid;
@@ -371,28 +385,37 @@ class Board {
   bool _adjacent(Cell a, Cell b) =>
       (a.row - b.row).abs() + (a.col - b.col).abs() == 1;
 
-  /// [path] の末尾に [to] を継げるか。隣接していて、[window] 枚ぶん
-  /// さかのぼった中に同じ相が無いこと。
+  /// [path] の末尾に [to] を継げるか。隣接していて、継ぎ方の決まりを
+  /// 満たすこと（[window] を見よ）。
   bool canExtendPath(List<Cell> path, Cell to) {
     if (path.isEmpty) return false;
     if (!_adjacent(path.last, to)) return false;
     return _fits(path, to, atFront: false);
   }
 
-  /// [path] の端に [c] を足したとき、同じ相が窓の中に二度出ないか。
+  /// [path] の端に [c] を足しても決まりを満たすか。
   ///
-  /// 決まりは「窓の中に同じ相が二度現れない」で、前から見ても後ろから見ても
-  /// 同じことなので、パスの先頭に足すときも同じ判定で済む。
+  /// 決まりは前から見ても後ろから見ても同じことなので（隣り合う2枚が違う
+  /// ことも、窓の中に相が全部出ることも、並びを裏返しても変わらない）、
+  /// パスの先頭に足すときも同じ判定で済む。
   bool _fits(List<Cell> path, Cell c, {required bool atFront}) {
     final t = tileAt(c);
     if (t == null) return false;
-    final near = atFront
-        ? path.take(window)
-        : path.reversed.take(window);
+    final near = (atFront ? path.take(window) : path.reversed.take(window))
+        .toList();
+    if (near.isEmpty) return true;
+    // 継ぎ目の隣は必ず違う相。
+    if (tileAt(near.first)?.phase == t.phase) return false;
+    // 窓が埋まるまでは、まだ揃わなくてよい。
+    if (near.length < window) return true;
+    // どの window + 1 枚を取っても相が全部出る。
+    final seen = <Phase>{t.phase};
     for (final other in near) {
-      if (tileAt(other)?.phase == t.phase) return false;
+      final p = tileAt(other)?.phase;
+      if (p == null) return false;
+      seen.add(p);
     }
-    return true;
+    return seen.length >= window;
   }
 
   /// 威力 [power] の鎖が [cell] に通すダメージ。マナのマスは 0。

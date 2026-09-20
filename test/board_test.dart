@@ -117,6 +117,93 @@ void main() {
     });
   });
 
+  group('3色の盤面の継ぎ方', () {
+    // 決まりは「隣り合う2枚は違う相。かつ、どの4枚を取っても3色すべてが出る」。
+    // 2色の往復は3枚まで。A→B→A は継げるが、その次の B は継げない。
+    //
+    // 「直前2枚と違う」だった頃は巡回しか編めず、次に置ける相が常に1種類
+    // しか無かった。盤面の 1/3 しか候補が無いので、2色だった頃より明確に
+    // 詰まる。往復を1回だけ許すと平均 1.6 種類になり、2色だった頃とほぼ
+    // 同じ割合に戻る（README 第8段階）。
+    final board = boardOf([
+      ['o', 'e', 'b', 'o'],
+      ['e', 'o', 'e', 'b'],
+      ['o', 'b', 'o', 'e'],
+    ]);
+
+    test('3色の巡回はそのまま継げる', () {
+      expect(
+        board.isValidPath(const [
+          Cell(0, 0),
+          Cell(0, 1),
+          Cell(0, 2),
+          Cell(0, 3),
+        ]),
+        isTrue,
+        reason: '熱→冷→雷→熱',
+      );
+    });
+
+    test('2色の往復も3枚目までは継げる', () {
+      // 熱→冷→熱。窓（4枚）が埋まっていないので、まだ3色そろわなくてよい。
+      expect(
+        board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
+        isTrue,
+      );
+    });
+
+    test('往復したら4枚目は残りの1色でなければならない', () {
+      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)]; // 熱→冷→熱
+      expect(
+        board.canExtendPath(back, const Cell(1, 2)),
+        isFalse,
+        reason: '(1,2) は冷。熱冷熱冷では4枚に3色そろわない',
+      );
+      expect(
+        board.canExtendPath(back, const Cell(2, 1)),
+        isTrue,
+        reason: '(2,1) は雷。これで4枚に3色そろう',
+      );
+    });
+
+    test('巡回のあとに戻るのは継げる', () {
+      // 熱→冷→雷→熱→雷。どの4枚を取っても3色そろっている。
+      expect(
+        board.isValidPath(const [
+          Cell(0, 0),
+          Cell(0, 1),
+          Cell(0, 2),
+          Cell(0, 3),
+          Cell(1, 3),
+        ]),
+        isTrue,
+      );
+    });
+
+    test('2色の編成では決まりが変わらない', () {
+      // 相が2つなら「どの3枚にも2色」は隣り合う2枚が違えば自動で満たされる。
+      // つまり交互と完全に同じ意味で、相を入れる前の盤面と手触りが変わらない。
+      final two = boardOf([
+        ['o', 'e', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+      expect(
+        two.isValidPath(const [
+          Cell(0, 0),
+          Cell(0, 1),
+          Cell(0, 2),
+          Cell(0, 3),
+        ]),
+        isTrue,
+      );
+      expect(
+        two.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
+        isTrue,
+        reason: '熱冷熱。2色では窓が効かない',
+      );
+    });
+  });
+
   group('守り', () {
     List<List<String>> layout() => [
       ['o', 'e5', 'o'],
