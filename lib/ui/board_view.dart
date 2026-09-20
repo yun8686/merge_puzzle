@@ -503,12 +503,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                 if (controller.hintPath.isNotEmpty)
                   Positioned.fill(
                     key: const ValueKey('hint-path'),
-                    child: CustomPaint(
-                      painter: _RibbonPainter(
+                    child: IgnorePointer(
+                      child: _HintTrace(
                         points: controller.hintPath.map(_centerOf).toList(),
-                        core: Colors.white.withValues(alpha: 0.35),
-                        glow: Colors.white.withValues(alpha: 0.2),
-                        width: cell * 0.18,
+                        cell: cell,
                       ),
                     ),
                   ),
@@ -2054,6 +2052,190 @@ class _RankBannerState extends State<_RankBanner>
       },
     );
   }
+}
+
+/// なぞるお手本。指が道を辿り、線がその後ろに引かれていく。
+///
+/// 線を出しておくだけでは「どこを通るか」しか分からない。**どこから始めて、
+/// どちら向きに、どの順で辿るか**は指が動いて初めて伝わる。始めの位置が
+/// 分からないまま止まっている人が、いちばん多い。
+///
+/// 辿り終えたら少し置いて、また始めから繰り返す。一度見逃しても次が来る。
+class _HintTrace extends StatefulWidget {
+  const _HintTrace({required this.points, required this.cell});
+
+  final List<Offset> points;
+  final double cell;
+
+  @override
+  State<_HintTrace> createState() => _HintTraceState();
+}
+
+class _HintTraceState extends State<_HintTrace>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  /// 1周の長さ。枚数で伸ばすと、長い道でも1枚あたりの速さが変わらない。
+  Duration get _span => Duration(
+    milliseconds: 520 + 190 * widget.points.length,
+  );
+
+  /// 辿り終えてから消えるまでの割合。残しておかないと、最後まで見る前に
+  /// 線が消える。
+  static const double _hold = 0.26;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: _span)..repeat();
+  }
+
+  @override
+  void didUpdateWidget(_HintTrace old) {
+    super.didUpdateWidget(old);
+    // 道が変われば頭から。前の道の途中から続くと、どこを見ればよいか分からない。
+    if (old.points.length != widget.points.length) {
+      _c
+        ..duration = _span
+        ..forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) => CustomPaint(
+        painter: _HintPainter(
+          points: widget.points,
+          cell: widget.cell,
+          t: _c.value,
+          hold: _hold,
+        ),
+      ),
+    );
+  }
+}
+
+class _HintPainter extends CustomPainter {
+  const _HintPainter({
+    required this.points,
+    required this.cell,
+    required this.t,
+    required this.hold,
+  });
+
+  final List<Offset> points;
+  final double cell;
+  final double t;
+  final double hold;
+
+  /// 道の [p]（0〜1）の位置。折れ線の長さで測る。
+  (Offset, int) _at(double p) {
+    var total = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      total += (points[i] - points[i - 1]).distance;
+    }
+    var want = total * p.clamp(0.0, 1.0);
+    for (var i = 1; i < points.length; i++) {
+      final seg = (points[i] - points[i - 1]).distance;
+      if (want <= seg || i == points.length - 1) {
+        final k = seg == 0 ? 0.0 : (want / seg).clamp(0.0, 1.0);
+        return (Offset.lerp(points[i - 1], points[i], k)!, i);
+      }
+      want -= seg;
+    }
+    return (points.last, points.length - 1);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    // 前半で辿り、後半は残して薄れる。
+    final draw = 1 - hold;
+    final p = (t / draw).clamp(0.0, 1.0);
+    final fade = t < draw ? 1.0 : 1 - (t - draw) / hold;
+    if (fade <= 0) return;
+
+    final (head, upto) = _at(p);
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < upto; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    path.lineTo(head.dx, head.dy);
+
+    final width = cell * 0.18;
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = width * 1.9
+        ..color = Colors.white.withValues(alpha: 0.22 * fade)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, width * 0.75),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = width
+        ..color = Colors.white.withValues(alpha: 0.75 * fade),
+    );
+
+    // 触れている点。押さえているところが分かるよう、輪を広げる。
+    final ring = cell * (0.26 + 0.20 * (t * 3 % 1));
+    canvas.drawCircle(
+      head,
+      ring,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = cell * 0.045
+        ..color = Colors.white.withValues(
+          alpha: 0.45 * fade * (1 - (t * 3 % 1)),
+        ),
+    );
+    canvas.drawCircle(
+      head,
+      cell * 0.16,
+      Paint()..color = Colors.white.withValues(alpha: 0.95 * fade),
+    );
+
+    _drawFinger(canvas, head, fade);
+  }
+
+  /// 指。触れている点の右下に置く。中央に重ねると点が隠れて、どのマスを
+  /// 押さえているのか読めなくなる。
+  void _drawFinger(Canvas canvas, Offset at, double fade) {
+    final icon = Icons.touch_app;
+    final size = cell * 0.78;
+    final painter = TextPainter(
+      textDirection: TextDirection.ltr,
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontSize: size,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          color: Colors.white.withValues(alpha: 0.9 * fade),
+          shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 6)],
+        ),
+      ),
+    )..layout();
+    painter.paint(canvas, at + Offset(cell * 0.06, cell * 0.02));
+  }
+
+  @override
+  bool shouldRepaint(_HintPainter old) =>
+      old.t != t || old.points != points || old.cell != cell;
 }
 
 class _RibbonPainter extends CustomPainter {

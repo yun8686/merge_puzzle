@@ -53,7 +53,14 @@ class TutorialScreen extends StatefulWidget {
 
 /// 課題ひとつ。盤面の状態だけで「できた」を決める。
 class _Lesson {
-  const _Lesson({required this.text, required this.done});
+  const _Lesson({
+    required this.label,
+    required this.text,
+    required this.done,
+  });
+
+  /// 終いの振り返りに並べる短い名札。
+  final String label;
 
   /// 上に出す一言。`**` で挟んだところだけ明るくする。
   final String text;
@@ -76,23 +83,27 @@ class _TutorialScreenState extends State<TutorialScreen> {
 
   static final List<_Lesson> _lessons = [
     _Lesson(
+      label: '鎖を編む',
       text: '隣り合うマスを指でなぞって継ぐ。\n'
           '**同じ相（色）は続けて継げない。**\n'
           '3枚つなげば鎖になる。',
       done: (c) => c.bestChain >= 3,
     ),
     _Lesson(
+      label: '長いほど強い',
       text: '継いだ枚数が、そのまま鎖の**威力**になる。\n'
           '遠回りしてでも、6枚つないでみよう。',
       done: (c) => c.bestChain >= 6,
     ),
     _Lesson(
+      label: '守りを破る',
       text: 'マスの数字は敵の**守り**。\n'
           '威力が守りに届けば傷がつく。\n'
           '守り3の敵を討ち取ろう。',
       done: (c) => c.felledWards.isNotEmpty,
     ),
     _Lesson(
+      label: '毎ターンの反撃',
       text: '**敵は毎ターン殴ってくる。**\n'
           '体力が減るのはそのため。早く討つほど楽になる。\n'
           '残りの敵も討ち取ろう。',
@@ -226,7 +237,11 @@ class _TutorialScreenState extends State<TutorialScreen> {
           ),
           if (_cheering && !_finished)
             const IgnorePointer(child: Center(child: _Cheer())),
-          if (_finished) _Finish(onDone: widget.onDone),
+          if (_finished)
+            _Finish(
+              onDone: widget.onDone,
+              learned: [for (final l in _lessons) l.label],
+            ),
         ],
       ),
     );
@@ -410,66 +425,237 @@ class _Cheer extends StatelessWidget {
   }
 }
 
-/// 通し終えたところ。**盤面では教えられない編成の話だけ、ここで足す。**
-class _Finish extends StatelessWidget {
-  const _Finish({required this.onDone});
+/// 通し終えたところ。
+///
+/// **ここをあっさり閉じると、覚えたことが残らない。** 何ができるように
+/// なったのかを順に並べ直してから送り出す。並ぶ名札は課題そのものなので、
+/// さっきまで自分でやっていたことがそのまま出てくる。
+///
+/// 盤面では教えられない編成の話だけ、最後にここで足す。
+class _Finish extends StatefulWidget {
+  const _Finish({required this.onDone, required this.learned});
 
   final VoidCallback onDone;
+  final List<String> learned;
+
+  @override
+  State<_Finish> createState() => _FinishState();
+}
+
+class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
 
   static const _party = [MageKind.ember, MageKind.rime, MageKind.storm];
 
   @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  /// [from]〜[to] の区間を 0〜1 に均した進み具合。
+  double _stage(double from, double to) =>
+      Curves.easeOutCubic.transform(
+        ((_c.value - from) / (to - from)).clamp(0.0, 1.0),
+      );
+
+  @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Palette.background.withValues(alpha: 0.94),
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 24),
-          child: Column(
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final veil = _stage(0, 0.10);
+        final title = _stage(0.05, 0.30);
+        final party = _stage(0.62, 0.82);
+        final button = _stage(0.80, 1.0);
+        return ColoredBox(
+          color: Palette.background.withValues(alpha: 0.95 * veil),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 30,
+                vertical: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: title,
+                    child: Transform.scale(
+                      scale: 0.7 + 0.3 * title,
+                      child: const _Crest(),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  for (var i = 0; i < widget.learned.length; i++)
+                    _Learned(
+                      label: widget.learned[i],
+                      // 1つずつ順に点く。全部まとめて出すと、何を覚えたのか
+                      // 目が追えないまま終わる。
+                      at: _stage(0.30 + i * 0.08, 0.42 + i * 0.08),
+                    ),
+                  const SizedBox(height: 26),
+                  Opacity(
+                    opacity: party,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - party) * 12),
+                      child: _PartyNote(party: _party),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Opacity(
+                    opacity: button,
+                    child: _DoneButton(onTap: widget.onDone),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 終いの紋。金の輪の中に一言。
+class _Crest extends StatelessWidget {
+  const _Crest();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Palette.gold.withValues(alpha: 0.65)),
+        gradient: RadialGradient(
+          colors: [
+            Palette.gold.withValues(alpha: 0.22),
+            Palette.boardBg.withValues(alpha: 0.2),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.gold.withValues(alpha: 0.3),
+            blurRadius: 40,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(30, 16, 30, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('ひととおり覚えた', style: AppFont.number(21, color: Palette.gold)),
+            const SizedBox(height: 6),
+            Text('READY', style: AppFont.label(10, color: Palette.textDim)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 覚えたことを1つ。点くまでは沈めておく。
+class _Learned extends StatelessWidget {
+  const _Learned({required this.label, required this.at});
+
+  final String label;
+
+  /// 0 で沈んだまま、1 で点いた状態。
+  final double at;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Opacity(
+        opacity: 0.15 + 0.85 * at,
+        child: Transform.translate(
+          offset: Offset((1 - at) * -14, 0),
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('ひととおり覚えた', style: AppFont.number(22)),
-              const SizedBox(height: 26),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final kind in _party)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: MagePortrait(kind: kind, size: 36),
-                    ),
-                ],
+              Transform.scale(
+                // 点く瞬間だけ少し大きく出す。
+                scale: 1 + (at < 1 ? at * (1 - at) * 1.6 : 0),
+                child: Icon(
+                  Icons.check_circle,
+                  size: 19,
+                  color: Color.lerp(Palette.textDim, Palette.life, at),
+                ),
               ),
-              const SizedBox(height: 10),
-              const Icon(
-                Icons.arrow_downward,
-                color: Palette.textDim,
-                size: 18,
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Color.lerp(Palette.textDim, Palette.textPrimary, at),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1,
+                ),
               ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final kind in _party)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: PhaseSwatch(
-                        phase: Mage.of(kind).phase,
-                        size: 24,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              const _Body(
-                'あとひとつ。盤面に出る相は、\n'
-                '**連れていった魔導士で決まる。**\n'
-                '相は2種類以上でなければ、鎖が1枚も編めない。',
-              ),
-              const SizedBox(height: 30),
-              _DoneButton(onTap: onDone),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 盤面では教えられない編成の話。
+class _PartyNote extends StatelessWidget {
+  const _PartyNote({required this.party});
+
+  final List<MageKind> party;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final kind in party)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    child: MagePortrait(kind: kind, size: 32),
+                  ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.arrow_forward,
+                  color: Palette.textDim,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                for (final kind in party)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: PhaseSwatch(phase: Mage.of(kind).phase, size: 22),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const _Body(
+              'あとひとつ。盤面に出る相は、\n'
+              '**連れていった魔導士で決まる。**\n'
+              '相は2種類以上でなければ、鎖が1枚も編めない。',
+            ),
+          ],
         ),
       ),
     );

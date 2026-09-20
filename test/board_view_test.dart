@@ -438,6 +438,42 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
+  testWidgets('お手本の指が道を辿る', (tester) async {
+    final controller = newController(1);
+    paintCheckerboard(controller.board);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 300,
+              height: 400,
+              child: BoardView(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    controller.showHint();
+    expect(controller.hintPath.length, greaterThanOrEqualTo(3));
+    await tester.pump();
+
+    // 指は繰り返し道を辿る。止まらないので pumpAndSettle は使えない。
+    for (var i = 0; i < 24; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(tester.takeException(), isNull);
+
+    // 消せば止まる。
+    controller.clearHint();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('盤面の敵マスに、姿と守りの数字が出る', (tester) async {
     final controller = newController(1);
     paintCheckerboard(controller.board);

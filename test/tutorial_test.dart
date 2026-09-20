@@ -116,6 +116,35 @@ void main() {
     expect(find.text('ひととおり覚えた'), findsOneWidget);
     expect(find.textContaining('連れていった魔導士で決まる'), findsOneWidget);
     expect(find.text('拠点へ'), findsOneWidget);
+
+    // 覚えたことが順に並ぶ。あっさり閉じると何も残らない。
+    for (final label in ['鎖を編む', '長いほど強い', '守りを破る', '毎ターンの反撃']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+
+    // 出そろうまで描き続けても例外が出ないこと。
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('手が止まるとお手本の指が出る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    paintCheckerboard(controller.board);
+    await tester.pump();
+
+    expect(controller.hintPath, isEmpty);
+    // 手が止まってから出る。すぐ出すと自分で探す気が失せる。
+    await tester.pump(const Duration(seconds: 7));
+    expect(controller.hintPath, isNotEmpty);
+
+    // 指が道を辿り続けても例外が出ないこと。
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('とばせる', (tester) async {
