@@ -93,8 +93,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '守りを破る',
-      text: 'マスの数字は敵の**守り**。\n'
-          '威力が守りに届けば傷がつく。\n'
+      text: 'マスに書かれた数字は、その敵の**守り**。\n'
+          '下の帯の威力がその数に届けば、傷がつく。\n'
           '守り3の敵を討ち取ろう。',
       done: (c) => c.felledWards.isNotEmpty,
     ),
@@ -240,6 +240,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
                       child: BoardView(controller: _controller),
                     ),
                   ),
+                  _Reach(controller: _controller),
                   _Gauges(controller: _controller),
                   const SizedBox(height: 10),
                 ],
@@ -346,6 +347,131 @@ class _Body extends StatelessWidget {
       ),
       textAlign: TextAlign.center,
       style: base,
+    );
+  }
+}
+
+/// 盤面と目盛りの間に挟む物差し。**敵のマスの数字の意味は、ここで伝わる。**
+///
+/// 「数字は守り」と文で言っても、目の前の鎖とは結びつかない。なぞっている
+/// 最中に、いまの鎖の威力と、通した敵の守りを並べて出す。1枚伸ばすたびに
+/// 威力が増え、届いた瞬間に言葉も色も変わるので、**数字が越えるべき線である
+/// ことが動きで分かる**。稽古場の一党は能力を持たない従者だけなので、
+/// 威力＝枚数。数字と鎖の長さが1対1で対応する。
+///
+/// 守りの数字は盤面と同じチップで描く（[WardChip]）。ここだけの飾りを作ると、
+/// マスに載っているあの数字の話だと分からない。
+///
+/// 高さは決め打ち。なぞるたびに伸び縮みすると盤面が動いて、指の下のマスが
+/// ずれる。
+class _Reach extends StatelessWidget {
+  const _Reach({required this.controller});
+
+  final GameController controller;
+
+  /// 道が通っている敵のうち、いま話をすべき1体。まだ討てない中でいちばん
+  /// 近いもの――伸ばせば届くところを見せたいので。全部討てるなら先頭。
+  ///
+  /// 2体ぶん並べると帯が詰まるうえ、どちらの数字の話か分からなくなる。
+  Cell? get _focus {
+    final board = controller.board;
+    Cell? best;
+    var bestNeed = 0;
+    Cell? first;
+    for (final c in controller.path) {
+      final t = board.tileAt(c);
+      if (t == null || !t.isFoe) continue;
+      first ??= c;
+      final need = t.powerToFell - controller.power;
+      if (need > 0 && (best == null || need < bestNeed)) {
+        best = c;
+        bestNeed = need;
+      }
+    }
+    return best ?? first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+        child: DecoratedBox(
+          decoration: panelDecoration(radius: 12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: controller.path.isEmpty ? _idle() : _tracing(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _idle() => Center(
+    // 狭い端末では縮めて収める。折り返すと帯の高さを越える。
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        'マスの数字は敵の守り。鎖の威力が届けば傷がつく',
+        style: AppFont.label(9, color: Palette.textDim),
+      ),
+    ),
+  );
+
+  Widget _tracing() {
+    final cell = _focus;
+    final tile = cell == null ? null : controller.board.tileAt(cell);
+    return Row(
+      children: [
+        Text('威力', style: AppFont.label(9)),
+        const SizedBox(width: 6),
+        Text(
+          '${controller.power}',
+          style: AppFont.number(
+            18,
+            color: controller.pathIsValid ? Palette.gold : Palette.textMuted,
+          ),
+        ),
+        const Spacer(),
+        if (tile == null)
+          Text(
+            '敵のマスを通すと、守りに届くか出る',
+            style: AppFont.label(9, color: Palette.textDim),
+          )
+        else ...[
+          Text('守り', style: AppFont.label(9, color: Palette.ward)),
+          const SizedBox(width: 6),
+          // 盤面のマスと同じチップ。一辺 64 のマスに載る大きさで描く。
+          WardChip(ward: tile.ward!, size: 64, color: Palette.ward),
+          const SizedBox(width: 10),
+          Flexible(child: _verdict(cell!, tile)),
+        ],
+      ],
+    );
+  }
+
+  /// いまの威力がその守りに何をするか。**討てる・傷がつく・届かない**の
+  /// 3つしかない。届いていないときだけ、あと何枚かを言う。
+  Widget _verdict(Cell cell, Tile tile) {
+    final String text;
+    final Color color;
+    if (controller.willFell(cell)) {
+      text = '討ち取れる';
+      color = Palette.gold;
+    } else if (controller.willHurt(cell)) {
+      text = '傷がつく';
+      color = Palette.evenA;
+    } else {
+      text = 'あと ${tile.powerToHurt - controller.power} 枚で届く';
+      color = Palette.textMuted;
+    }
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.fade,
+      softWrap: false,
+      style: AppFont.label(10, color: color),
     );
   }
 }

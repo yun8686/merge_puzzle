@@ -162,6 +162,51 @@ void main() {
     expect(controller.hintPath, isNotEmpty);
   });
 
+  testWidgets('なぞると、いまの威力と敵の守りが並ぶ', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    // 隅に守り3の敵を1体だけ残す。
+    paintCheckerboard(controller.board, ward: 3);
+    await tester.pump();
+
+    // なぞっていない間は、数字の読み方だけを置いておく。
+    expect(find.textContaining('マスの数字は敵の守り'), findsOneWidget);
+
+    // 敵を通していない鎖では、威力だけ。
+    controller.beginPath(const Cell(0, 0));
+    controller.extendPath(const Cell(0, 1));
+    await tester.pump();
+    expect(find.text('威力'), findsOneWidget);
+    expect(find.text('守り'), findsNothing);
+
+    // 敵のマスを通すと、その守りと、いま届いているかが並ぶ。
+    controller.beginPath(const Cell(7, 3));
+    controller.extendPath(const Cell(7, 4));
+    await tester.pump();
+    expect(find.text('守り'), findsNothing);
+
+    controller.extendPath(const Cell(7, 5));
+    await tester.pump();
+    expect(find.text('守り'), findsOneWidget);
+    // 従者だけの一党なので威力＝枚数。3枚で守り3に届く。
+    expect(controller.power, 3);
+    expect(find.text('討ち取れる'), findsOneWidget);
+  });
+
+  testWidgets('威力が守りに届かないうちは、あと何枚かを言う', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    paintCheckerboard(controller.board, ward: 6);
+    await tester.pump();
+
+    controller.beginPath(const Cell(7, 3));
+    controller.extendPath(const Cell(7, 4));
+    controller.extendPath(const Cell(7, 5));
+    await tester.pump();
+
+    expect(find.text('あと 3 枚で届く'), findsOneWidget);
+  });
+
   testWidgets('とばせる', (tester) async {
     var done = 0;
     await tester.pumpWidget(

@@ -1643,7 +1643,7 @@ class _FoeFace extends StatelessWidget {
         Positioned(
           left: size * 0.025,
           top: size * 0.025,
-          child: _WardChip(ward: ward, size: size, color: tint),
+          child: WardChip(ward: ward, size: size, color: tint),
         ),
         if (maxHp > 1)
           Align(
@@ -1664,8 +1664,12 @@ class _FoeFace extends StatelessWidget {
 
 /// 守りの数字を載せる小さなチップ。姿に場所を譲って隅へ寄ったぶん、
 /// 暗く塗った丸に載せて、下のマナの色から必ず浮くようにする。
-class _WardChip extends StatelessWidget {
-  const _WardChip({
+///
+/// 稽古場でも同じものを使う（`tutorial.dart` の `_Reach`）。盤面の数字の話を
+/// するのに別の飾りを描くと、同じものだと分からない。
+class WardChip extends StatelessWidget {
+  const WardChip({
+    super.key,
     required this.ward,
     required this.size,
     required this.color,
