@@ -159,14 +159,13 @@ void main() {
     traceRoute(controller);
     await tester.pump();
 
-    // 手前の守り3は討ち取れ、奥の守り5には傷が残る。
-    expect(controller.felledWards, contains(3));
-    final tough = toughFoe(controller.board);
-    expect(tough, isNotNull);
-    expect(controller.board.tileAt(tough!)!.hp, 1);
+    // **2体とも討ち取れる。** 片方だけ残ると、なぜ残ったのか分からない。
+    expect(controller.felledWards.where((w) => w == 3).length, 2);
+    expect(toughFoe(controller.board), isNull, reason: '体力持ちは混ぜない');
+    expect(find.textContaining('体力を2つ持っている'), findsOneWidget);
   });
 
-  testWidgets('残った傷を次の稽古で削り切る', (tester) async {
+  testWidgets('体力のある敵は、1体だけを相手に分けて教える', (tester) async {
     final controller = newController();
     await open(tester, controller);
     for (var i = 0; i < 4; i++) {
@@ -174,11 +173,23 @@ void main() {
       await tester.pump();
     }
 
-    expect(find.textContaining('削り切ろう'), findsOneWidget);
-    // 道は、傷ついた敵を通る。
+    // 体力2の敵と、盤面を空にしないための控えだけ。道は体力持ちを通る。
     final tough = toughFoe(controller.board);
     expect(tough, isNotNull);
+    expect(controller.board.tileAt(tough!)!.hp, 2);
     expect(controller.lockedPath, contains(tough));
+    final route = List.of(controller.lockedPath);
+
+    // 1本目は守りを破るが、削り切れない。
+    traceRoute(controller);
+    await tester.pump();
+
+    final hurt = toughFoe(controller.board);
+    expect(hurt, isNotNull);
+    expect(controller.board.tileAt(hurt!)!.hp, 1, reason: '傷が残る');
+    expect(find.textContaining('つけた傷はそのまま残る'), findsOneWidget);
+    // 同じ道が戻ってくる。同じ手が二度目で通ることが、そのまま証しになる。
+    expect(controller.lockedPath, route);
 
     traceRoute(controller);
     await tester.pump();
@@ -191,7 +202,7 @@ void main() {
   testWidgets('通しでなぞると終いの言葉が出る', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < 7; i++) {
       traceRoute(controller);
       await tester.pump();
     }
@@ -209,7 +220,8 @@ void main() {
       '長いほど強い',
       '守りを破る',
       'まとめて当てる',
-      '削って討つ',
+      '体力のある敵',
+      '削り切る',
       '毎ターンの反撃',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
