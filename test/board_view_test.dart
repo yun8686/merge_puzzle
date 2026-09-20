@@ -461,6 +461,26 @@ void main() {
     expect(controller.hintPath.length, greaterThanOrEqualTo(3));
     await tester.pump();
 
+    // 指はタイルより後に積む。先に積むと不透明なタイルに隠れて出てこない。
+    final stack = tester.widget<Stack>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('hint-path')),
+            matching: find.byType(Stack),
+          )
+          .first,
+    );
+    final kids = stack.children;
+    final hintAt = kids.indexWhere((w) => w.key == const ValueKey('hint-path'));
+    final lastTile = kids.lastIndexWhere(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key as ValueKey<String>).value.startsWith('tile-'),
+    );
+    expect(hintAt, greaterThan(0));
+    expect(lastTile, greaterThan(0));
+    expect(hintAt, greaterThan(lastTile));
+
     // 指は繰り返し道を辿る。止まらないので pumpAndSettle は使えない。
     for (var i = 0; i < 24; i++) {
       await tester.pump(const Duration(milliseconds: 150));

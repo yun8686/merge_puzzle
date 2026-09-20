@@ -500,16 +500,6 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                if (controller.hintPath.isNotEmpty)
-                  Positioned.fill(
-                    key: const ValueKey('hint-path'),
-                    child: IgnorePointer(
-                      child: _HintTrace(
-                        points: controller.hintPath.map(_centerOf).toList(),
-                        cell: cell,
-                      ),
-                    ),
-                  ),
                 ..._buildTiles(controller, cell),
                 // 経路はタイルの上に細く引く。下に敷くとタイルの隙間しか見えず、
                 // どの順でなぞったのかが読み取れなくなる。
@@ -527,6 +517,18 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                           ),
                           width: cell * 0.15,
                         ),
+                      ),
+                    ),
+                  ),
+                // お手本もタイルの上。指はマスの中央に出るので、下に敷くと
+                // 不透明なタイルに完全に隠れて何も見えない。
+                if (controller.hintPath.isNotEmpty)
+                  Positioned.fill(
+                    key: const ValueKey('hint-path'),
+                    child: IgnorePointer(
+                      child: _HintTrace(
+                        points: controller.hintPath.map(_centerOf).toList(),
+                        cell: cell,
                       ),
                     ),
                   ),
