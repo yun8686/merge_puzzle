@@ -334,6 +334,7 @@ void main() {
     controller.extendPath(const Cell(0, 2));
     controller.commitPath();
     controller.settle();
+    controller.strike();
     expect(controller.phase, GamePhase.floorLost);
     // 反撃は守りの合計。
     expect(controller.lastBacklash, 26);
@@ -519,6 +520,9 @@ void main() {
     controller.extendPath(const Cell(0, 2));
     controller.commitPath();
     controller.settle();
+    expect(controller.isStriking, isTrue, reason: '詰んでから間を置いて殴られる');
+    expect(controller.party.hp, hpBefore, reason: 'まだ殴られていない');
+    controller.strike();
     await tester.pump();
 
     expect(controller.party.hp, lessThan(hpBefore));

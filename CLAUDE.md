@@ -145,10 +145,24 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 線が焼き切れる速さ（`_ChainFlashView`）は `stagger` から算出しているので自動で追従するが、
 焼き切ったあとの残り香の長さだけは固定値なので、尺を変えるときは一緒に見ること。
 
-殴られたときの赤い明滅（`game_screen.dart` の `_HurtFlash`）は、**中央を透かした
-まま縁だけを染める**。盤面の上に色を乗せるとマスの相が読めなくなって次の手を
-選べない。走らせるきっかけは量（`lastHit`）ではなく回数（`hitTick`）で、同じ量の
-痛手が続けて来ても必ず鳴る。
+**敵の反撃は `settle` では起きない。** `settle` は盤面を詰めて `isStriking` を
+立てるだけで、痛手を出すのは `strike`。消した瞬間に殴られると自分の手と相手の手が
+重なって読めないので、間を置いてから呼ぶ（`board_view.dart` の `_strikePause`、
+420ms）。**呼ぶのは盤面を描く側の責任**で、`settle` と同じ約束になっている。
+`isStriking` の間は `acceptsInput` が false。
+
+殴られたときの演出は3つ重なっている。**どれか1つでは足りない。**
+
+- 殴った敵そのものが突き出して、爪痕と赤い飛沫が出る（`board_view.dart` の
+  `_foeStrike` / `_SlashView` / `TileWidget.strikeCount`）。画面全体を赤くする
+  だけでは、**誰に殴られたのか**が分からない
+- 盤面ごと赤に振って揺らす（`_screenFlash` / `_frameGlow` / `_shake`）。鎖の演出
+  は相の色なので、赤は必ず「殴られた」を指す
+- 画面の縁から赤が差す（`game_screen.dart` の `_HurtFlash`）。**中央は透かした
+  まま**にする。盤面の上に色を乗せるとマスの相が読めなくなって次の手を選べない
+
+走らせるきっかけは量（`lastHit`）ではなく回数（`hitTick` / `strikeCount`）。
+同じ量の痛手が続けて来ても必ず鳴る。
 
 制圧したときだけ、盤面が詰まってから結果を出すまでにもう一段の間がある
 （`lib/ui/game_screen.dart` の `_clearPause`、300ms）。無いと討った手応えが残らない

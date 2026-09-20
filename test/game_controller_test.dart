@@ -119,6 +119,7 @@ void main() {
     }
 
     controller.settle();
+    controller.strike();
     expect(controller.isSettling, isFalse);
     expect(controller.phase, GamePhase.playing);
     expect(controller.acceptsInput, isTrue);
@@ -165,6 +166,7 @@ void main() {
     expect(result!.felled, 1);
 
     controller.settle();
+    controller.strike();
     expect(controller.remainingFoes, 0);
     expect(controller.phase, GamePhase.stageCleared);
     expect(controller.acceptsInput, isFalse);
@@ -179,6 +181,7 @@ void main() {
     trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     controller.commitPath();
     controller.settle();
+    controller.strike();
 
     expect(controller.movesLeft, 0);
     expect(controller.phase, GamePhase.floorLost);
@@ -201,6 +204,7 @@ void main() {
       expect(controller.party.hp, hpBefore, reason: '殴られるのは settle のとき');
 
       controller.settle();
+      controller.strike();
       expect(controller.lastHit, 2);
       expect(controller.party.hp, hpBefore - 2);
       expect(controller.phase, GamePhase.playing);
@@ -209,6 +213,7 @@ void main() {
       trace(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
       expect(controller.party.hp, hpBefore - 4);
     });
 
@@ -241,6 +246,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.remainingFoes, 0);
       expect(controller.lastHit, 0);
@@ -255,10 +261,60 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.party.hp, 0);
       expect(controller.phase, GamePhase.defeated);
       expect(controller.lastBacklash, 0, reason: '階層を落とす前に倒れている');
+    });
+
+    test('盤面が詰んでも、すぐには殴られない', () {
+      // 消した瞬間に反撃が始まると、自分の手と相手の手が重なって読めない。
+      // 詰んだ盤面を見せてから殴る。間を計るのは盤面を描く側。
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      final hpBefore = controller.party.hp;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.isStriking, isTrue);
+      expect(controller.party.hp, hpBefore, reason: 'まだ殴られていない');
+      expect(controller.acceptsInput, isFalse, reason: '殴られる前に打たせない');
+
+      controller.strike();
+      expect(controller.isStriking, isFalse);
+      expect(controller.party.hp, hpBefore - 2);
+      expect(controller.acceptsInput, isTrue);
+    });
+
+    test('反撃は二度来ない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      final hpBefore = controller.party.hp;
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+      controller.strike();
+      controller.strike();
+      controller.strike();
+
+      expect(controller.party.hp, hpBefore - 2);
+      expect(controller.hitTick, 1);
+    });
+
+    test('制圧した手では反撃を待たない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.isStriking, isFalse);
+      expect(controller.phase, GamePhase.stageCleared);
     });
 
     test('痛手を受けた回数が数えられる', () {
@@ -271,12 +327,14 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
       expect(controller.hitTick, 1);
 
       // 同じ量の痛手でも数は進む。
       trace(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
       expect(controller.lastHit, 2, reason: '量は同じ');
       expect(controller.hitTick, 2);
     });
@@ -288,6 +346,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.remainingFoes, 0);
       expect(controller.hitTick, 0);
@@ -307,6 +366,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.remainingFoes, 1, reason: '守り3の方を討った');
       expect(controller.lastHit, 2, reason: '討った敵のぶんはもう来ない');
@@ -320,6 +380,7 @@ void main() {
     trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     controller.commitPath();
     controller.settle();
+    controller.strike();
     expect(controller.phase, GamePhase.floorLost);
 
     final floor = controller.floor;
@@ -341,6 +402,7 @@ void main() {
     trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     controller.commitPath();
     controller.settle();
+    controller.strike();
 
     expect(controller.party.hp, 0);
     expect(controller.party.isDown, isTrue);
@@ -364,6 +426,7 @@ void main() {
     expect(result.cleared, [true, false, true]);
 
     controller.settle();
+    controller.strike();
     expect(controller.remainingFoes, 1);
     expect(controller.phase, GamePhase.playing);
   });
@@ -400,6 +463,7 @@ void main() {
     expect(result!.felled, 0);
     expect(result.damages[1], 1);
     controller.settle();
+    controller.strike();
     expect(controller.remainingFoes, 1);
     // 消えたのは左右のマナだけなので、敵は同じマスに傷ついたまま残る。
     final foe = controller.board.tileAt(const Cell(0, 1))!;
@@ -443,6 +507,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
       expect(controller.felledWards, [3]);
 
       controller.nextFloor(Blessing.heal);
@@ -678,6 +743,7 @@ void main() {
     trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
     controller.commitPath();
     controller.settle();
+    controller.strike();
     controller.nextFloor(Blessing.vigor);
     controller.party.hp = 3;
     expect(controller.floor, 2);
@@ -742,6 +808,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.phase, GamePhase.dungeonCleared);
     });
@@ -754,6 +821,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.phase, GamePhase.stageCleared);
     });
@@ -825,6 +893,7 @@ void main() {
     // settle を通すために、いったん演出中の状態にする。
     controller.isSettling = true;
     controller.settle();
+    controller.strike();
     expect(controller.phase, GamePhase.floorLost);
     expect(controller.lastBacklash, 8);
   });
@@ -950,6 +1019,7 @@ void main() {
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
       controller.settle();
+      controller.strike();
 
       expect(controller.phase, GamePhase.floorLost);
       // 守り7の敵を討ち漏らした。半分にして切り上げで4。

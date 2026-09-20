@@ -71,6 +71,15 @@ class GameController extends ChangeNotifier {
   /// 直近の1手で敵から受けた痛手。0 なら何も起きていない。
   int lastHit = 0;
 
+  /// 盤面は詰み終わっていて、敵の反撃を待っている。
+  ///
+  /// 消した瞬間に殴られると、**自分の手と相手の手が重なって読めない**。
+  /// 盤面が詰んだのを見せてから殴る。この間は手を受け付けない（殴られる前に
+  /// 次の手を打たれると、反撃が起きた順が分からなくなる）。
+  ///
+  /// [settle] で立ち、[strike] で下りる。盤面を描く側が間を置いて呼ぶ。
+  bool isStriking = false;
+
   /// 痛手を受けた回数。**演出はこれが変わったのを見て走り出す。**
   ///
   /// 量（[lastHit]）だけを見ていると、同じ量の痛手が続けて来たときに値が
@@ -117,6 +126,7 @@ class GameController extends ChangeNotifier {
     hintPath = const [];
     freshTileIds = const <int>{};
     isSettling = false;
+    isStriking = false;
     lastHealed = 0;
     lastHit = 0;
     felledWards.clear();
@@ -156,7 +166,8 @@ class GameController extends ChangeNotifier {
   bool get isTracing => path.isNotEmpty;
 
   /// いま指を受け付けるか。演出中は触らせない。
-  bool get acceptsInput => phase == GamePhase.playing && !isSettling;
+  bool get acceptsInput =>
+      phase == GamePhase.playing && !isSettling && !isStriking;
 
   /// 盤面に残っている敵の数。
   int get remainingFoes => board.remainingFoes;
@@ -338,8 +349,18 @@ class GameController extends ChangeNotifier {
       return;
     }
 
-    // 生き残った敵が毎ターン殴ってくる。討ち取れば減るので、早く討つほど
-    // 後が楽になる。盾が居れば半分。
+    // ここでは殴らない。盤面が詰んだのを見せてから [strike] を呼ぶ。
+    isStriking = true;
+    notifyListeners();
+  }
+
+  /// 生き残った敵の反撃。[settle] が盤面を詰め終えてから、間を置いて呼ぶ。
+  ///
+  /// 討ち取れば減るので、早く討つほど後が楽になる。盾が居れば半分。
+  void strike() {
+    if (!isStriking) return;
+    isStriking = false;
+
     lastHit = party.damageFor(board.foeAttack);
     var taken = lastHit;
     party.takeDamage(lastHit);

@@ -1123,10 +1123,10 @@ class _HurtFlashState extends State<_HurtFlash>
   late final AnimationController _c;
 
   /// 差し込みから引くまで。長いと次の手を考える邪魔になる。
-  static const _span = Duration(milliseconds: 520);
+  static const _span = Duration(milliseconds: 700);
 
   /// 立ち上がりにかける割合。殴られた手応えは速さで出る。
-  static const double _rise = 0.16;
+  static const double _rise = 0.10;
 
   @override
   void initState() {
@@ -1152,7 +1152,7 @@ class _HurtFlashState extends State<_HurtFlash>
   Widget build(BuildContext context) {
     // 毎ターンの反撃は 1〜6、階層を落としたときの反撃は 20 を超える。
     // 濃さは頭打ちにして、痛手が大きいほど濃いが画面は潰れないようにする。
-    final strength = (widget.amount / 10).clamp(0.4, 1.0);
+    final strength = (widget.amount / 8).clamp(0.55, 1.0);
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: _c,
@@ -1161,19 +1161,37 @@ class _HurtFlashState extends State<_HurtFlash>
           if (t == 0 || t == 1) return const SizedBox.expand();
           final e = t < _rise ? t / _rise : 1 - (t - _rise) / (1 - _rise);
           final a = Curves.easeOut.transform(e.clamp(0.0, 1.0)) * strength;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: const Alignment(0, -0.15),
-                radius: 1.0,
-                colors: [
-                  const Color(0x00000000),
-                  Palette.danger.withValues(alpha: a * 0.55),
-                ],
-                stops: const [0.42, 1],
+          // 立ち上がりに1回だけ、画面全体を薄く赤に沈める。縁だけだと
+          // 目の端に流れてしまうので、最初の一瞬だけ視界の真ん中にも置く。
+          final wash = t < _rise * 2
+              ? (1 - (t / (_rise * 2))) * strength * 0.18
+              : 0.0;
+          return Stack(
+            children: [
+              if (wash > 0)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Palette.danger.withValues(alpha: wash),
+                  ),
+                ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0, -0.15),
+                      // 縁を厚く取る。薄い輪だと画面の外に逃げて見えない。
+                      radius: 0.92,
+                      colors: [
+                        const Color(0x00000000),
+                        Palette.danger.withValues(alpha: a * 0.45),
+                        Palette.danger.withValues(alpha: a * 0.95),
+                      ],
+                      stops: const [0.28, 0.66, 1],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: const SizedBox.expand(),
+            ],
           );
         },
       ),

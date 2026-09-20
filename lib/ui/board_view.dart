@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,15 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final List<_Popup> _popups = <_Popup>[];
   final List<_ChainFlash> _flashes = <_ChainFlash>[];
   final List<_Bolt> _bolts = <_Bolt>[];
+
+  /// 敵が殴りかかったときの爪痕。敵1体につき1つ。
+  final List<_Slash> _slashes = <_Slash>[];
+
+  /// ブロックが殴りかかった回数。増えたフレームで突き出す。
+  final Map<int, int> _strikes = <int, int>{};
+
+  /// 盤面が詰んでから敵が殴りかかるまでの間を計る。
+  Timer? _strikeTimer;
 
   /// 敵の id ごとの「討たれずに残った回数」。値が変わったフレームで
   /// そのブロックを揺らす。消えずに残ったことを、その場で伝えるため。
@@ -62,6 +72,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _strikeTimer?.cancel();
     _ticker.dispose();
     super.dispose();
   }
@@ -145,6 +156,13 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// 新しいタイルが降ってきて順番が埋もれるが、長いと手が止まって間延びする。
   static const Duration _settleTail = Duration(milliseconds: 225);
 
+  /// 盤面が詰んでから敵が殴りかかるまでの間。
+  ///
+  /// 消した瞬間に反撃が始まると、**自分の手と相手の手が重なって読めない**。
+  /// 詰んだ盤面を一拍見せてから殴らせる。制圧したときの [_clearPause]
+  /// （300ms）より少し長く取ってあるのは、こちらは敵の動きが続くため。
+  static const Duration _strikePause = Duration(milliseconds: 420);
+
   void _onPanEnd(DragEndDetails d) {
     final result = widget.controller.commitPath();
     if (result == null) return;
@@ -210,6 +228,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     Future<void>.delayed(stagger * (result.length - 1) + _settleTail, () {
       if (!mounted) return;
       widget.controller.settle();
+      _scheduleFoeStrike();
     });
 
     // なぞった線が、弾ける位置に合わせて先頭から焼き切れていく。
@@ -260,6 +279,60 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     _shakeTime = 0;
     _ensureTicking();
     setState(() {});
+  }
+
+  /// 盤面が詰んだあと、間を置いて敵に殴らせる。
+  void _scheduleFoeStrike() {
+    _strikeTimer?.cancel();
+    if (!widget.controller.isStriking) return;
+    _strikeTimer = Timer(_strikePause, () {
+      if (!mounted || !widget.controller.isStriking) return;
+      _foeStrike(widget.controller.board.foeCells);
+      widget.controller.strike();
+    });
+  }
+
+  /// 敵が殴りかかった瞬間。**殴った敵そのものの上で鳴らす。**
+  ///
+  /// 画面全体を赤くするだけだと、誰に殴られたのか分からない。残っている敵を
+  /// 1体ずつ突き出させ、その上に爪痕と赤い飛沫を出す。盤面を見ている目に、
+  /// どの敵がまだ生きているかがそのまま焼き付く。
+  void _foeStrike(List<Cell> cells) {
+    final board = widget.controller.board;
+    for (final cell in cells) {
+      final at = _centerOf(cell);
+      final tile = board.tileAt(cell);
+      if (tile != null) {
+        _strikes[tile.id] = (_strikes[tile.id] ?? 0) + 1;
+      }
+      _slashes.add(_Slash(id: _seq++, center: at));
+      _particles.burst(at, Palette.danger, count: 20, power: _cell * 6.0);
+      _particles.shockwave(
+        at,
+        Palette.danger,
+        radius: _cell * 1.8,
+        life: 0.45,
+        width: 6,
+      );
+      _particles.shockwave(
+        at,
+        Colors.white,
+        radius: _cell * 0.9,
+        life: 0.26,
+        width: 3,
+      );
+    }
+    if (cells.isEmpty) return;
+    // 盤面ごと赤に振る。鎖の演出（相の色）とは別物だと一目で分かる。
+    _screenFlash = 0.34;
+    _screenFlashColor = Palette.danger;
+    _frameGlow = 1.0;
+    _frameColor = Palette.danger;
+    _shake = max(_shake, 26.0);
+    _shakeTime = 0;
+    HapticFeedback.heavyImpact();
+    _ensureTicking();
+    if (mounted) setState(() {});
   }
 
   /// 雷が落ちた瞬間。盤面ごと金に光らせて、鎖の演出と別物だと見せる。
@@ -503,6 +576,31 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
+                // 爪痕は敵のマスの上に重ねる。盤の外へはみ出さない。
+                for (final slash in _slashes)
+                  Positioned.fill(
+                    key: ValueKey('slash-${slash.id}'),
+                    child: IgnorePointer(
+                      child: ClipPath(
+                        clipper: _BoardClipper(
+                          left: _originX - cell * 0.12,
+                          top: _originY - cell * 0.12,
+                          width: boardW + cell * 0.24,
+                          height: boardH + cell * 0.24,
+                          radius: cell * 0.45,
+                        ),
+                        child: _SlashView(
+                          center: slash.center,
+                          cell: cell,
+                          seed: slash.id,
+                          onDone: () {
+                            _slashes.removeWhere((x) => x.id == slash.id);
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
                 // 粒と輪は盤面の中に閉じ込める。外に出るとヘッダーの上を
                 // 横切って、何が起きたのか読み取れなくなる。
                 Positioned.fill(
@@ -590,6 +688,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
               willFell: controller.willFell(at),
               willHurt: controller.willHurt(at),
               resistCount: _resists[tile.id] ?? 0,
+              strikeCount: _strikes[tile.id] ?? 0,
             ),
           ),
         );
@@ -631,6 +730,136 @@ class _BoardClipper extends CustomClipper<Path> {
       old.width != width ||
       old.height != height ||
       old.radius != radius;
+}
+
+/// 敵が殴りかかったときの爪痕。
+class _Slash {
+  _Slash({required this.id, required this.center});
+
+  final int id;
+  final Offset center;
+}
+
+/// 敵のマスの上を走る爪痕。3本の斜線が一気に引かれて、すぐ薄れる。
+///
+/// 粒と輪だけだと「何かが弾けた」までしか伝わらない。線に向きがあると、
+/// **こちらが殴られた**という向きが出る。
+class _SlashView extends StatefulWidget {
+  const _SlashView({
+    required this.center,
+    required this.cell,
+    required this.seed,
+    required this.onDone,
+  });
+
+  final Offset center;
+  final double cell;
+
+  /// 傾きを1体ずつ散らす種。全部同じ向きだと模様に見える。
+  final int seed;
+
+  final VoidCallback onDone;
+
+  @override
+  State<_SlashView> createState() => _SlashViewState();
+}
+
+class _SlashViewState extends State<_SlashView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _c.addStatusListener((s) {
+      if (s == AnimationStatus.completed) widget.onDone();
+    });
+    _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) => CustomPaint(
+        painter: _SlashPainter(
+          center: widget.center,
+          cell: widget.cell,
+          t: _c.value,
+          angle: -0.9 + (widget.seed % 5) * 0.12,
+        ),
+      ),
+    );
+  }
+}
+
+class _SlashPainter extends CustomPainter {
+  const _SlashPainter({
+    required this.center,
+    required this.cell,
+    required this.t,
+    required this.angle,
+  });
+
+  final Offset center;
+  final double cell;
+  final double t;
+  final double angle;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 引き切るのは前半。後半は薄れるだけ。
+    const draw = 0.38;
+    final grow = Curves.easeOutCubic.transform((t / draw).clamp(0.0, 1.0));
+    final fade = t < draw ? 1.0 : 1 - (t - draw) / (1 - draw);
+    if (fade <= 0) return;
+
+    final dir = Offset(cos(angle), sin(angle));
+    final perp = Offset(-dir.dy, dir.dx);
+    final half = cell * 0.95 * grow;
+
+    for (var i = -1; i <= 1; i++) {
+      // 真ん中を長く太く。爪の形に見える。
+      final k = i == 0 ? 1.0 : 0.72;
+      final at = center + perp * (i * cell * 0.30);
+      final a = at - dir * half * k;
+      final b = at + dir * half * k;
+      canvas.drawLine(
+        a,
+        b,
+        Paint()
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = cell * 0.13 * k
+          ..color = Palette.danger.withValues(alpha: 0.55 * fade)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * 0.10),
+      );
+      canvas.drawLine(
+        a,
+        b,
+        Paint()
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = cell * 0.055 * k
+          ..color = Color.lerp(
+            Colors.white,
+            Palette.danger,
+            0.35,
+          )!.withValues(alpha: fade),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SlashPainter old) => old.t != t || old.center != center;
 }
 
 /// なぞった線を白く光らせてから消す演出のデータ。
@@ -1035,6 +1264,7 @@ class TileWidget extends StatefulWidget {
     required this.willFell,
     required this.willHurt,
     required this.resistCount,
+    required this.strikeCount,
   });
 
   final Tile tile;
@@ -1054,6 +1284,10 @@ class TileWidget extends StatefulWidget {
   /// 増えたフレームで揺らす。
   final int resistCount;
 
+  /// このブロックが殴りかかった回数。増えたフレームで突き出す。
+  /// 数えているのは回数で、量ではない。同じ痛手が続けて来ても必ず動く。
+  final int strikeCount;
+
   @override
   State<TileWidget> createState() => _TileWidgetState();
 }
@@ -1062,6 +1296,7 @@ class _TileWidgetState extends State<TileWidget>
     with TickerProviderStateMixin {
   late final AnimationController _entry;
   late final AnimationController _resist;
+  late final AnimationController _strike;
 
   @override
   void initState() {
@@ -1073,6 +1308,10 @@ class _TileWidgetState extends State<TileWidget>
     _resist = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 420),
+    );
+    _strike = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
     );
     if (widget.fresh) {
       _entry.forward();
@@ -1087,12 +1326,16 @@ class _TileWidgetState extends State<TileWidget>
     if (widget.resistCount != old.resistCount) {
       _resist.forward(from: 0);
     }
+    if (widget.strikeCount != old.strikeCount) {
+      _strike.forward(from: 0);
+    }
   }
 
   @override
   void dispose() {
     _entry.dispose();
     _resist.dispose();
+    _strike.dispose();
     super.dispose();
   }
 
@@ -1160,19 +1403,27 @@ class _TileWidgetState extends State<TileWidget>
     );
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_entry, _resist]),
+      animation: Listenable.merge([_entry, _resist, _strike]),
       builder: (context, child) {
         final e = Curves.easeOutCubic.transform(_entry.value);
         // 耐えたときの横揺れ。減衰する正弦で「弾かれずに踏みとどまった」感じを出す。
         final r = _resist.isAnimating || _resist.value > 0
             ? sin(_resist.value * pi * 6) * (1 - _resist.value) * size * 0.16
             : 0.0;
+        // 殴りかかる動き。素早く手前に踏み込んで、ゆっくり戻る。
+        // 引きを速くすると、ただ震えただけに見えて殴ったと読めない。
+        final st = _strike.value;
+        final jab = st == 0 || st == 1
+            ? 0.0
+            : st < 0.22
+            ? Curves.easeOutCubic.transform(st / 0.22)
+            : 1 - Curves.easeInOutCubic.transform((st - 0.22) / 0.78);
         // 落ちている間だけ縦に伸ばす。着地で 1.0 に戻るので跳ねて見える。
         return Transform.translate(
-          offset: Offset(r, (1 - e) * -size * 2.6),
+          offset: Offset(r, (1 - e) * -size * 2.6 + jab * size * 0.26),
           child: Transform.scale(
-            scaleX: 1 - (1 - e) * 0.16,
-            scaleY: 1 + (1 - e) * 0.28,
+            scaleX: 1 - (1 - e) * 0.16 + jab * 0.16,
+            scaleY: 1 + (1 - e) * 0.28 + jab * 0.16,
             child: Opacity(opacity: e.clamp(0.0, 1.0), child: child),
           ),
         );
