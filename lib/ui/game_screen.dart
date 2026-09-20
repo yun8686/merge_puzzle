@@ -104,6 +104,17 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() => _controller.restart();
 
+  /// 能力を開いている魔導士。null なら閉じている。
+  ///
+  /// **潜っている最中に能力を確かめる道はここしか無い。** 名簿は拠点にあって
+  /// 途中では開けないので、無いと「誰を連れてきたか」は姿で分かるのに
+  /// 「何をする人か」が確かめられない。
+  MageKind? _inspecting;
+
+  void _inspect(Mage mage) => setState(() => _inspecting = mage.kind);
+
+  void _closeInspect() => setState(() => _inspecting = null);
+
   /// 中断の確かめを出しているか。
   ///
   /// **押してすぐには帰さない。** 潜っている途中の体力も戦果もここで打ち切られ、
@@ -195,6 +206,7 @@ class _GameScreenState extends State<GameScreen> {
                           healed: _controller.lastHealed,
                           hit: _controller.lastHit,
                           hitTick: _controller.hitTick,
+                          onInspect: _inspect,
                         ),
                         Expanded(
                           child: Padding(
@@ -246,6 +258,16 @@ class _GameScreenState extends State<GameScreen> {
                         controller: _controller,
                         onRestart: _restart,
                         onLeave: _reportsHome ? _leaveDefeated : null,
+                      ),
+                    // いちばん上。決着の覆いが出ている間も閉じられる。
+                    if (_inspecting != null)
+                      _MageSheet(
+                        party: _controller.party,
+                        kind: _inspecting!,
+                        onSelect: (kind) => setState(
+                          () => _inspecting = kind,
+                        ),
+                        onClose: _closeInspect,
                       ),
                   ],
                 );
@@ -698,38 +720,56 @@ class _IconAction extends StatelessWidget {
 /// 決着画面の共通の器。暗幕と、その中央のパネル。
 /// 中身が縦に伸びても画面から溢れないように、常にスクロールできるようにしてある。
 class _Curtain extends StatelessWidget {
-  const _Curtain({required this.children});
+  const _Curtain({required this.children, this.onDismiss});
 
   final List<Widget> children;
+
+  /// 覆いの外を押したときに呼ぶ。決着の覆いは押して消えては困るので既定は
+  /// null。**閉じられるのは、閉じても何も失われない覆いだけ。**
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: ColoredBox(
-          color: const Color(0xCC07070F),
-          // 中身が短いときは中央に置き、伸びたときだけスクロールさせる。
-          // 素の SingleChildScrollView では高さが無制限になり、Center が
-          // 縮んで上に張り付いてしまう。
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 20,
-                    ),
-                    child: Center(
-                      child: DecoratedBox(
-                        decoration: panelDecoration(radius: 26),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: children,
+      child: GestureDetector(
+        // onTap が null のときは認識器を置かないので、決着の覆いの当たり方は
+        // 今までと変わらない。
+        behavior: onDismiss == null
+            ? HitTestBehavior.deferToChild
+            : HitTestBehavior.opaque,
+        onTap: onDismiss,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: ColoredBox(
+            color: const Color(0xCC07070F),
+            // 中身が短いときは中央に置き、伸びたときだけスクロールさせる。
+            // 素の SingleChildScrollView では高さが無制限になり、Center が
+            // 縮んで上に張り付いてしまう。
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 20,
+                      ),
+                      child: Center(
+                        // 札そのものを押しても閉じない。中の切り替えを押す
+                        // つもりで外したときに消えると、読み直せない。
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {},
+                          child: DecoratedBox(
+                            decoration: panelDecoration(radius: 26),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: children,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1276,6 +1316,7 @@ class _PartyBar extends StatelessWidget {
     required this.healed,
     required this.hit,
     required this.hitTick,
+    required this.onInspect,
   });
 
   final Party party;
@@ -1289,6 +1330,9 @@ class _PartyBar extends StatelessWidget {
 
   /// 痛手を受けた回数。[_HitTag] がこれを見て出方を流し直す。
   final int hitTick;
+
+  /// 姿を押したときに開く。能力を確かめる道はここしか無い。
+  final ValueChanged<Mage> onInspect;
 
   @override
   Widget build(BuildContext context) {
@@ -1346,7 +1390,11 @@ class _PartyBar extends StatelessWidget {
               for (final mage in party.members)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
-                  child: _MageChip(mage: mage),
+                  child: _MageChip(
+                    key: ValueKey('party-${mage.kind.name}'),
+                    mage: mage,
+                    onTap: () => onInspect(mage),
+                  ),
                 ),
             ],
           ),
@@ -1401,27 +1449,145 @@ class _LifeBar extends StatelessWidget {
 }
 
 /// 一党に並ぶ魔導士。色はその魔導士が見ている相。
+///
+/// **押すと能力が開く**（[_MageSheet]）。指で遊ぶので、被せの札
+/// （[Tooltip]）だけでは長押ししないと出ず、あることに気付けない。
 class _MageChip extends StatelessWidget {
-  const _MageChip({required this.mage});
+  const _MageChip({
+    super.key,
+    required this.mage,
+    required this.onTap,
+    this.selected = false,
+  });
 
   final Mage mage;
+  final VoidCallback onTap;
+
+  /// いま開いている魔導士。切り替えの列で、どれを見ているかを示す。
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final tint = Palette.mageColor(mage.kind);
     return Tooltip(
       message: '${mage.name}／${mage.effect}',
-      child: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Color.alphaBlend(tint.withValues(alpha: 0.18), Palette.panel),
-          shape: BoxShape.circle,
-          border: Border.all(color: tint.withValues(alpha: 0.6)),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Color.alphaBlend(
+              tint.withValues(alpha: selected ? 0.4 : 0.18),
+              Palette.panel,
+            ),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: tint.withValues(alpha: selected ? 1 : 0.6),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: MagePortrait(kind: mage.kind, size: 21),
         ),
-        child: MagePortrait(kind: mage.kind, size: 21),
       ),
+    );
+  }
+}
+
+/// 連れている魔導士1人の詳細。一党の帯の姿を押すと開く。
+///
+/// **潜っている最中に能力を確かめられる唯一の場所。** 名簿は拠点にあって
+/// 途中では開けないので、ここが無いと「誰を連れてきたか」は姿で分かるのに
+/// 「何をする人か」が確かめられない。
+///
+/// **開いたまま他の顔ぶれへ移れる。** 下に連れている全員を並べてあるので、
+/// 焔と烈火のどちらが何枚で乗るのかを、閉じて開き直さずに見比べられる。
+///
+/// 覆いで盤面を隠すのは、ここが手を選ぶ場面ではないから。読むあいだ盤面を
+/// 半端に透かすより、読み終えて閉じたときに元の盤面がそのまま出るほうがよい。
+class _MageSheet extends StatelessWidget {
+  const _MageSheet({
+    required this.party,
+    required this.kind,
+    required this.onSelect,
+    required this.onClose,
+  });
+
+  final Party party;
+
+  /// いま開いている魔導士。
+  final MageKind kind;
+
+  final ValueChanged<MageKind> onSelect;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final mage = Mage.of(kind);
+    final tint = Palette.mageColor(kind);
+    return _Curtain(
+      onDismiss: onClose,
+      children: [
+        MagePortrait(kind: kind, size: 64),
+        const SizedBox(height: 12),
+        Text(mage.name, style: AppFont.number(22, color: tint)),
+        const SizedBox(height: 12),
+        // 相は呼び名より先に色で読む。盤面のマスと同じ小片を並べる。
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhaseSwatch(phase: mage.phase, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              '${mage.phase.label}の相',
+              style: const TextStyle(
+                color: Palette.textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Text('能力', style: AppFont.label(10, color: Palette.gold)),
+        const SizedBox(height: 8),
+        Text(
+          mage.effect,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Palette.textPrimary,
+            fontSize: 14,
+            height: 1.6,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 20),
+        // この1人がどれだけ厚みを出しているか。合計しか帯に出ていないので、
+        // 誰を連れてきたから 135 なのかはここでしか読めない。
+        _ResultRow(label: 'この人の体力', value: '${mage.hp}'),
+        const SizedBox(height: 8),
+        _ResultRow(label: '一党の体力', value: '${party.hp} / ${party.maxHp}'),
+        const SizedBox(height: 22),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final other in party.members)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: _MageChip(
+                  key: ValueKey('sheet-${other.kind.name}'),
+                  mage: other,
+                  selected: other.kind == kind,
+                  onTap: () => onSelect(other.kind),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _PlainButton(label: '閉じる', onTap: onClose),
+      ],
     );
   }
 }

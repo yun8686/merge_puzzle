@@ -327,6 +327,35 @@ void main() {
     expect(portraitOf(MageKind.storm), findsNothing, reason: '連れていない');
   });
 
+  testWidgets('一党の姿を押すと能力が開き、連れている全員を見比べられる', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameScreen(
+          controller: GameController(rng: Random(1), roster: emberPair),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // 潜っている最中に能力を確かめる道はここしか無い（名簿は拠点にある）。
+    expect(find.text(Mage.ember.effect), findsNothing, reason: '押すまでは出ない');
+
+    await tester.tap(find.byKey(const ValueKey('party-ember')));
+    await tester.pump();
+    expect(find.text(Mage.ember.name), findsOneWidget);
+    expect(find.text(Mage.ember.effect), findsOneWidget);
+
+    // 閉じて開き直さずに、もう1人へ移れる。
+    await tester.tap(find.byKey(const ValueKey('sheet-rime')));
+    await tester.pump();
+    expect(find.text(Mage.rime.effect), findsOneWidget);
+    expect(find.text(Mage.ember.effect), findsNothing);
+
+    await tester.tap(find.text('閉じる'));
+    await tester.pump();
+    expect(find.text(Mage.rime.effect), findsNothing);
+  });
+
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
     var id = 0;
