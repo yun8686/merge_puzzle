@@ -449,7 +449,13 @@ void main() {
             child: SizedBox(
               width: 300,
               height: 400,
-              child: BoardView(controller: controller),
+              // BoardView は controller を購読しない。本番と同じく、外側が
+              // 同じ通知で描き直す。包まずに置くと showHint しても盤面が
+              // 描き直されず、お手本が出ているかを見られない。
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) => BoardView(controller: controller),
+              ),
             ),
           ),
         ),
@@ -462,14 +468,11 @@ void main() {
     await tester.pump();
 
     // 指はタイルより後に積む。先に積むと不透明なタイルに隠れて出てこない。
-    final stack = tester.widget<Stack>(
-      find
-          .ancestor(
-            of: find.byKey(const ValueKey('hint-path')),
-            matching: find.byType(Stack),
-          )
-          .first,
-    );
+    final stack = tester
+        .widgetList<Stack>(find.byType(Stack))
+        .firstWhere(
+          (s) => s.children.any((w) => w.key == const ValueKey('hint-path')),
+        );
     final kids = stack.children;
     final hintAt = kids.indexWhere((w) => w.key == const ValueKey('hint-path'));
     final lastTile = kids.lastIndexWhere(
