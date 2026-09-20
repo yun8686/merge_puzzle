@@ -155,15 +155,16 @@ void main() {
         .where((c) => controller.board.tileAt(c)!.isFoe)
         .length;
     expect(onRoute, 2, reason: '道が敵を2体通っている');
+    // この稽古に体力持ちは混ぜない。片方だけ残ると、なぜ残ったのか分からない。
+    expect(toughFoe(controller.board), isNull);
 
     // 3つ目の稽古までに1体討っているので、増えたぶんを数える。
     final felled = controller.felledWards.length;
     traceRoute(controller);
     await tester.pump();
 
-    // **2体とも討ち取れる。** 片方だけ残ると、なぜ残ったのか分からない。
+    // 2体とも討ち取れる。体力の話は、次の稽古で1体だけを相手にする。
     expect(controller.felledWards.length - felled, 2);
-    expect(toughFoe(controller.board), isNull, reason: '体力持ちは混ぜない');
     expect(find.textContaining('体力を2つ持っている'), findsOneWidget);
   });
 
