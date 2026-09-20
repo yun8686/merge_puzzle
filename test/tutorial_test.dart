@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:parity_chain/game/progress.dart';
 import 'package:parity_chain/ui/tutorial.dart';
 
 import 'home_screen_test.dart' show openBase;
