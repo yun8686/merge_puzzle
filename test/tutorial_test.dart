@@ -143,19 +143,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('なぞり始めると消え、手が止まるとまた出る', (tester) async {
+  testWidgets('なぞっている間だけ消え、離せばまた出る', (tester) async {
     final controller = newController();
     await open(tester, controller);
     paintCheckerboard(controller.board);
     await tester.pump();
+    expect(controller.hintPath, isNotEmpty);
 
+    // 自分の指と重なると読めないので、なぞっている間は引っ込む。
     controller.beginPath(const Cell(0, 0));
     expect(controller.hintPath, isEmpty);
-
-    // 2手目からは手が止まってから。すぐ出し直すと自分で探す気が失せる。
-    await tester.pump(const Duration(seconds: 3));
+    controller.extendPath(const Cell(0, 1));
     expect(controller.hintPath, isEmpty);
-    await tester.pump(const Duration(seconds: 4));
+
+    // 離せば戻る。稽古場は覚えるための場所なので、待たせない。
+    play(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+    await tester.pump();
     expect(controller.hintPath, isNotEmpty);
   });
 

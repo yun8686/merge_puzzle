@@ -71,17 +71,11 @@ class _Lesson {
 class _TutorialScreenState extends State<TutorialScreen> {
   late final GameController _controller;
   late final bool _ownsController;
-  Timer? _idle;
   Timer? _cheer;
   int _at = 0;
 
   /// 課題が変わった直後だけ出す「できた」。
   bool _cheering = false;
-
-  /// 手が止まってから道を光らせるまで。**開いた直後だけは待たない。**
-  /// 1手目は何をどうなぞるのかが分からないので、探す気が失せるより先に
-  /// 手が止まる。2手目からは、止まったときだけ出す。
-  static const Duration _hintAfter = Duration(seconds: 6);
 
   static final List<_Lesson> _lessons = [
     _Lesson(
@@ -129,32 +123,41 @@ class _TutorialScreenState extends State<TutorialScreen> {
           roster: const [Mage.squireHeat, Mage.squireCold],
         );
     _controller.addListener(_check);
-    // 開いた瞬間にお手本を出す。盤面が組み上がってからでないと道が引けない
-    // ので、最初の1枚を描き終えてから。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _finished) return;
-      _controller.showHint();
-    });
-    _restartIdle();
+    // 開いた瞬間から出す。盤面が組み上がってからでないと道が引けないので、
+    // 最初の1枚を描き終えてから。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _keepHint());
   }
 
   @override
   void dispose() {
-    _idle?.cancel();
     _cheer?.cancel();
     _controller.removeListener(_check);
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
-  /// 手が止まったら道を光らせる。動かすたびに数え直す。
-  void _restartIdle() {
-    _idle?.cancel();
-    if (_finished) return;
-    _idle = Timer(_hintAfter, () {
-      if (!mounted || _finished || !_controller.acceptsInput) return;
-      _controller.showHint();
-    });
+  /// 稽古場ではお手本を出しっぱなしにする。ここは覚えるための場所なので、
+  /// 道を隠して考えさせる理由がない。なぞり始めれば消え（`beginPath`）、
+  /// 指が離れてまた打てるようになれば戻る。
+  ///
+  /// 1度の通知につき1回しか出し直さない。[GameController.showHint] は道が
+  /// 見つからなくても知らせるので、見つからないまま呼び続けると止まらなく
+  /// なる。[_showingHint] はそのための歯止め。
+  bool _showingHint = false;
+
+  void _keepHint() {
+    if (_showingHint || !mounted) return;
+    // 通し終えたら片付ける。終いの言葉の裏で指が回り続ける理由はない。
+    if (_finished) {
+      _controller.clearHint();
+      return;
+    }
+    // なぞっている最中に出すと、自分の指と重なって読めない。
+    if (!_controller.acceptsInput || _controller.path.isNotEmpty) return;
+    if (_controller.hintPath.isNotEmpty) return;
+    _showingHint = true;
+    _controller.showHint();
+    _showingHint = false;
   }
 
   void _check() {
@@ -192,7 +195,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
         });
       }
     }
-    _restartIdle();
+    _keepHint();
   }
 
   @override
