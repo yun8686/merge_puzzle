@@ -47,11 +47,10 @@ void main() {
   group('拠点から出す', () {
     testWidgets('初回だけ出る', (tester) async {
       final store = await openBase(tester, taught: false);
-      await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('鎖を編む'), findsOneWidget);
 
       await tester.tap(find.text('とばす'));
-      await tester.pumpAndSettle();
+      await settle(tester);
       expect(find.text('鎖を編む'), findsNothing);
 
       // 印が記録に残るので、二度目からは出ない。

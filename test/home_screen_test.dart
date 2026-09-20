@@ -46,7 +46,14 @@ Future<MemoryProgressStore> openBase(
   await tester.pumpWidget(
     MaterialApp(home: HomeScreen(key: UniqueKey(), store: store)),
   );
-  await tester.pumpAndSettle();
+  if (taught) {
+    await tester.pumpAndSettle();
+  } else {
+    // 案内が出る経路では settle まで進めない。鎖が編まれる絵が repeat で
+    // 回り続けるので、止まらないまま待つことになる。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
   return store;
 }
 
