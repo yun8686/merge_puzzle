@@ -52,7 +52,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
-| `tools/sim/` | 継ぎ方の決まりの難易度を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
+| `tools/sim/` | 継ぎ方の決まりの難易度（`chain_length.py`）と、1本の潜りで浴びる痛手（`damage.py`）を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
 | `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
@@ -126,8 +126,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 **`Board.attackFor` と `Party.startingHp` は対で動かすこと。** 階層あたりの痛手は
 「攻撃力の合計 × その階層に使った手数」で積み上がるので、片方だけ変えると桁が
-合わなくなる（README 第9段階に見積もりがある。ただしその見積もりは祝福があった
-頃のもので、**いまは道中で戻る手立てが氷雨の回復だけ**）。
+合わなくなる。**見積もりは手で書かない。** `python3 tools/sim/damage.py` が
+`dungeon.dart` を読んで出す（README 第9段階の表はこれ）。いま道中で戻る手立ては
+氷雨の回復だけなので、深いダンジョンはそこも込みで見ること。
 
 一党は**潜る前に決まり、道中では何も増えない**。制圧しても増えるものは無く、
 体力も階層をまたいで戻らない（戻すのは氷雨の回復だけ）。ここを緩めると編成が
