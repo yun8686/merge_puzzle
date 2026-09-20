@@ -191,8 +191,9 @@ void main() {
     expect(hurt, isNotNull);
     expect(controller.board.tileAt(hurt!)!.hp, 1, reason: '傷が残る');
     expect(find.textContaining('つけた傷はそのまま残る'), findsOneWidget);
-    // 同じ道が戻ってくる。同じ手が二度目で通ることが、そのまま証しになる。
-    expect(controller.lockedPath, route);
+    // 次の道は形が違う。同じなのは道ではなく、当てる敵のほう。
+    expect(controller.lockedPath, contains(hurt));
+    expect(controller.lockedPath, isNot(route));
 
     traceRoute(controller);
     await tester.pump();

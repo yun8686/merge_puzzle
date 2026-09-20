@@ -35,13 +35,14 @@ import 'theme.dart';
 /// 3. **守りを破る** … マスの数字は越えるべき線。守り3を討つ
 /// 4. **まとめて当てる** … 1本の鎖は通った敵すべてに当たる。2体とも討つ
 /// 5. **体力のある敵** … 守りは破れても討てない1体。粒が残りの体力
-/// 6. **削り切る** … 同じ道をもう一度。**つけた傷は残っている**
+/// 6. **削り切る** … **同じ敵にもう一度**。つけた傷は残っている
 /// 7. **毎ターンの反撃** … 敵は毎手殴ってくる。残りを討ち果たす
 ///
 /// **一度に1つだけ新しくする。** 4 で通る2体は守りも体力も同じにしてあり、
 /// 2体とも討ち取れる。ここに体力持ちを混ぜると、片方だけ残った理由が
 /// 分からないまま「まとめて当たった」ことまで疑わしくなる。体力の話は
-/// 5・6 で、1体だけを相手に、**同じ道を二度なぞらせて**見せる。
+/// 5・6 で、1体だけを相手に、**同じ敵へ二度当てさせて**見せる（道は横から
+/// 縦へ変える。同じなのは道ではなく敵のほう）。
 ///
 /// 盤面で試せないことだけ、終いの画面で言い添える（[_DiveNote] は階層と
 /// 手数、[_PartyNote] は編成）。手数切れの痛手は**わざと味わわせない**。
@@ -179,18 +180,34 @@ class _TutorialScreenState extends State<TutorialScreen> {
     for (var c = from; c <= to; c++) Cell(r, c),
   ];
 
-  /// 体力を持つ敵を通る、5枚の道。**「体力のある敵」と「削り切る」で同じ道を
-  /// 引く。** 同じ手が二度目で通ることが、そのまま「傷は残る」の証しになる。
-  ///
-  /// その敵は前の稽古の重力で落ちていることがあるので、位置は盤面に訊く。
-  /// 列は6つ、道は5枚なので、窓をどちらかに寄せれば必ずその敵を含められる。
-  static List<Cell> _finishOff(Board board) {
-    final at = board.foeCells.firstWhere(
-      (c) => board.tileAt(c)!.maxHp > 1,
-      orElse: () => board.foeCells.first,
-    );
+  /// 縦に1列ぶんの道。横と同じで、市松なら必ず成立する。
+  static List<Cell> _col(int c, int from, int to) => [
+    for (var r = from; r <= to; r++) Cell(r, c),
+  ];
+
+  /// 体力を持つ敵。前の稽古の重力で落ちていることがあるので、位置は盤面に訊く。
+  static Cell _toughFoe(Board board) => board.foeCells.firstWhere(
+    (c) => board.tileAt(c)!.maxHp > 1,
+    orElse: () => board.foeCells.first,
+  );
+
+  /// その敵を**横から**通る5枚（「体力のある敵」）。列は6つ、道は5枚なので、
+  /// 窓をどちらかに寄せれば必ずその敵を含められる。
+  static List<Cell> _acrossTough(Board board) {
+    final at = _toughFoe(board);
     final from = (at.col - 2).clamp(0, board.cols - 5);
     return _row(at.row, from, from + 4);
+  }
+
+  /// 同じ敵を**縦から**通る5枚（「削り切る」）。
+  ///
+  /// **道はわざと変えてある。** 教えたいのは「同じ道をもう一度なぞる」こと
+  /// ではなく「**同じ敵にもう一度当てる**」ことなので、同じ形を出すと道の
+  /// ほうを覚え直しているように見える。通る敵だけが同じ。
+  static List<Cell> _downTough(Board board) {
+    final at = _toughFoe(board);
+    final from = (at.row - 2).clamp(0, board.rows - 5);
+    return _col(at.col, from, from + 4);
   }
 
   late final List<_Lesson> _lessons = switch (widget.course) {
@@ -257,16 +274,16 @@ class _TutorialScreenState extends State<TutorialScreen> {
         _Foe(Cell(4, 3), TutorialScreen.toughWard, hp: 2),
         _Foe(Cell(0, 0), 3),
       ],
-      route: _finishOff,
+      route: _acrossTough,
     ),
     _Lesson(
       label: '削り切る',
       text: '**つけた傷はそのまま残る。**\n'
           '粒が1つ減っているはず。\n'
-          'もう一度同じ道をなぞって、討ち取ろう。',
+          '同じ敵にもう一度当てて、討ち取ろう。',
       // 敵は置き直さない。さっき傷をつけた敵が、そのまま教材になる。
-      // 道も同じ形に戻るので、**同じ手が二度目で通る**ことが分かる。
-      route: _finishOff,
+      // 道は縦に変えてある。同じなのは道ではなく敵のほう。
+      route: _downTough,
     ),
     _Lesson(
       label: '毎ターンの反撃',
