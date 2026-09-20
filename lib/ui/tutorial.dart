@@ -36,7 +36,14 @@ import 'theme.dart';
 /// 4. **まとめて当てる** … 1本の鎖は通った敵すべてに当たる。2体とも討つ
 /// 5. **体力のある敵** … 守りは破れても討てない1体。粒が残りの体力
 /// 6. **削り切る** … **同じ敵にもう一度**。つけた傷は残っている
-/// 7. **毎ターンの反撃** … 敵は毎手殴ってくる。残りを討ち果たす
+/// 7. **一撃で討つ** … 守りを上回るほど深く削れる。威力6なら体力2も一撃
+/// 8. **届かないとき** … 守り8には弾かれる。**それでもマナは消える**
+/// 9. **並びを変えて討つ** … 降りてきたマスで8枚つながる。討ち取る
+/// 10. **毎ターンの反撃** … 敵は毎手殴ってくる。残りを討ち果たす
+///
+/// 5〜7 は同じ相手（守り5・体力2）の三段。2本で削り切ってから、**同じ敵を
+/// 1本で討てる威力**を見せる。8・9 も同じ相手（守り8）の二段で、**届かない
+/// 手にも意味がある**ことと、盤面は崩せば変わることを続けて見せる。
 ///
 /// **一度に1つだけ新しくする。** 4 で通る2体は守りも体力も同じにしてあり、
 /// 2体とも討ち取れる。ここに体力持ちを混ぜると、片方だけ残った理由が
@@ -78,9 +85,13 @@ class TutorialScreen extends StatefulWidget {
   /// テスト用（`GameScreen` と同じ約束）。
   final GameController? controller;
 
-  /// 1本では討ち切れない敵の守り。**「削って討つ」の教材。** 体力2なので、
-  /// 討ち取るには威力5の鎖を2本（または威力6以上の1本）要る。
+  /// 1本では討ち切れない敵の守り。**体力の稽古の教材。** 体力2なので、
+  /// 討ち取るには威力5の鎖を2本、または威力6の1本。
   static const int toughWard = 5;
+
+  /// いまの道では届かない敵の守り。**盤面を崩す稽古の教材。**
+  /// 8枚つなげば届くが、3枚では弾かれる。
+  static const int thickWard = 8;
 
   /// 稽古場の階層。**ここに書いた敵は始まりの姿でしかない。**
   ///
@@ -210,6 +221,44 @@ class _TutorialScreenState extends State<TutorialScreen> {
     return _col(at.col, from, from + 4);
   }
 
+  /// 同じ敵を、列ぜんぶ使って**6枚**で通る（「一撃で討つ」）。
+  /// 守り5に威力6なら削れるのは2つぶんなので、体力2でも1本で討ち切れる。
+  static List<Cell> _oneShotTough(Board board) {
+    final at = _toughFoe(board);
+    return _row(at.row, 0, board.cols - 1);
+  }
+
+  /// 守りのいちばん厚い敵。位置は盤面に訊く。
+  static Cell _thickFoe(Board board) {
+    var best = board.foeCells.first;
+    for (final at in board.foeCells) {
+      if (board.tileAt(at)!.ward! > board.tileAt(best)!.ward!) best = at;
+    }
+    return best;
+  }
+
+  /// その敵を通る**3枚**（「届かないとき」）。威力3では守り8に弾かれるが、
+  /// **通したマナは消える**。盤面を崩す手がこれ。
+  static List<Cell> _shortAt(Board board) {
+    final at = _thickFoe(board);
+    final from = (at.col - 1).clamp(0, board.cols - 3);
+    return _row(at.row, from, from + 2);
+  }
+
+  /// 同じ敵を通る**8枚**（「並びを変えて討つ」）。列ぜんぶを使って、足りない
+  /// ぶんは端から縦に折る。市松なので折れても成立する。
+  static List<Cell> _longRun(Board board) {
+    final at = _thickFoe(board);
+    final edge = board.cols - 1;
+    // 端から離れる向きは、盤面からはみ出さないほうを選ぶ。
+    final up = at.row >= 2;
+    return [
+      ..._row(at.row, 0, edge),
+      Cell(up ? at.row - 1 : at.row + 1, edge),
+      Cell(up ? at.row - 2 : at.row + 2, edge),
+    ];
+  }
+
   late final List<_Lesson> _lessons = switch (widget.course) {
     TutorialCourse.basics => _basics,
     TutorialCourse.prism => _prism,
@@ -284,6 +333,36 @@ class _TutorialScreenState extends State<TutorialScreen> {
       // 敵は置き直さない。さっき傷をつけた敵が、そのまま教材になる。
       // 道は縦に変えてある。同じなのは道ではなく敵のほう。
       route: _downTough,
+    ),
+    _Lesson(
+      label: '一撃で討つ',
+      text: '威力が守りを**上回るほど深く削れる**。\n'
+          '守り5に威力6なら、2つぶん。\n'
+          '6枚つないで、体力2を一撃で討とう。',
+      foes: const [
+        _Foe(Cell(4, 3), TutorialScreen.toughWard, hp: 2),
+        _Foe(Cell(0, 0), 3),
+      ],
+      route: _oneShotTough,
+    ),
+    _Lesson(
+      label: '届かないとき',
+      text: '守り8。**いまの道では届かない。**\n'
+          'それでも、通したマナのマスは消える。\n'
+          'まず消して、新しいマスを降らせよう。',
+      foes: const [
+        _Foe(Cell(4, 2), TutorialScreen.thickWard),
+        _Foe(Cell(0, 0), 3),
+      ],
+      route: _shortAt,
+    ),
+    _Lesson(
+      label: '並びを変えて討つ',
+      text: '降りてきたマスで、並びが変わった。\n'
+          '**今度は8枚つなげる。**\n'
+          '威力8なら守り8に届く。討ち取ろう。',
+      // 敵は置き直さない。さっき弾かれた敵が、そのまま相手。
+      route: _longRun,
     ),
     _Lesson(
       label: '毎ターンの反撃',
@@ -903,7 +982,7 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
     _c = AnimationController(
       vsync: this,
       // 名札を1つずつ点け、そのあと盤面で試せなかった話を2枚。
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 3400),
     )..forward();
   }
 
@@ -926,8 +1005,8 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
       builder: (context, _) {
         final veil = _stage(0, 0.08);
         final title = _stage(0.05, 0.26);
-        final dive = _stage(0.66, 0.78);
-        final party = _stage(0.78, 0.90);
+        final dive = _stage(0.68, 0.79);
+        final party = _stage(0.79, 0.90);
         final button = _stage(0.90, 1.0);
         return ColoredBox(
           color: Palette.background.withValues(alpha: 0.95 * veil),
@@ -957,7 +1036,7 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                       label: widget.learned[i],
                       // 1つずつ順に点く。全部まとめて出すと、何を覚えたのか
                       // 目が追えないまま終わる。
-                      at: _stage(0.24 + i * 0.05, 0.36 + i * 0.05),
+                      at: _stage(0.20 + i * 0.04, 0.32 + i * 0.04),
                     ),
                   const SizedBox(height: 26),
                   // 盤面では試せない話だけを、送り出す前に言い添える。

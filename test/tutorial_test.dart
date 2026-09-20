@@ -31,10 +31,18 @@ void traceRoute(GameController c) {
   c.strike();
 }
 
-/// 盤面に残っている、体力を持つ敵（＝「削って討つ」の教材）。
+/// 盤面に残っている、体力を持つ敵（＝体力の稽古の教材）。
 Cell? toughFoe(Board board) {
   for (final at in board.foeCells) {
     if (board.tileAt(at)!.maxHp > 1) return at;
+  }
+  return null;
+}
+
+/// 盤面に残っている、守りの厚い敵（＝盤面を崩す稽古の教材）。
+Cell? thickFoe(Board board) {
+  for (final at in board.foeCells) {
+    if (board.tileAt(at)!.ward == TutorialScreen.thickWard) return at;
   }
   return null;
 }
@@ -203,10 +211,70 @@ void main() {
     expect(find.textContaining('残った敵を討ち取ろう'), findsOneWidget);
   });
 
-  testWidgets('通しでなぞると終いの言葉が出る', (tester) async {
+  testWidgets('威力が守りを上回れば、体力2でも一撃で討てる', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    for (var i = 0; i < 6; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
+
+    expect(find.textContaining('一撃で討とう'), findsOneWidget);
+    final tough = toughFoe(controller.board);
+    expect(tough, isNotNull);
+    expect(controller.board.tileAt(tough!)!.hp, 2, reason: '傷のない体力2');
+    // 守り5に威力6。上回った2つぶんが削れて、体力2がそのまま尽きる。
+    expect(controller.lockedPath.length, 6);
+    expect(controller.lockedPath, contains(tough));
+
+    final felled = controller.felledWards.length;
+    traceRoute(controller);
+    await tester.pump();
+
+    expect(controller.felledWards.length - felled, 1);
+    expect(toughFoe(controller.board), isNull, reason: '1本で討ち切った');
+  });
+
+  testWidgets('届かない鎖でも、消せば並びが変わって届くようになる', (tester) async {
     final controller = newController();
     await open(tester, controller);
     for (var i = 0; i < 7; i++) {
+      traceRoute(controller);
+      await tester.pump();
+    }
+
+    // 守り8。3枚では弾かれる。
+    expect(find.textContaining('いまの道では届かない'), findsOneWidget);
+    final thick = thickFoe(controller.board);
+    expect(thick, isNotNull);
+    expect(controller.lockedPath.length, 3);
+    expect(controller.lockedPath, contains(thick));
+
+    final felled = controller.felledWards.length;
+    traceRoute(controller);
+    await tester.pump();
+
+    // 敵は無傷のまま残り、通したマナだけが消えている。
+    final still = thickFoe(controller.board);
+    expect(still, isNotNull, reason: '弾かれたので残る');
+    expect(controller.felledWards.length, felled);
+
+    // 次の稽古では、同じ敵に8枚で届く。
+    expect(find.textContaining('今度は8枚つなげる'), findsOneWidget);
+    expect(controller.lockedPath.length, 8);
+    expect(controller.lockedPath, contains(still));
+
+    traceRoute(controller);
+    await tester.pump();
+
+    expect(thickFoe(controller.board), isNull, reason: '討ち取った');
+    expect(controller.felledWards, contains(TutorialScreen.thickWard));
+  });
+
+  testWidgets('通しでなぞると終いの言葉が出る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    for (var i = 0; i < 10; i++) {
       traceRoute(controller);
       await tester.pump();
     }
@@ -226,6 +294,9 @@ void main() {
       'まとめて当てる',
       '体力のある敵',
       '削り切る',
+      '一撃で討つ',
+      '届かないとき',
+      '並びを変えて討つ',
       '毎ターンの反撃',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
