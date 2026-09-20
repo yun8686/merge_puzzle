@@ -338,16 +338,16 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// **敵の上では何も弾けさせない。** 爆発も衝撃波も、その場所が「殴られた」
   /// ことを意味してしまう。敵の上で鳴らすと、こちらが敵を攻撃したように見える。
   ///
-  /// 鳴らすのは向きだけ。敵はいったん引いてから踏み込み、そこから盤面の下端
+  /// 鳴らすのは向きだけ。敵はいったん引いてから踏み込み、そこから盤面の上端
   /// （一党の帯がある側）へ向かって筋が飛ぶ。敵が何体居ても筋は1点に集まるので、
   /// 狙われているのが誰なのかが読める。
+  ///
+  /// **向く先は一党の帯のあるほう。** 帯を盤面の下から上へ移したときは、ここも
+  /// 一緒に返すこと。逆を向くと、こちらを狙った一撃に見えない。
   void _foeWindUp(List<Cell> cells) {
     if (cells.isEmpty) return;
     final board = widget.controller.board;
-    final target = Offset(
-      _originX + _cell * board.cols / 2,
-      _originY + _cell * board.rows + _cell * 0.28,
-    );
+    final target = _partySide();
     for (final cell in cells) {
       final tile = board.tileAt(cell);
       if (tile != null) {
@@ -361,13 +361,15 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
     if (mounted) setState(() {});
   }
 
+  /// 一党の帯があるほう。盤面の上端の少し外。
+  Offset _partySide() => Offset(
+    _originX + _cell * widget.controller.board.cols / 2,
+    _originY - _cell * 0.28,
+  );
+
   /// 一撃が届いた瞬間。**弾けるのは一党の側**で、敵の上ではない。
   void _foeImpact() {
-    final board = widget.controller.board;
-    final at = Offset(
-      _originX + _cell * board.cols / 2,
-      _originY + _cell * board.rows + _cell * 0.28,
-    );
+    final at = _partySide();
     _particles.burst(at, Palette.danger, count: 26, power: _cell * 7.0);
     _particles.shockwave(
       at,

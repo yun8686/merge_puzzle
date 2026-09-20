@@ -188,6 +188,14 @@ class _GameScreenState extends State<GameScreen> {
                           movesLeft: _controller.movesLeft,
                           remainingFoes: _controller.remainingFoes,
                         ),
+                        // 体力は盤面の上。**殴られた側が盤面の上に居る**ので、
+                        // 敵の一撃もそちらへ飛ぶ（`BoardView` の `_foeWindUp`）。
+                        _PartyBar(
+                          party: _controller.party,
+                          healed: _controller.lastHealed,
+                          hit: _controller.lastHit,
+                          hitTick: _controller.hitTick,
+                        ),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -196,12 +204,6 @@ class _GameScreenState extends State<GameScreen> {
                             ),
                             child: BoardView(controller: _controller),
                           ),
-                        ),
-                        _PartyBar(
-                          party: _controller.party,
-                          healed: _controller.lastHealed,
-                          hit: _controller.lastHit,
-                          hitTick: _controller.hitTick,
                         ),
                         _Footer(
                           controller: _controller,
@@ -643,18 +645,6 @@ class _Footer extends StatelessWidget {
                       ),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          _IconAction(
-            icon: Icons.lightbulb,
-            tint: Palette.gold,
-            onTap: () {
-              controller.showHint();
-              Future<void>.delayed(
-                const Duration(milliseconds: 1600),
-                controller.clearHint,
-              );
-            },
           ),
           if (onAbort != null) ...[
             const SizedBox(width: 8),

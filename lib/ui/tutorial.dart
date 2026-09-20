@@ -656,6 +656,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
                         : _lessons[_at].text,
                     onSkip: widget.onDone,
                   ),
+                  // 目盛りは盤面の上。本番と同じ並びにしておかないと、
+                  // ここで覚えた読み方が本番で効かない（敵の一撃が飛ぶ先も
+                  // 一党の側＝盤面の上になる）。
+                  _Gauges(controller: _controller),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -666,7 +670,6 @@ class _TutorialScreenState extends State<TutorialScreen> {
                     ),
                   ),
                   _Reach(controller: _controller),
-                  _Gauges(controller: _controller),
                   const SizedBox(height: 10),
                 ],
               ),
