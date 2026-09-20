@@ -29,11 +29,18 @@ Future<void> goTab(WidgetTester tester, String label) async {
 }
 
 /// 記録を差し込んだ拠点を開く。読み込みは非同期なので settle まで進める。
+///
+/// 既定では遊び方を通した記録にする。通していないと初回の案内が覆いかぶさり、
+/// そこに repeat のアニメが居るので pumpAndSettle が止まらない。案内そのものを
+/// 見たいときだけ [taught] を下ろす。
 Future<MemoryProgressStore> openBase(
   WidgetTester tester, {
   Progress? progress,
+  bool taught = true,
 }) async {
-  final store = MemoryProgressStore(progress?.encode());
+  final seed = progress ?? Progress();
+  seed.taughtTutorial = taught;
+  final store = MemoryProgressStore(seed.encode());
   // 鍵を変えないと、同じテストで開き直したときに State が使い回されて
   // initState が走らず、前の記録が残ったままになる。
   await tester.pumpWidget(

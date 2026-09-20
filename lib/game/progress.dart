@@ -15,6 +15,7 @@ class Progress {
     Set<String>? cleared,
     List<MageKind>? party,
     this.shards = 0,
+    this.taughtTutorial = false,
   }) : // 従者は常に居る。ここが欠けると編成が組めなくなる。
        owned = <MageKind>{
          ...?owned,
@@ -59,6 +60,12 @@ class Progress {
 
   /// 魔晶。ガチャを引く元手。
   int shards;
+
+  /// 遊び方を一度通したか。**初回だけチュートリアルを出す**ための印。
+  ///
+  /// 盤面もダンジョンも読まないこの箱に置いてよいのは、これが「この人の
+  /// 記録」だから。拠点が読み込んだあとに見て、立っていなければ出す。
+  bool taughtTutorial;
 
   /// まだ持っていない魔導士。ガチャはここから引く。
   /// 従者は最初から居るので、引く対象は [Mage.summonable] だけ。
@@ -163,6 +170,7 @@ class Progress {
     'cleared': cleared.toList(),
     'party': [for (final k in party) k.name],
     'shards': shards,
+    'taught': taughtTutorial,
   };
 
   static Progress fromJson(Map<String, Object?> json) {
@@ -188,6 +196,9 @@ class Progress {
         final int n => n < 0 ? 0 : n,
         _ => 0,
       },
+      // 印が無い古い記録は「まだ教えていない」扱い。一度出るだけなので、
+      // 続きから始めた人に出てしまっても害は小さい。
+      taughtTutorial: json['taught'] == true,
     );
   }
 

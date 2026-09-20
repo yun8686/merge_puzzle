@@ -294,6 +294,8 @@ void main() {
 
     expect(find.text('ダンジョン'), findsOneWidget);
     expect(find.text('氷炎の鎖'), findsNothing);
+    // まっさらな記録なので、初回の遊び方が拠点の上に乗る。
+    expect(find.text('鎖を編む'), findsOneWidget);
   });
 
   testWidgets('盤面の画面に階層と敵の数が表示される', (tester) async {

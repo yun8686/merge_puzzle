@@ -42,6 +42,8 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵と手数を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
 | `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
+| `lib/ui/tutorial.dart` | 遊び方。初回だけ拠点の上に出す。記録は読み書きしない |
+| `lib/ui/chain_mark.dart` | 鎖が編まれる絵。タイトルと遊び方で使う |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択。記録を持つのはここだけ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
 | `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 相の割合 / 一党 / 決着画面 |
@@ -51,7 +53,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
 | `tools/sim/` | 継ぎ方の決まりの難易度を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
-| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
@@ -139,8 +141,18 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **タイトルは Navigator で積まない。** 戻る道が無いのに積むと、端末の「戻る」で
 拠点が消えてタイトルに落ちる。`AnimatedSwitcher` で入れ替える。
 
-**タイトルのアニメは `repeat` なので `pumpAndSettle` が止まらない。** タイトルを
-含むテストは `pump(Duration)` で送ること。
+**遊び方は初回だけ拠点の上に出す。** 判断するのは記録を読んだあと
+（`Progress.taughtTutorial`）。タイトルが記録を読まずに済むのはこのため。
+`tutorial.dart` 自身は記録を読み書きせず、通し終えたことを知らせるだけで、
+印を付けて保存するのは拠点の仕事。
+
+**遊び方は文で説明しない。絵で見せて、文は一言添えるだけ。** 絵は盤面と同じ色・
+同じ形・同じ向きで描く（`PhaseSwatch` / `FoePortrait` / `MagePortrait`）。
+ここだけの飾りを作ると、初めて潜ったときに繋がらない。
+
+**タイトルと遊び方のアニメは `repeat` なので `pumpAndSettle` が止まらない。**
+これらを含むテストは `pump(Duration)` で送ること。拠点のテストの `openBase` が
+既定で「通した記録」にしてあるのも同じ理由。
 
 **画面いっぱいに敷く地は `Stack(fit: StackFit.expand)` で。** 既定の loose の
 ままだと、Stack の大きさが位置を決めていない子に合わせて決まる。Column を1つ

@@ -10,6 +10,7 @@ import '../game/progress.dart';
 import 'foe_art.dart';
 import 'game_screen.dart';
 import 'mage_art.dart';
+import 'tutorial.dart';
 import 'theme.dart';
 
 /// 拠点。潜る前と潜ったあとに戻ってくる場所。
@@ -40,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 直前に持ち帰った魔晶。潜って帰ってきた直後だけ出す。
   String? _spoils;
 
+  /// 遊び方を出しているか。初回と、上の帯から呼ばれたとき。
+  bool _teaching = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +67,21 @@ class _HomeScreenState extends State<HomeScreen> {
       progress = Progress();
     }
     if (!mounted) return;
-    setState(() => _progress = progress);
+    setState(() {
+      _progress = progress;
+      // 初回だけ遊び方を通す。読み込んでから決めるので、タイトルは記録を
+      // 読まなくて済む。
+      _teaching = !progress.taughtTutorial;
+    });
+  }
+
+  /// 遊び方を通し終えた。印を付けて、二度目からは出さない。
+  void _taught() {
+    final progress = _progress;
+    setState(() => _teaching = false);
+    if (progress == null || progress.taughtTutorial) return;
+    progress.taughtTutorial = true;
+    _save();
   }
 
   Future<void> _save() async {
@@ -125,7 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final progress = _progress;
     return Scaffold(
       backgroundColor: Palette.background,
+      // 地は画面いっぱいに敷く。loose のままだと Stack の大きさが中身に
+      // 合わせて決まり、地が中ほどの帯にしかならない。
       body: Stack(
+        fit: StackFit.expand,
         children: [
           const Positioned.fill(
             child: DecoratedBox(
@@ -151,8 +172,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     onRoll: _roll,
                     onToggle: _toggle,
                     onDive: _dive,
+                    onTeach: () => setState(() => _teaching = true),
                   ),
           ),
+          if (_teaching && progress != null)
+            TutorialOverlay(onDone: _taught),
         ],
       ),
     );
@@ -174,6 +198,7 @@ class _Base extends StatelessWidget {
     required this.onRoll,
     required this.onToggle,
     required this.onDive,
+    required this.onTeach,
   });
 
   final Progress progress;
@@ -185,11 +210,14 @@ class _Base extends StatelessWidget {
   final void Function(MageKind) onToggle;
   final void Function(Dungeon) onDive;
 
+  /// 遊び方をもう一度開く。
+  final VoidCallback onTeach;
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _StatusStrip(progress: progress),
+        _StatusStrip(progress: progress, onTeach: onTeach),
         Expanded(
           child: switch (tab) {
             _Tab.dungeons => _DungeonTab(
@@ -214,9 +242,12 @@ class _Base extends StatelessWidget {
 
 /// 上の帯。どの面に居ても、名乗りと魔晶だけは常に見えている。
 class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.progress});
+  const _StatusStrip({required this.progress, required this.onTeach});
 
   final Progress progress;
+
+  /// 遊び方をもう一度開く。初回に飛ばした人と、忘れた人のため。
+  final VoidCallback onTeach;
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +282,19 @@ class _StatusStrip extends StatelessWidget {
               ),
             ),
             const Spacer(),
+            IconButton(
+              onPressed: onTeach,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              tooltip: 'あそびかた',
+              icon: const Icon(
+                Icons.help_outline,
+                size: 19,
+                color: Palette.textDim,
+              ),
+            ),
+            const SizedBox(width: 6),
             DecoratedBox(
               decoration: BoxDecoration(
                 color: Palette.boardBg,

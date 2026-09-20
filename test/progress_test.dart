@@ -32,6 +32,14 @@ void main() {
     expect(back.shards, 27);
   });
 
+  test('遊び方を通した印も残る', () {
+    expect(Progress().taughtTutorial, isFalse, reason: '始まりは未読');
+    final progress = Progress()..taughtTutorial = true;
+    expect(Progress.decode(progress.encode()).taughtTutorial, isTrue);
+    // 印の無い古い記録は「まだ教えていない」扱い。
+    expect(Progress.decode('{"shards":3}').taughtTutorial, isFalse);
+  });
+
   test('壊れた保存は捨てて、まっさらな記録になる', () {
     for (final raw in [null, '', 'not json', '[1,2,3]', '{"owned":5}']) {
       final progress = Progress.decode(raw);
