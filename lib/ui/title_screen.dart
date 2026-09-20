@@ -20,10 +20,16 @@ class TitleScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Palette.background,
+      // **画面いっぱいに広げる。** 既定の loose のままだと、Stack の大きさが
+      // 位置を決めていない子――ここでは題とボタンの Column――に合わせて
+      // 決まる。Column の幅は一番広い子の幅なので、Stack が画面の中ほどの
+      // 細い帯になり、Positioned.fill の地もその幅しか塗らない。
       body: Stack(
+        fit: StackFit.expand,
         children: [
           // 盤面の画面と同じ放射グラデ。地下の広間に篝火が一つ、という地。
           const Positioned.fill(
+            key: ValueKey('title-backdrop'),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(

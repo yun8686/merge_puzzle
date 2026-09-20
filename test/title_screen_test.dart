@@ -24,6 +24,19 @@ void main() {
     expect(started, 1);
   });
 
+  testWidgets('地が画面いっぱいに広がる', (tester) async {
+    // Stack を既定の loose のままにすると、大きさが題とボタンの Column に
+    // 合わせて決まり、地が画面の中ほどの細い帯にしかならない。
+    await tester.pumpWidget(MaterialApp(home: TitleScreen(onStart: () {})));
+    await tester.pump();
+
+    final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(
+      tester.getSize(find.byKey(const ValueKey('title-backdrop'))),
+      screen,
+    );
+  });
+
   testWidgets('鎖が編まれる絵が走り続けても落ちない', (tester) async {
     // 題の上のマスは順に灯って繋がり、消えてまた繰り返す。repeat なので
     // pumpAndSettle は使えない。1周ぶん描いて例外が出ないことだけ見る。

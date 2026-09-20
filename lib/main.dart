@@ -55,6 +55,12 @@ class _EntryState extends State<_Entry> {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 420),
+      // 既定の並べ方は loose な Stack なので、画面いっぱいの制約が子に
+      // 伝わらない。どちらの画面も画面の大きさで組みたいので広げておく。
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
       child: _started
           ? const HomeScreen(
               key: ValueKey('home'),

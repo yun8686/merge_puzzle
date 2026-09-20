@@ -142,6 +142,12 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **タイトルのアニメは `repeat` なので `pumpAndSettle` が止まらない。** タイトルを
 含むテストは `pump(Duration)` で送ること。
 
+**画面いっぱいに敷く地は `Stack(fit: StackFit.expand)` で。** 既定の loose の
+ままだと、Stack の大きさが位置を決めていない子に合わせて決まる。Column を1つ
+置いただけだと幅が一番広い子の幅になり、`Positioned.fill` の地も画面の中ほどの
+細い帯にしかならない。`AnimatedSwitcher` の既定の並べ方も loose な Stack なので、
+そこも `layoutBuilder` で広げてある（`main.dart`）。
+
 ## 消える演出のテンポ
 
 何度も調整している箇所なので、触る前に現状を把握すること。`lib/ui/board_view.dart` の
