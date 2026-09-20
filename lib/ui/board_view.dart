@@ -30,14 +30,21 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   final List<_ChainFlash> _flashes = <_ChainFlash>[];
   final List<_Bolt> _bolts = <_Bolt>[];
 
-  /// 敵が殴りかかったときの爪痕。敵1体につき1つ。
-  final List<_Slash> _slashes = <_Slash>[];
+  /// 敵が放った一撃。敵から一党へ向かって飛ぶ。敵1体につき1本。
+  final List<_Lunge> _lunges = <_Lunge>[];
 
   /// ブロックが殴りかかった回数。増えたフレームで突き出す。
   final Map<int, int> _strikes = <int, int>{};
 
-  /// 盤面が詰んでから敵が殴りかかるまでの間を計る。
+  /// 盤面が詰んでから敵が振りかぶるまでの間を計る。
   Timer? _strikeTimer;
+
+  /// 振りかぶってから一撃が届くまでを計る。
+  ///
+  /// 届いた瞬間に痛手を出したいが、**それを描画側の都合に任せない**。
+  /// ウィジェットが途中で消えると反撃が起きないまま入力も止まったままになる。
+  /// 当たる時刻はここで決めて、線はただ絵として乗せる。
+  Timer? _impactTimer;
 
   /// 敵の id ごとの「討たれずに残った回数」。値が変わったフレームで
   /// そのブロックを揺らす。消えずに残ったことを、その場で伝えるため。
@@ -73,6 +80,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   @override
   void dispose() {
     _strikeTimer?.cancel();
+    _impactTimer?.cancel();
     _ticker.dispose();
     super.dispose();
   }
@@ -162,6 +170,13 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// 詰んだ盤面を一拍見せてから殴らせる。制圧したときの [_clearPause]
   /// （300ms）より少し長く取ってあるのは、こちらは敵の動きが続くため。
   static const Duration _strikePause = Duration(milliseconds: 420);
+
+  /// 敵が振りかぶってから打ち込むまで。
+  static const Duration _windUp = Duration(milliseconds: 150);
+
+  /// 一撃が敵からこちらへ届くまで。**[_LungeView] の尺と同じにする。**
+  /// ずれると、線がまだ飛んでいる途中で着弾の音と揺れが鳴る。
+  static const Duration _travel = Duration(milliseconds: 260);
 
   void _onPanEnd(DragEndDetails d) {
     final result = widget.controller.commitPath();
@@ -284,45 +299,69 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// 盤面が詰んだあと、間を置いて敵に殴らせる。
   void _scheduleFoeStrike() {
     _strikeTimer?.cancel();
+    _impactTimer?.cancel();
     if (!widget.controller.isStriking) return;
     _strikeTimer = Timer(_strikePause, () {
       if (!mounted || !widget.controller.isStriking) return;
-      _foeStrike(widget.controller.board.foeCells);
-      widget.controller.strike();
+      _foeWindUp(widget.controller.board.foeCells);
+      _impactTimer = Timer(_windUp + _travel, () {
+        if (!mounted || !widget.controller.isStriking) return;
+        _foeImpact();
+        widget.controller.strike();
+      });
     });
   }
 
-  /// 敵が殴りかかった瞬間。**殴った敵そのものの上で鳴らす。**
+  /// 敵が振りかぶって、一撃を**こちらへ**放つ。
   ///
-  /// 画面全体を赤くするだけだと、誰に殴られたのか分からない。残っている敵を
-  /// 1体ずつ突き出させ、その上に爪痕と赤い飛沫を出す。盤面を見ている目に、
-  /// どの敵がまだ生きているかがそのまま焼き付く。
-  void _foeStrike(List<Cell> cells) {
+  /// **敵の上では何も弾けさせない。** 爆発も衝撃波も、その場所が「殴られた」
+  /// ことを意味してしまう。敵の上で鳴らすと、こちらが敵を攻撃したように見える。
+  ///
+  /// 鳴らすのは向きだけ。敵はいったん引いてから踏み込み、そこから盤面の下端
+  /// （一党の帯がある側）へ向かって筋が飛ぶ。敵が何体居ても筋は1点に集まるので、
+  /// 狙われているのが誰なのかが読める。
+  void _foeWindUp(List<Cell> cells) {
+    if (cells.isEmpty) return;
     final board = widget.controller.board;
+    final target = Offset(
+      _originX + _cell * board.cols / 2,
+      _originY + _cell * board.rows + _cell * 0.28,
+    );
     for (final cell in cells) {
-      final at = _centerOf(cell);
       final tile = board.tileAt(cell);
       if (tile != null) {
         _strikes[tile.id] = (_strikes[tile.id] ?? 0) + 1;
       }
-      _slashes.add(_Slash(id: _seq++, center: at));
-      _particles.burst(at, Palette.danger, count: 20, power: _cell * 6.0);
-      _particles.shockwave(
-        at,
-        Palette.danger,
-        radius: _cell * 1.8,
-        life: 0.45,
-        width: 6,
-      );
-      _particles.shockwave(
-        at,
-        Colors.white,
-        radius: _cell * 0.9,
-        life: 0.26,
-        width: 3,
+      _lunges.add(
+        _Lunge(id: _seq++, from: _centerOf(cell), to: target, delay: _windUp),
       );
     }
-    if (cells.isEmpty) return;
+    _ensureTicking();
+    if (mounted) setState(() {});
+  }
+
+  /// 一撃が届いた瞬間。**弾けるのは一党の側**で、敵の上ではない。
+  void _foeImpact() {
+    final board = widget.controller.board;
+    final at = Offset(
+      _originX + _cell * board.cols / 2,
+      _originY + _cell * board.rows + _cell * 0.28,
+    );
+    _particles.burst(at, Palette.danger, count: 26, power: _cell * 7.0);
+    _particles.shockwave(
+      at,
+      Palette.danger,
+      radius: _cell * 2.4,
+      life: 0.48,
+      width: 7,
+    );
+    _particles.shockwave(
+      at,
+      Colors.white,
+      radius: _cell * 1.2,
+      life: 0.28,
+      width: 3,
+    );
     // 盤面ごと赤に振る。鎖の演出（相の色）とは別物だと一目で分かる。
     _screenFlash = 0.34;
     _screenFlashColor = Palette.danger;
@@ -576,10 +615,10 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                // 爪痕は敵のマスの上に重ねる。盤の外へはみ出さない。
-                for (final slash in _slashes)
+                // 一撃は敵から盤面の下端へ飛ぶ。盤の外へはみ出さない。
+                for (final lunge in _lunges)
                   Positioned.fill(
-                    key: ValueKey('slash-${slash.id}'),
+                    key: ValueKey('lunge-${lunge.id}'),
                     child: IgnorePointer(
                       child: ClipPath(
                         clipper: _BoardClipper(
@@ -589,12 +628,13 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                           height: boardH + cell * 0.24,
                           radius: cell * 0.45,
                         ),
-                        child: _SlashView(
-                          center: slash.center,
+                        child: _LungeView(
+                          from: lunge.from,
+                          to: lunge.to,
                           cell: cell,
-                          seed: slash.id,
+                          delay: lunge.delay,
                           onDone: () {
-                            _slashes.removeWhere((x) => x.id == slash.id);
+                            _lunges.removeWhere((x) => x.id == lunge.id);
                             if (mounted) setState(() {});
                           },
                         ),
@@ -732,53 +772,71 @@ class _BoardClipper extends CustomClipper<Path> {
       old.radius != radius;
 }
 
-/// 敵が殴りかかったときの爪痕。
-class _Slash {
-  _Slash({required this.id, required this.center});
+/// 敵が放った一撃。敵から一党へ向かって飛ぶ。
+class _Lunge {
+  _Lunge({
+    required this.id,
+    required this.from,
+    required this.to,
+    required this.delay,
+  });
 
   final int id;
-  final Offset center;
+
+  /// 放った敵のマス。
+  final Offset from;
+
+  /// 届く先。盤面の下端――一党の帯がある側。
+  final Offset to;
+
+  /// 振りかぶりぶんの待ち。
+  final Duration delay;
 }
 
-/// 敵のマスの上を走る爪痕。3本の斜線が一気に引かれて、すぐ薄れる。
+/// 敵から一党へ飛ぶ一撃。
 ///
-/// 粒と輪だけだと「何かが弾けた」までしか伝わらない。線に向きがあると、
-/// **こちらが殴られた**という向きが出る。
-class _SlashView extends StatefulWidget {
-  const _SlashView({
-    required this.center,
+/// **弾けさせるのではなく、飛ばす。** 敵の上で何かが弾けると、その敵が
+/// 殴られたように見える。向きのある線を敵から**こちら**へ走らせて初めて、
+/// 殴ったのが敵の側だと読める。
+class _LungeView extends StatefulWidget {
+  const _LungeView({
+    required this.from,
+    required this.to,
     required this.cell,
-    required this.seed,
+    required this.delay,
     required this.onDone,
   });
 
-  final Offset center;
+  final Offset from;
+  final Offset to;
   final double cell;
-
-  /// 傾きを1体ずつ散らす種。全部同じ向きだと模様に見える。
-  final int seed;
-
+  final Duration delay;
   final VoidCallback onDone;
 
   @override
-  State<_SlashView> createState() => _SlashViewState();
+  State<_LungeView> createState() => _LungeViewState();
 }
 
-class _SlashViewState extends State<_SlashView>
+class _LungeViewState extends State<_LungeView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
+  bool _flying = false;
 
   @override
   void initState() {
     super.initState();
     _c = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 260),
     );
     _c.addStatusListener((s) {
       if (s == AnimationStatus.completed) widget.onDone();
     });
-    _c.forward();
+    Future<void>.delayed(widget.delay, () {
+      if (!mounted) return;
+      setState(() => _flying = true);
+      _c.forward();
+    });
   }
 
   @override
@@ -789,80 +847,80 @@ class _SlashViewState extends State<_SlashView>
 
   @override
   Widget build(BuildContext context) {
+    if (!_flying) return const SizedBox.expand();
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) => CustomPaint(
-        painter: _SlashPainter(
-          center: widget.center,
+        painter: _LungePainter(
+          from: widget.from,
+          to: widget.to,
           cell: widget.cell,
           t: _c.value,
-          angle: -0.9 + (widget.seed % 5) * 0.12,
         ),
       ),
     );
   }
 }
 
-class _SlashPainter extends CustomPainter {
-  const _SlashPainter({
-    required this.center,
+class _LungePainter extends CustomPainter {
+  const _LungePainter({
+    required this.from,
+    required this.to,
     required this.cell,
     required this.t,
-    required this.angle,
   });
 
-  final Offset center;
+  final Offset from;
+  final Offset to;
   final double cell;
   final double t;
-  final double angle;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 引き切るのは前半。後半は薄れるだけ。
-    const draw = 0.38;
-    final grow = Curves.easeOutCubic.transform((t / draw).clamp(0.0, 1.0));
-    final fade = t < draw ? 1.0 : 1 - (t - draw) / (1 - draw);
-    if (fade <= 0) return;
+    // 頭が先に出て、尾が追う。線そのものが進む向きを持つ。
+    // 頭と尾は同時に届く。着弾で線が消えるので、当たった瞬間が読める。
+    final head = Curves.easeInCubic.transform(t.clamp(0.0, 1.0));
+    final tail = Curves.easeInCubic.transform(
+      ((t - 0.34) / 0.66).clamp(0.0, 1.0),
+    );
+    if (head <= tail) return;
 
-    final dir = Offset(cos(angle), sin(angle));
-    final perp = Offset(-dir.dy, dir.dx);
-    final half = cell * 0.95 * grow;
+    final a = Offset.lerp(from, to, tail)!;
+    final b = Offset.lerp(from, to, head)!;
 
-    for (var i = -1; i <= 1; i++) {
-      // 真ん中を長く太く。爪の形に見える。
-      final k = i == 0 ? 1.0 : 0.72;
-      final at = center + perp * (i * cell * 0.30);
-      final a = at - dir * half * k;
-      final b = at + dir * half * k;
-      canvas.drawLine(
-        a,
-        b,
-        Paint()
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = cell * 0.13 * k
-          ..color = Palette.danger.withValues(alpha: 0.55 * fade)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * 0.10),
-      );
-      canvas.drawLine(
-        a,
-        b,
-        Paint()
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = cell * 0.055 * k
-          ..color = Color.lerp(
-            Colors.white,
-            Palette.danger,
-            0.35,
-          )!.withValues(alpha: fade),
-      );
-    }
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = cell * 0.30
+        ..color = Palette.danger.withValues(alpha: 0.45)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * 0.22),
+    );
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = cell * 0.10
+        ..color = Palette.danger.withValues(alpha: 0.95),
+    );
+    // 芯を白く抜くと、速い一撃に見える。
+    canvas.drawLine(
+      Offset.lerp(a, b, 0.45)!,
+      b,
+      Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = cell * 0.045
+        ..color = Colors.white.withValues(alpha: 0.9),
+    );
   }
 
   @override
-  bool shouldRepaint(_SlashPainter old) => old.t != t || old.center != center;
+  bool shouldRepaint(_LungePainter old) => old.t != t || old.from != from;
 }
 
-/// なぞった線を白く光らせてから消す演出のデータ。
+/// なぞった線を白く光らせてから消す演出のデータ。/// なぞった線を白く光らせてから消す演出のデータ。
 class _ChainFlash {
   _ChainFlash({
     required this.id,
@@ -1309,6 +1367,8 @@ class _TileWidgetState extends State<TileWidget>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
+    // 振りかぶり（_windUp）と打ち込みの尺を合わせてある。打ち込んだ瞬間に
+    // 一撃が飛び出すので、ここを変えるなら _BoardViewState の _windUp も。
     _strike = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 380),
@@ -1410,20 +1470,33 @@ class _TileWidgetState extends State<TileWidget>
         final r = _resist.isAnimating || _resist.value > 0
             ? sin(_resist.value * pi * 6) * (1 - _resist.value) * size * 0.16
             : 0.0;
-        // 殴りかかる動き。素早く手前に踏み込んで、ゆっくり戻る。
-        // 引きを速くすると、ただ震えただけに見えて殴ったと読めない。
+        // 殴りかかる動き。**振りかぶってから打ち込む。**
+        //
+        // いきなり突き出すと、突き飛ばされたようにも見えて向きが読めない。
+        // いったん奥へ引いてから手前へ踏み込むと、動きを起こしたのが
+        // このブロックの側だと分かる。
         final st = _strike.value;
-        final jab = st == 0 || st == 1
-            ? 0.0
-            : st < 0.22
-            ? Curves.easeOutCubic.transform(st / 0.22)
-            : 1 - Curves.easeInOutCubic.transform((st - 0.22) / 0.78);
+        final double jab;
+        if (st == 0 || st == 1) {
+          jab = 0;
+        } else if (st < 0.40) {
+          // 振りかぶる。ゆっくり引く。
+          jab = -Curves.easeOutCubic.transform(st / 0.40) * 0.42;
+        } else if (st < 0.56) {
+          // 打ち込む。ここだけ速い。
+          jab =
+              -0.42 +
+              Curves.easeInCubic.transform((st - 0.40) / 0.16) * 1.42;
+        } else {
+          jab = 1 - Curves.easeOutCubic.transform((st - 0.56) / 0.44);
+        }
         // 落ちている間だけ縦に伸ばす。着地で 1.0 に戻るので跳ねて見える。
         return Transform.translate(
-          offset: Offset(r, (1 - e) * -size * 2.6 + jab * size * 0.26),
+          offset: Offset(r, (1 - e) * -size * 2.6 + jab * size * 0.30),
           child: Transform.scale(
-            scaleX: 1 - (1 - e) * 0.16 + jab * 0.16,
-            scaleY: 1 + (1 - e) * 0.28 + jab * 0.16,
+            // 引くときは縮み、打ち込むときは伸びる。溜めが見える。
+            scaleX: 1 - (1 - e) * 0.16 + jab * 0.14,
+            scaleY: 1 + (1 - e) * 0.28 + jab * 0.14,
             child: Opacity(opacity: e.clamp(0.0, 1.0), child: child),
           ),
         );
