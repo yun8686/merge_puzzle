@@ -176,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
           ),
           if (_teaching && progress != null)
-            TutorialOverlay(onDone: _taught),
+            TutorialScreen(onDone: _taught),
         ],
       ),
     );

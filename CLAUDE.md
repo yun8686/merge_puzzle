@@ -42,7 +42,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵と手数を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
 | `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
-| `lib/ui/tutorial.dart` | 遊び方。初回だけ拠点の上に出す。記録は読み書きしない |
+| `lib/ui/tutorial.dart` | 遊び方。**本物の盤面をなぞらせる**稽古場。初回だけ拠点の上に出す |
 | `lib/ui/chain_mark.dart` | 鎖が編まれる絵。タイトルと遊び方で使う |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択。記録を持つのはここだけ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
@@ -146,13 +146,29 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 `tutorial.dart` 自身は記録を読み書きせず、通し終えたことを知らせるだけで、
 印を付けて保存するのは拠点の仕事。
 
-**遊び方は文で説明しない。絵で見せて、文は一言添えるだけ。** 絵は盤面と同じ色・
-同じ形・同じ向きで描く（`PhaseSwatch` / `FoePortrait` / `MagePortrait`）。
-ここだけの飾りを作ると、初めて潜ったときに繋がらない。
+**遊び方は読ませない。実際になぞらせる。** 稽古場は本物の `BoardView` と
+`GameController` で動いていて、継ぎ方の決まりも威力の計算も毎ターンの反撃も
+本番と同じものが動く。絵で説明してから本番で学び直させるより速いし、嘘が
+混ざらない。
 
-**タイトルと遊び方のアニメは `repeat` なので `pumpAndSettle` が止まらない。**
-これらを含むテストは `pump(Duration)` で送ること。拠点のテストの `openBase` が
-既定で「通した記録」にしてあるのも同じ理由。
+**課題は盤面の状態だけで判定する**（何枚継いだか、討ったか）。なぞる道を
+指定しないので、詰まっても自分で見つけた手で先へ進める。手が止まったら
+`showHint` で通る道を光らせる。
+
+**稽古場では躓かせない。** 倒れても手数が尽きても黙って組み直す
+（`GamePhase.floorLost` / `defeated` を見て `enterDungeon`）。敵を討ち切ったら、
+途中の課題が残っていても終い――盤面から敵が居なくなると試しようがない。
+
+盤面では教えられない編成の話だけ、終いの画面で絵を使って足す。絵は盤面と
+同じ色・同じ形で描く（`PhaseSwatch` / `MagePortrait`）。ここだけの飾りを作ると、
+初めて潜ったときに繋がらない。
+
+**タイトルのアニメは `repeat` なので `pumpAndSettle` が止まらない。** タイトルを
+含むテストは `pump(Duration)` で送ること。
+
+稽古場は `GameController` を差し込める（`GameScreen` と同じ約束）。テストは盤面を
+決め打ちで塗ってから、なぞって課題が進むところを作る。拠点のテストの `openBase`
+が既定で「通した記録」にしてあるのは、稽古場が拠点の中身に覆いかぶさるため。
 
 **画面いっぱいに敷く地は `Stack(fit: StackFit.expand)` で。** 既定の loose の
 ままだと、Stack の大きさが位置を決めていない子に合わせて決まる。Column を1つ

@@ -30,9 +30,8 @@ Future<void> goTab(WidgetTester tester, String label) async {
 
 /// 記録を差し込んだ拠点を開く。読み込みは非同期なので settle まで進める。
 ///
-/// 既定では遊び方を通した記録にする。通していないと初回の案内が覆いかぶさり、
-/// そこに repeat のアニメが居るので pumpAndSettle が止まらない。案内そのものを
-/// 見たいときだけ [taught] を下ろす。
+/// 既定では遊び方を通した記録にする。通していないと初回の稽古場が覆いかぶさり、
+/// 拠点の中身に届かない。稽古場そのものを見たいときだけ [taught] を下ろす。
 Future<MemoryProgressStore> openBase(
   WidgetTester tester, {
   Progress? progress,
@@ -49,8 +48,7 @@ Future<MemoryProgressStore> openBase(
   if (taught) {
     await tester.pumpAndSettle();
   } else {
-    // 案内が出る経路では settle まで進めない。鎖が編まれる絵が repeat で
-    // 回り続けるので、止まらないまま待つことになる。
+    // 稽古場が出る経路。盤面の演出が絡むので、決め打ちの間で送る。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }

@@ -1,85 +1,179 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
+import '../game/board.dart';
+import '../game/dungeon.dart';
+import '../game/game_controller.dart';
 import '../game/party.dart';
-import '../game/phase.dart';
-import 'chain_mark.dart';
-import 'foe_art.dart';
+import 'board_view.dart';
 import 'mage_art.dart';
 import 'theme.dart';
 
-/// 初回だけ出る遊び方。拠点の上に覆いかぶせて、通し終えたら記録に印を付ける。
+/// 初回だけ出る遊び方。**読ませるのではなく、実際になぞらせる。**
 ///
-/// **文で説明しない。絵で見せて、文は一言添えるだけ。** 決まりを字で並べても
-/// 読まれないし、読んでも盤面の前で思い出せない。盤面と同じ色・同じ形・同じ
-/// 演出で見せておけば、初めて潜ったときに「さっきの絵だ」で繋がる。
+/// 盤面は本物（`BoardView` と `GameController`）。継ぎ方の決まりも、威力の
+/// 計算も、毎ターンの反撃も本番と同じものが動く。絵で説明してから本番で
+/// 学び直させるより、最初から本物を触らせるほうが速いし、嘘が混ざらない。
+///
+/// 課題は**盤面の状態だけ**で判定する（何枚継いだか、討ったか）。なぞる道を
+/// 指定しないので、詰まっても自分で見つけた手で先へ進める。迷ったときのため
+/// に、しばらく手が止まると通る道が光る。
 ///
 /// 記録は読み書きしない。通し終えたことを [onDone] で知らせるだけで、印を
 /// 付けて保存するのは拠点の仕事。
-class TutorialOverlay extends StatefulWidget {
-  const TutorialOverlay({super.key, required this.onDone});
+class TutorialScreen extends StatefulWidget {
+  const TutorialScreen({super.key, required this.onDone, this.controller});
 
   final VoidCallback onDone;
 
+  /// 差し込むと、画面が自前で作る代わりにこれを使う。特定の局面から始めたい
+  /// テスト用（`GameScreen` と同じ約束）。
+  final GameController? controller;
+
+  /// 稽古場。敵は2体だけで、手数はたっぷり取ってある。
+  ///
+  /// 攻撃力を1ずつに抑えてあるのは、覚えるより先に倒されないため。40手を
+  /// 使い切っても 80 で、初期体力 120 には届かない。
+  static const Dungeon dungeon = Dungeon(
+    id: 'tutorial',
+    name: '稽古場',
+    floors: [
+      FloorSpec(
+        [FoeSpec(3, atk: 1), FoeSpec(5, hp: 2, atk: 1)],
+        moves: 40,
+      ),
+    ],
+  );
+
   @override
-  State<TutorialOverlay> createState() => _TutorialOverlayState();
+  State<TutorialScreen> createState() => _TutorialScreenState();
 }
 
-class _TutorialOverlayState extends State<TutorialOverlay> {
-  final PageController _pages = PageController();
+/// 課題ひとつ。盤面の状態だけで「できた」を決める。
+class _Lesson {
+  const _Lesson({required this.text, required this.done});
+
+  /// 上に出す一言。`**` で挟んだところだけ明るくする。
+  final String text;
+
+  final bool Function(GameController) done;
+}
+
+class _TutorialScreenState extends State<TutorialScreen> {
+  late final GameController _controller;
+  late final bool _ownsController;
+  Timer? _idle;
+  Timer? _cheer;
   int _at = 0;
 
-  static const List<_Page> _slides = [
-    _Page(
-      title: '鎖を編む',
-      body: '隣り合うマスを指でなぞって継ぐ。\n'
-          '**隣り合う2枚は違う相**でなければ繋がらない。\n'
-          '3枚つながれば鎖になる。',
-      art: _ChainArt(),
+  /// 課題が変わった直後だけ出す「できた」。
+  bool _cheering = false;
+
+  /// 手が止まってから道を光らせるまで。すぐ出すと自分で探す気が失せる。
+  static const Duration _hintAfter = Duration(seconds: 6);
+
+  static final List<_Lesson> _lessons = [
+    _Lesson(
+      text: '隣り合うマスを指でなぞって継ぐ。\n'
+          '**同じ相（色）は続けて継げない。**\n'
+          '3枚つなげば鎖になる。',
+      done: (c) => c.bestChain >= 3,
     ),
-    _Page(
-      title: '長いほど強い',
-      body: '継いだ枚数が、そのまま鎖の**威力**になる。\n'
-          '遠回りしてでも長く編むほど強い。',
-      art: _PowerArt(),
+    _Lesson(
+      text: '継いだ枚数が、そのまま鎖の**威力**になる。\n'
+          '遠回りしてでも、6枚つないでみよう。',
+      done: (c) => c.bestChain >= 6,
     ),
-    _Page(
-      title: '守りを破る',
-      body: 'マスに書かれた数字は敵の**守り**。\n'
-          '威力が守りに届けば1、上回るごとに1ずつ傷がつく。\n'
-          '体力を削り切れば討ち取れる。',
-      art: _WardArt(),
+    _Lesson(
+      text: 'マスの数字は敵の**守り**。\n'
+          '威力が守りに届けば傷がつく。\n'
+          '守り3の敵を討ち取ろう。',
+      done: (c) => c.felledWards.isNotEmpty,
     ),
-    _Page(
-      title: '敵は毎ターン殴ってくる',
-      body: '1手ごとに、生きている敵のぶんだけ体力が減る。\n'
-          '**早く討つほど、後が楽になる。**',
-      art: _StrikeArt(),
-    ),
-    _Page(
-      title: '編成が盤面を決める',
-      body: '連れていった魔導士の**相**だけが盤面に出る。\n'
-          '相は2種類以上でなければ、鎖が1枚も編めない。',
-      art: _PartyArt(),
+    _Lesson(
+      text: '**敵は毎ターン殴ってくる。**\n'
+          '体力が減るのはそのため。早く討つほど楽になる。\n'
+          '残りの敵も討ち取ろう。',
+      done: (c) => c.remainingFoes == 0,
     ),
   ];
 
-  bool get _isLast => _at == _slides.length - 1;
+  bool get _finished => _at >= _lessons.length;
 
-  void _next() {
-    if (_isLast) {
-      widget.onDone();
-      return;
-    }
-    _pages.nextPage(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+  @override
+  void initState() {
+    super.initState();
+    _ownsController = widget.controller == null;
+    _controller =
+        widget.controller ??
+        GameController(
+          rng: Random(4),
+          dungeon: TutorialScreen.dungeon,
+          // 能力を持たない従者だけ。威力＝枚数になるので、「6枚つなぐ」が
+          // そのまま「威力6」になって説明と食い違わない。
+          roster: const [Mage.squireHeat, Mage.squireCold],
+        );
+    _controller.addListener(_check);
+    _restartIdle();
   }
 
   @override
   void dispose() {
-    _pages.dispose();
+    _idle?.cancel();
+    _cheer?.cancel();
+    _controller.removeListener(_check);
+    if (_ownsController) _controller.dispose();
     super.dispose();
+  }
+
+  /// 手が止まったら道を光らせる。動かすたびに数え直す。
+  void _restartIdle() {
+    _idle?.cancel();
+    if (_finished) return;
+    _idle = Timer(_hintAfter, () {
+      if (!mounted || _finished || !_controller.acceptsInput) return;
+      _controller.showHint();
+    });
+  }
+
+  void _check() {
+    if (!mounted) return;
+    // 倒れても手数が尽きても、稽古場なので黙って組み直す。ここで躓かせると
+    // 覚える前に投げられる。
+    if (_controller.phase == GamePhase.floorLost ||
+        _controller.phase == GamePhase.defeated) {
+      _controller.enterDungeon(TutorialScreen.dungeon);
+      return;
+    }
+    // 最後の課題（敵を討ち切る）が片付いたら、途中が残っていても終い。
+    // 盤面から敵が居なくなると、残した課題はもう試しようがない。
+    final int i;
+    if (_lessons.last.done(_controller)) {
+      i = _lessons.length;
+    } else {
+      var n = _at;
+      while (n < _lessons.length && _lessons[n].done(_controller)) {
+        n++;
+      }
+      i = n;
+    }
+    if (i != _at) {
+      final finished = i >= _lessons.length;
+      setState(() {
+        _at = i;
+        // 終いの言葉が出るところでは重ねない。
+        _cheering = !finished;
+      });
+      _cheer?.cancel();
+      if (!finished) {
+        _cheer = Timer(const Duration(milliseconds: 1400), () {
+          if (mounted) setState(() => _cheering = false);
+        });
+      }
+    }
+    _restartIdle();
   }
 
   @override
@@ -94,7 +188,7 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: Alignment(0, -0.25),
+                  center: Alignment(0, -0.15),
                   radius: 1.0,
                   colors: [Palette.backgroundGlow, Palette.background],
                   stops: [0, 0.85],
@@ -103,80 +197,89 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
             ),
           ),
           SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 0),
-                  child: Row(
-                    children: [
-                      Text('あそびかた', style: AppFont.label(10)),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: widget.onDone,
-                        child: Text(
-                          'とばす',
-                          style: AppFont.label(10, color: Palette.textDim),
-                        ),
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) => Column(
+                children: [
+                  _Banner(
+                    at: _at,
+                    total: _lessons.length,
+                    text: _finished
+                        ? ''
+                        : _lessons[_at].text,
+                    onSkip: widget.onDone,
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
                       ),
-                    ],
+                      child: BoardView(controller: _controller),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pages,
-                    itemCount: _slides.length,
-                    onPageChanged: (i) => setState(() => _at = i),
-                    itemBuilder: (context, i) => _slides[i],
-                  ),
-                ),
-                _Dots(count: _slides.length, at: _at),
-                const SizedBox(height: 18),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 22),
-                  child: _NextButton(
-                    label: _isLast ? 'はじめる' : 'つぎへ',
-                    onTap: _next,
-                  ),
-                ),
-              ],
+                  _Gauges(controller: _controller),
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
           ),
+          if (_cheering && !_finished)
+            const IgnorePointer(child: Center(child: _Cheer())),
+          if (_finished) _Finish(onDone: widget.onDone),
         ],
       ),
     );
   }
 }
 
-/// 1枚ぶん。上に絵、下に一言。
-class _Page extends StatelessWidget {
-  const _Page({required this.title, required this.body, required this.art});
+/// 上に出す課題。高さを決め打ちにして、文が変わっても盤面が動かないように
+/// してある。
+class _Banner extends StatelessWidget {
+  const _Banner({
+    required this.at,
+    required this.total,
+    required this.text,
+    required this.onSkip,
+  });
 
-  final String title;
-  final String body;
-  final Widget art;
+  final int at;
+  final int total;
+  final String text;
+  final VoidCallback onSkip;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 26),
+      padding: const EdgeInsets.fromLTRB(16, 8, 10, 4),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 絵の高さを揃える。枚をめくったときに文が上下に跳ねない。
-          SizedBox(height: 150, child: Center(child: art)),
-          const SizedBox(height: 30),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Palette.textPrimary,
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.5,
-            ),
+          Row(
+            children: [
+              for (var i = 0; i < total; i++)
+                Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  width: i == at ? 18 : 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: i <= at ? Palette.evenA : Palette.panelBorder,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: onSkip,
+                child: Text(
+                  'とばす',
+                  style: AppFont.label(10, color: Palette.textDim),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 14),
-          _Body(body),
+          SizedBox(
+            height: 76,
+            child: Center(child: _Body(text)),
+          ),
         ],
       ),
     );
@@ -185,7 +288,7 @@ class _Page extends StatelessWidget {
 
 /// 一言。`**` で挟んだところだけ明るくする。
 ///
-/// 覚えてほしいのは各枚に1つだけ。そこだけ色を変えておけば、読み飛ばしても
+/// 覚えてほしいのは各課題に1つだけ。そこだけ色を変えておけば、読み飛ばしても
 /// 目が止まる。
 class _Body extends StatelessWidget {
   const _Body(this.text);
@@ -196,8 +299,8 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     const base = TextStyle(
       color: Palette.textMuted,
-      fontSize: 13,
-      height: 1.85,
+      fontSize: 12.5,
+      height: 1.6,
     );
     final parts = text.split('**');
     return Text.rich(
@@ -221,38 +324,161 @@ class _Body extends StatelessWidget {
   }
 }
 
-/// いま何枚目か。
-class _Dots extends StatelessWidget {
-  const _Dots({required this.count, required this.at});
+/// 下の目盛り。体力・残りの手数・残りの敵。
+///
+/// 盤面の画面と同じものを並べてある。ここで覚えた読み方が、そのまま本番で
+/// 効くようにするため。
+class _Gauges extends StatelessWidget {
+  const _Gauges({required this.controller});
 
-  final int count;
-  final int at;
+  final GameController controller;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (var i = 0; i < count; i++)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: i == at ? 20 : 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: i == at ? Palette.evenA : Palette.panelBorder,
-              borderRadius: BorderRadius.circular(999),
-            ),
+    final party = controller.party;
+    final ratio = party.maxHp == 0 ? 0.0 : party.hp / party.maxHp;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: DecoratedBox(
+        decoration: panelDecoration(radius: 14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
+          child: Row(
+            children: [
+              Text('体力', style: AppFont.label(9, color: Palette.life)),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 96,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: ratio.clamp(0.0, 1.0),
+                    minHeight: 7,
+                    backgroundColor: Palette.boardBg,
+                    valueColor: const AlwaysStoppedAnimation(Palette.life),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text('残り手数', style: AppFont.label(9)),
+              const SizedBox(width: 6),
+              Text(
+                '${controller.movesLeft}',
+                style: AppFont.number(15, color: Palette.textMuted),
+              ),
+              const SizedBox(width: 14),
+              Text('敵', style: AppFont.label(9, color: Palette.gold)),
+              const SizedBox(width: 6),
+              Text(
+                '${controller.remainingFoes}',
+                style: AppFont.number(15, color: Palette.gold),
+              ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }
 
-class _NextButton extends StatelessWidget {
-  const _NextButton({required this.label, required this.onTap});
+/// 課題がひとつ片付いたときの短い手応え。
+class _Cheer extends StatelessWidget {
+  const _Cheer();
 
-  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Palette.boardBg.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Palette.life.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.life.withValues(alpha: 0.28),
+            blurRadius: 30,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(30, 16, 30, 18),
+        child: Text(
+          'できた',
+          style: AppFont.number(22, color: Palette.life),
+        ),
+      ),
+    );
+  }
+}
+
+/// 通し終えたところ。**盤面では教えられない編成の話だけ、ここで足す。**
+class _Finish extends StatelessWidget {
+  const _Finish({required this.onDone});
+
+  final VoidCallback onDone;
+
+  static const _party = [MageKind.ember, MageKind.rime, MageKind.storm];
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Palette.background.withValues(alpha: 0.94),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ひととおり覚えた', style: AppFont.number(22)),
+              const SizedBox(height: 26),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final kind in _party)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: MagePortrait(kind: kind, size: 36),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Icon(
+                Icons.arrow_downward,
+                color: Palette.textDim,
+                size: 18,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final kind in _party)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: PhaseSwatch(
+                        phase: Mage.of(kind).phase,
+                        size: 24,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              const _Body(
+                'あとひとつ。盤面に出る相は、\n'
+                '**連れていった魔導士で決まる。**\n'
+                '相は2種類以上でなければ、鎖が1枚も編めない。',
+              ),
+              const SizedBox(height: 30),
+              _DoneButton(onTap: onDone),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DoneButton extends StatelessWidget {
+  const _DoneButton({required this.onTap});
+
   final VoidCallback onTap;
 
   @override
@@ -275,228 +501,20 @@ class _NextButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                  color: Colors.white,
-                  shadows: AppFont.number(16).shadows,
-                ),
+            padding: const EdgeInsets.symmetric(horizontal: 46, vertical: 15),
+            child: Text(
+              '拠点へ',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+                color: Colors.white,
+                shadows: AppFont.number(16).shadows,
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-// ---- 絵 ---------------------------------------------------------------
-//
-// どれも盤面と同じ色・同じ形で描く。初めて潜ったときに「さっきの絵だ」で
-// 繋がるようにするため、ここだけの飾りは作らない。
-
-/// 鎖が編まれるところ。タイトルと同じものを使う。
-class _ChainArt extends StatelessWidget {
-  const _ChainArt();
-
-  @override
-  Widget build(BuildContext context) => const ChainMark();
-}
-
-/// 短い鎖と長い鎖。枚数がそのまま威力になることを、並べて見せる。
-class _PowerArt extends StatelessWidget {
-  const _PowerArt();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _Row(phases: [Phase.heat, Phase.cold, Phase.heat], power: 3),
-        const SizedBox(height: 18),
-        const _Row(
-          phases: [
-            Phase.heat,
-            Phase.cold,
-            Phase.heat,
-            Phase.cold,
-            Phase.heat,
-            Phase.cold,
-          ],
-          power: 6,
-        ),
-      ],
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row({required this.phases, required this.power});
-
-  final List<Phase> phases;
-  final int power;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final phase in phases)
-          Padding(
-            padding: const EdgeInsets.only(right: 5),
-            child: PhaseSwatch(phase: phase, size: 22),
-          ),
-        const SizedBox(width: 10),
-        Text('威力', style: AppFont.label(9)),
-        const SizedBox(width: 6),
-        Text('$power', style: AppFont.number(20, color: Palette.gold)),
-      ],
-    );
-  }
-}
-
-/// 守りの数字と、通るダメージ。敵はマスに出るのと同じ姿・同じ封印の色で。
-class _WardArt extends StatelessWidget {
-  const _WardArt();
-
-  static const int _ward = 5;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: Palette.boardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Palette.wardColorFor(_ward).withValues(alpha: 0.6),
-              width: 1.5,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const FoePortrait(ward: _ward, size: 44),
-                const SizedBox(height: 4),
-                Text(
-                  '$_ward',
-                  style: AppFont.number(
-                    16,
-                    color: Palette.wardColorFor(_ward),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final (power, damage) in const [(5, 1), (6, 2), (8, 4)]) ...[
-              Text('威力$power', style: AppFont.label(9)),
-              const SizedBox(width: 5),
-              Text(
-                '→ $damage',
-                style: AppFont.number(13, color: Palette.gold),
-              ),
-              const SizedBox(width: 14),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// 敵からこちらへ向かう一撃。盤面で出るのと同じ向き・同じ赤で。
-class _StrikeArt extends StatelessWidget {
-  const _StrikeArt();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FoePortrait(ward: 4, size: 38),
-            SizedBox(width: 20),
-            FoePortrait(ward: 7, size: 38),
-          ],
-        ),
-        const SizedBox(height: 6),
-        const Icon(Icons.keyboard_double_arrow_down,
-            color: Palette.danger, size: 26),
-        const SizedBox(height: 6),
-        SizedBox(
-          width: 150,
-          child: Column(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: const LinearProgressIndicator(
-                  value: 0.62,
-                  minHeight: 8,
-                  backgroundColor: Palette.boardBg,
-                  valueColor: AlwaysStoppedAnimation(Palette.life),
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text('一党の体力', style: AppFont.label(9)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 連れていく顔ぶれと、そこから決まる盤面の色。
-class _PartyArt extends StatelessWidget {
-  const _PartyArt();
-
-  static const _party = [MageKind.ember, MageKind.rime, MageKind.storm];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final kind in _party)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: MagePortrait(kind: kind, size: 38),
-              ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        const Icon(Icons.arrow_downward, color: Palette.textDim, size: 20),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final kind in _party)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: PhaseSwatch(phase: Mage.of(kind).phase, size: 26),
-              ),
-          ],
-        ),
-      ],
     );
   }
 }
