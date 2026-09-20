@@ -156,6 +156,7 @@ class _Lesson {
     required this.text,
     required this.route,
     this.foes,
+    this.shape,
   });
 
   /// 終いの振り返りに並べる短い名札。
@@ -167,6 +168,11 @@ class _Lesson {
   /// この稽古で置く敵。**null なら盤面の敵をそのまま引き継ぐ。**
   /// 前の稽古でつけた傷を持ち越すのに使う。
   final List<_Foe>? foes;
+
+  /// 敷いたあとの手直し。**盤面を「詰まった形」にしたいときだけ使う。**
+  /// 市松のままでは長い道がどこにでも通ってしまうので、そこを崩す稽古では
+  /// これで相を揃えて袋小路を作る。
+  final void Function(Board)? shape;
 
   /// なぞらせる道。敵は前の稽古の重力で落ちていることがあるので、
   /// マスを直に書くのではなく盤面から作る。
@@ -259,6 +265,35 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ];
   }
 
+  /// 1マスだけ相を塗り替える。敵のマスには触らない。
+  static void _repaintAt(Board board, int r, int c, Phase phase) {
+    if (r < 0 || r >= board.rows || c < 0 || c >= board.cols) return;
+    final tile = board.grid[r][c];
+    if (tile == null || tile.isFoe) return;
+    board.grid[r][c] = Tile(id: tile.id, phase: phase);
+  }
+
+  /// 守りの厚い敵のまわりを**袋小路**にする（「届かないとき」）。
+  ///
+  /// 市松のままだと8枚の道がすでに通っていて、崩す意味が無い。敵の居る行を
+  /// 通り道として残し、**その上下と行の先を同じ相で塞ぐ**。同じ相は続けて
+  /// 継げないので、鎖は行から出られず、どう編んでも5枚止まりになる。
+  ///
+  /// 塞ぐのは敵のまわりだけ。ほかの場所は市松のままにしておく。盤面ぜんぶを
+  /// 手詰まりにすると、1手のあとに階層が落ちて稽古がやり直しになる。
+  static void _pocket(Board board) {
+    final row = _thickFoe(board).row;
+    final phases = board.phases;
+    Phase along(int c) => phases[(row + c) % phases.length];
+    // 通り道は行の端まで。最後の1列は塞ぐのに使う。
+    final last = board.cols - 2;
+    for (var c = 0; c <= last; c++) {
+      _repaintAt(board, row - 1, c, along(c));
+      _repaintAt(board, row + 1, c, along(c));
+    }
+    _repaintAt(board, row, board.cols - 1, along(last));
+  }
+
   late final List<_Lesson> _lessons = switch (widget.course) {
     TutorialCourse.basics => _basics,
     TutorialCourse.prism => _prism,
@@ -347,13 +382,14 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '届かないとき',
-      text: '守り8。**いまの道では届かない。**\n'
-          'それでも、通したマナのマスは消える。\n'
-          'まず消して、新しいマスを降らせよう。',
+      text: '守り8。まわりは同じ相で塞がっていて、\n'
+          '**この敵には5枚までしかつなげない。**\n'
+          '届かなくても、通したマナのマスは消える。',
       foes: const [
         _Foe(Cell(4, 2), TutorialScreen.thickWard),
         _Foe(Cell(0, 0), 3),
       ],
+      shape: _pocket,
       route: _shortAt,
     ),
     _Lesson(
@@ -495,6 +531,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
   void _enterScene() {
     final lesson = _lessons[_at];
     _paint(lesson.foes);
+    lesson.shape?.call(_controller.board);
     final route = lesson.route(_controller.board);
     _controller.lockedPath = route;
     // お手本は決めた道そのもの。探すまでもない。

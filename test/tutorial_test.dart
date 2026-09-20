@@ -245,10 +245,20 @@ void main() {
       await tester.pump();
     }
 
-    // 守り8。3枚では弾かれる。
-    expect(find.textContaining('いまの道では届かない'), findsOneWidget);
+    // 守り8。まわりが塞がっていて、5枚までしかつなげない。
+    expect(find.textContaining('5枚までしかつなげない'), findsOneWidget);
     final thick = thickFoe(controller.board);
     expect(thick, isNotNull);
+    expect(
+      controller.board.findPathThrough(thick!, 5),
+      isNotEmpty,
+      reason: '5枚は通る',
+    );
+    expect(
+      controller.board.findPathThrough(thick, 6),
+      isEmpty,
+      reason: '**そのままでは届かない。** ここが市松のままだと崩す意味が無い',
+    );
     expect(controller.lockedPath.length, 3);
     expect(controller.lockedPath, contains(thick));
 
@@ -263,6 +273,11 @@ void main() {
 
     // 次の稽古では、同じ敵に8枚で届く。
     expect(find.textContaining('今度は8枚つなげる'), findsOneWidget);
+    expect(
+      controller.board.findPathThrough(still!, 8),
+      isNotEmpty,
+      reason: '並びが変わって通るようになった',
+    );
     expect(controller.lockedPath.length, 8);
     expect(controller.lockedPath, contains(still));
 
