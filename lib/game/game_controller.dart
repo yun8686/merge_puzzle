@@ -71,6 +71,12 @@ class GameController extends ChangeNotifier {
   /// 直近の1手で敵から受けた痛手。0 なら何も起きていない。
   int lastHit = 0;
 
+  /// 痛手を受けた回数。**演出はこれが変わったのを見て走り出す。**
+  ///
+  /// 量（[lastHit]）だけを見ていると、同じ量の痛手が続けて来たときに値が
+  /// 変わらず、2回目の演出が鳴らない。
+  int hitTick = 0;
+
   /// この階層で討ち取った敵の守り。討った順に積む。制圧画面に姿を並べるのに使う。
   /// 敵は盤面から消えてしまうので、ここに控えておかないと何を討ったか分からない。
   final List<int> felledWards = <int>[];
@@ -335,20 +341,21 @@ class GameController extends ChangeNotifier {
     // 生き残った敵が毎ターン殴ってくる。討ち取れば減るので、早く討つほど
     // 後が楽になる。盾が居れば半分。
     lastHit = party.damageFor(board.foeAttack);
+    var taken = lastHit;
     party.takeDamage(lastHit);
-    if (party.isDown) {
-      phase = GamePhase.defeated;
-      notifyListeners();
-      return;
-    }
 
-    if (movesLeft <= 0 || !board.hasAnyChain()) {
+    if (!party.isDown && (movesLeft <= 0 || !board.hasAnyChain())) {
       // 落とした階層の締め。討ち漏らした敵の守りぶんをまとめて浴びる。
       // 守りが厚い敵を残すほど高くつく。
       lastBacklash = party.damageFor(board.foeThreat);
+      taken += lastBacklash;
       party.takeDamage(lastBacklash);
       phase = party.isDown ? GamePhase.defeated : GamePhase.floorLost;
+    } else if (party.isDown) {
+      phase = GamePhase.defeated;
     }
+
+    if (taken > 0) hitTick++;
     notifyListeners();
   }
 

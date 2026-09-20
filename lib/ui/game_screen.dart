@@ -184,9 +184,14 @@ class _GameScreenState extends State<GameScreen> {
                           party: _controller.party,
                           healed: _controller.lastHealed,
                           hit: _controller.lastHit,
+                          hitTick: _controller.hitTick,
                         ),
                         _Footer(controller: _controller, onRestart: _restart),
                       ],
+                    ),
+                    _HurtFlash(
+                      tick: _controller.hitTick,
+                      amount: _controller.lastHit + _controller.lastBacklash,
                     ),
                     if (_controller.phase == GamePhase.stageCleared &&
                         !_holdingClear)
@@ -1092,11 +1097,158 @@ class FoeChip extends StatelessWidget {
 
 /// 一党。階層をまたいで残る唯一の資源なので、盤面の外に常に出しておく。
 /// 体力が減るのは階層を落としたときだけなので、普段は動かない目盛りになる。
+/// 敵に殴られた瞬間、画面の縁から差す赤。
+///
+/// 一党の帯に出る `-N` だけでは、盤面を見ている目に入らない。毎ターン
+/// 殴られる以上、視線を動かさずに分かる知らせが要る。
+///
+/// **中央は透かしたまま**にしてある。盤面の上に色を乗せると、マスの相が
+/// 読めなくなって次の手を選べない。縁だけを染める。
+class _HurtFlash extends StatefulWidget {
+  const _HurtFlash({required this.tick, required this.amount});
+
+  /// 痛手を受けた回数。変わるたびに頭から流し直す。量だけを見ていると、
+  /// 同じ量が続けて来たときに2回目が鳴らない。
+  final int tick;
+
+  /// 受けた量。濃さに効く。
+  final int amount;
+
+  @override
+  State<_HurtFlash> createState() => _HurtFlashState();
+}
+
+class _HurtFlashState extends State<_HurtFlash>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  /// 差し込みから引くまで。長いと次の手を考える邪魔になる。
+  static const _span = Duration(milliseconds: 520);
+
+  /// 立ち上がりにかける割合。殴られた手応えは速さで出る。
+  static const double _rise = 0.16;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: _span);
+  }
+
+  @override
+  void didUpdateWidget(_HurtFlash old) {
+    super.didUpdateWidget(old);
+    if (widget.tick != old.tick && widget.amount > 0) {
+      _c.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 毎ターンの反撃は 1〜6、階層を落としたときの反撃は 20 を超える。
+    // 濃さは頭打ちにして、痛手が大きいほど濃いが画面は潰れないようにする。
+    final strength = (widget.amount / 10).clamp(0.4, 1.0);
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final t = _c.value;
+          if (t == 0 || t == 1) return const SizedBox.expand();
+          final e = t < _rise ? t / _rise : 1 - (t - _rise) / (1 - _rise);
+          final a = Curves.easeOut.transform(e.clamp(0.0, 1.0)) * strength;
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, -0.15),
+                radius: 1.0,
+                colors: [
+                  const Color(0x00000000),
+                  Palette.danger.withValues(alpha: a * 0.55),
+                ],
+                stops: const [0.42, 1],
+              ),
+            ),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 受けた痛手の数字。跳ねてから薄く残る。
+///
+/// 出しっぱなしの文字だと、同じ量が続いたときに「まだ殴られているのか、
+/// さっきのが残っているのか」が分からない。1手ごとに跳ね直す。
+class _HitTag extends StatefulWidget {
+  const _HitTag({required this.amount, required this.tick});
+
+  final int amount;
+  final int tick;
+
+  @override
+  State<_HitTag> createState() => _HitTagState();
+}
+
+class _HitTagState extends State<_HitTag> with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(_HitTag old) {
+    super.didUpdateWidget(old);
+    if (widget.tick != old.tick) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // 立ち上がりで少し大きく出して、すぐ等倍に落とす。
+        final pop = t < 0.22
+            ? 1 + Curves.easeOut.transform(t / 0.22) * 0.55
+            : 1.55 - Curves.easeOutCubic.transform((t - 0.22) / 0.78) * 0.55;
+        return Transform.translate(
+          // 下から突き上げる。落ちてくる向きだと回復と見分けがつかない。
+          offset: Offset(0, (1 - Curves.easeOut.transform(t)) * 5),
+          child: Transform.scale(scale: pop, child: child),
+        );
+      },
+      child: Text(
+        '-${widget.amount}',
+        style: AppFont.number(12, color: Palette.danger),
+      ),
+    );
+  }
+}
+
 class _PartyBar extends StatelessWidget {
   const _PartyBar({
     required this.party,
     required this.healed,
     required this.hit,
+    required this.hitTick,
   });
 
   final Party party;
@@ -1107,6 +1259,9 @@ class _PartyBar extends StatelessWidget {
   /// 直近の1手で敵から受けた痛手。敵は毎ターン殴ってくるので、これを
   /// 出さないと体力がひとりでに減っているように見える。
   final int hit;
+
+  /// 痛手を受けた回数。[_HitTag] がこれを見て出方を流し直す。
+  final int hitTick;
 
   @override
   Widget build(BuildContext context) {
@@ -1132,10 +1287,7 @@ class _PartyBar extends StatelessWidget {
                         if (hit > 0)
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
-                            child: Text(
-                              '-$hit',
-                              style: AppFont.number(12, color: Palette.danger),
-                            ),
+                            child: _HitTag(amount: hit, tick: hitTick),
                           ),
                         if (healed > 0)
                           Padding(

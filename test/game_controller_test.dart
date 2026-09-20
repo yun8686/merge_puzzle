@@ -261,6 +261,38 @@ void main() {
       expect(controller.lastBacklash, 0, reason: '階層を落とす前に倒れている');
     });
 
+    test('痛手を受けた回数が数えられる', () {
+      // 演出はこれが変わったのを見て走り出す。量だけを見ていると、同じ量が
+      // 続けて来たときに2回目が鳴らない。
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      expect(controller.hitTick, 0);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+      expect(controller.hitTick, 1);
+
+      // 同じ量の痛手でも数は進む。
+      trace(controller, const [Cell(2, 0), Cell(2, 1), Cell(2, 2)]);
+      controller.commitPath();
+      controller.settle();
+      expect(controller.lastHit, 2, reason: '量は同じ');
+      expect(controller.hitTick, 2);
+    });
+
+    test('制圧した手では痛手の回数が進まない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+      controller.settle();
+
+      expect(controller.remainingFoes, 0);
+      expect(controller.hitTick, 0);
+    });
+
     test('敵を討つほど毎ターンの痛手が減る', () {
       final controller = newController();
       paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);

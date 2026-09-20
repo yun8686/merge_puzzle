@@ -503,6 +503,39 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
 
+  testWidgets('殴られると赤い明滅が走る', (tester) async {
+    final controller = newController(1);
+    // 隅に届かない守りの敵が1体残る。毎ターン殴ってくる。
+    paintCheckerboard(controller.board);
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    final hpBefore = controller.party.hp;
+    controller.beginPath(const Cell(0, 0));
+    controller.extendPath(const Cell(0, 1));
+    controller.extendPath(const Cell(0, 2));
+    controller.commitPath();
+    controller.settle();
+    await tester.pump();
+
+    expect(controller.party.hp, lessThan(hpBefore));
+    expect(controller.hitTick, 1);
+    // 受けた量が帯に出る。
+    expect(find.text('-${controller.lastHit}'), findsOneWidget);
+
+    // 明滅が走りきるまで描き続けても例外が出ないこと。実機を見られなくても、
+    // 描画で落ちればここで分かる。
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
   testWidgets('制圧の画面は、最後の敵を討ってから少し待って出る', (tester) async {
     final controller = newController(5);
     // 威力3で討てる敵を1体だけ置く。1手で制圧できる。
