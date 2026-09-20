@@ -16,7 +16,7 @@ import 'home_screen_test.dart' show openBase;
 GameController newController() => GameController(
   rng: Random(4),
   dungeon: TutorialScreen.dungeon,
-  roster: const [Mage.squireHeat, Mage.squireCold],
+  roster: const [Mage.squireRed, Mage.squireBlue],
 );
 
 /// いま決められている道をそのままなぞって離す。盤面が詰んで、反撃まで済む。

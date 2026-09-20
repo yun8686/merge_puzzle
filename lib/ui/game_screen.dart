@@ -258,7 +258,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// ロゴタイプ。熱の相=暖色、冷の相=寒色というルールの色をそのまま使うので、
+/// ロゴタイプ。赤の相=暖色、青の相=寒色というルールの色をそのまま使うので、
 /// 見出しがそのまま配色の説明になっている。
 class _TitleBar extends StatelessWidget {
   const _TitleBar();
@@ -269,7 +269,7 @@ class _TitleBar extends StatelessWidget {
       padding: const EdgeInsets.only(top: 10, bottom: 2),
       child: ShaderMask(
         shaderCallback: (rect) => const LinearGradient(
-          colors: [Palette.oddA, Palette.oddB, Palette.evenB, Palette.evenA],
+          colors: [Palette.redA, Palette.redB, Palette.blueB, Palette.blueA],
         ).createShader(rect),
         child: Text(
           'FROSTFIRE CHAIN',
@@ -635,7 +635,7 @@ class _Footer extends StatelessWidget {
                         ],
                       )
                     : const Text(
-                        '熱と冷を交互に継いで鎖を編む',
+                        '同じ色を続けずに、なぞって鎖を編む',
                         key: ValueKey('hint'),
                         style: TextStyle(
                           color: Palette.textMuted,
@@ -1495,11 +1495,11 @@ class _PrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Palette.evenA, Palette.evenB]),
+        gradient: const LinearGradient(colors: [Palette.blueA, Palette.blueB]),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Palette.evenB.withValues(alpha: 0.5),
+            color: Palette.blueB.withValues(alpha: 0.5),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),

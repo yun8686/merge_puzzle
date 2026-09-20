@@ -28,7 +28,7 @@ class ParityChainApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Palette.background,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Palette.evenB,
+          seedColor: Palette.blueB,
           brightness: Brightness.dark,
         ),
       ),

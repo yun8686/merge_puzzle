@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/party.dart';
 import '../game/phase.dart';
 
-/// 熱の相=暖色、冷の相=寒色。この2色がゲームの中心情報なので、
+/// 赤の相=暖色、青の相=寒色。この2色がゲームの中心情報なので、
 /// 背景は暗く沈めてマナとエフェクトを目立たせる。
 ///
 /// 相は [Phase] で持つ。盤面に出る相は編成から決まるので、ここは3色ぶん
@@ -27,18 +27,18 @@ class Palette {
   /// 盤面の空きマスのくぼみ。タイルが乗る「受け皿」に見せる。
   static const boardWell = Color(0xFF1A1A2E);
 
-  static const oddA = Color(0xFFFFA83D);
-  static const oddB = Color(0xFFFF3E70);
-  static const evenA = Color(0xFF45DBFF);
-  static const evenB = Color(0xFF4458FF);
+  static const redA = Color(0xFFFFA83D);
+  static const redB = Color(0xFFFF3E70);
+  static const blueA = Color(0xFF45DBFF);
+  static const blueB = Color(0xFF4458FF);
 
-  /// 雷の相。3つ目として足した色。
+  /// 紫の相。3つ目として足した色。**相の呼び名はこの色そのもの。**
   ///
   /// 金や白金も試したが、暖色と混ざって濁り、盤面で見分けられなかった。
-  /// 緑は冷の水色と隣り合うと紛れる。藤から濃紫なら、暖色とも寒色とも
+  /// 緑は青の水色と隣り合うと紛れる。藤から濃紫なら、暖色とも寒色とも
   /// 離れていて、明るさもマナのマスとして足りる。
-  static const boltA = Color(0xFFC9A6FF);
-  static const boltB = Color(0xFF6D28D9);
+  static const violetA = Color(0xFFC9A6FF);
+  static const violetB = Color(0xFF6D28D9);
 
   static const textPrimary = Color(0xFFF2F2F7);
   static const textMuted = Color(0xFF8C8CA6);
@@ -70,9 +70,9 @@ class Palette {
 
   /// 相ごとの2色。マナのマスはこのグラデで塗る。
   static (Color, Color) pairFor(Phase phase) => switch (phase) {
-    Phase.heat => (oddA, oddB),
-    Phase.cold => (evenA, evenB),
-    Phase.bolt => (boltA, boltB),
+    Phase.red => (redA, redB),
+    Phase.blue => (blueA, blueB),
+    Phase.violet => (violetA, violetB),
   };
 
   static LinearGradient gradientFor(Phase phase) {
@@ -87,9 +87,9 @@ class Palette {
   /// 光らせるときの色。濃い側を使う相と薄い側を使う相があるのは、
   /// 暗い背景の上で同じくらいの明るさに見えるようにするため。
   static Color glowFor(Phase phase) => switch (phase) {
-    Phase.heat => oddB,
-    Phase.cold => evenA,
-    Phase.bolt => boltA,
+    Phase.red => redB,
+    Phase.blue => blueA,
+    Phase.violet => violetA,
   };
 
   static Color baseFor(Phase phase) => pairFor(phase).$1;
@@ -132,9 +132,9 @@ class AppFont {
       );
 }
 
-/// 盤面のマス1枚ぶんの見本。**相を漢字ではなく色で示す。**
+/// 盤面のマス1枚ぶんの見本。**相を字ではなく色で示す。**
 ///
-/// 「熱」「冷」「雷」と書いても、盤面で探すのは結局その色のマスなので、
+/// 「赤」「青」「紫」と書いても、盤面で探すのは結局その色のマスなので、
 /// 呼び名を挟まずに同じ色を出す。角の丸みもグラデーションも
 /// `board_view.dart` のマスと揃えてあるので、盤面のどれを指しているのかが
 /// 説明なしに伝わる。

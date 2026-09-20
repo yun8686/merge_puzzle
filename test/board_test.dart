@@ -6,19 +6,19 @@ import 'package:parity_chain/game/phase.dart';
 
 /// 決め打ちの盤面を作る。
 ///
-///  - `'o'` / `'e'` / `'b'` … 熱 / 冷 / 雷のマナ（数字は書かれていない）
+///  - `'o'` / `'e'` / `'b'` … 赤 / 青 / 紫のマナ（数字は書かれていない）
 ///  - `'o5'` / `'e3'` … その守りを持つ敵。体力は 1
 ///  - `'o5:2'` … 守り 5・体力 2 の敵
 ///  - `'.'` … 空マス
 Board boardOf(List<List<String>> spec) {
-  // 記号に 'b' が出てくる盤面だけ、雷の相も入っているものとして組む。
+  // 記号に 'b' が出てくる盤面だけ、紫の相も入っているものとして組む。
   final hasBolt = spec.any((row) => row.any((s) => s.startsWith('b')));
   final board = Board(
     rows: spec.length,
     cols: spec.first.length,
     phases: hasBolt
-        ? const [Phase.heat, Phase.cold, Phase.bolt]
-        : const [Phase.heat, Phase.cold],
+        ? const [Phase.red, Phase.blue, Phase.violet]
+        : const [Phase.red, Phase.blue],
     rng: Random(1),
   );
   var id = 0;
@@ -34,9 +34,9 @@ Board boardOf(List<List<String>> spec) {
       board.grid[r][c] = Tile(
         id: id++,
         phase: switch (s[0]) {
-          'o' => Phase.heat,
-          'b' => Phase.bolt,
-          _ => Phase.cold,
+          'o' => Phase.red,
+          'b' => Phase.violet,
+          _ => Phase.blue,
         },
         ward: ward,
         hp: parts.length > 1 ? int.parse(parts[1]) : 1,
@@ -55,9 +55,9 @@ List<List<String>> dump(Board b) => [
           '.'
         else
           switch (b.grid[r][c]!.phase) {
-            Phase.heat => 'o',
-            Phase.cold => 'e',
-            Phase.bolt => 'b',
+            Phase.red => 'o',
+            Phase.blue => 'e',
+            Phase.violet => 'b',
           },
     ],
 ];
@@ -143,37 +143,37 @@ void main() {
           Cell(0, 3),
         ]),
         isTrue,
-        reason: '熱→冷→雷→熱',
+        reason: '赤→青→紫→赤',
       );
     });
 
     test('3枚目で1枚目に戻ると2色の鎖になる', () {
-      // 熱→冷→熱。ここで2色に確定する。
+      // 赤→青→赤。ここで2色に確定する。
       const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)];
       expect(board.isValidPath(back), isTrue);
       expect(
         board.canExtendPath(back, const Cell(1, 2)),
         isTrue,
-        reason: '(1,2) は冷。2色の交互なので続けられる',
+        reason: '(1,2) は青。2色の交互なので続けられる',
       );
     });
 
     test('2色に確定した鎖に3色目は継げない', () {
-      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)]; // 熱→冷→熱
+      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)]; // 赤→青→赤
       expect(
         board.canExtendPath(back, const Cell(2, 1)),
         isFalse,
-        reason: '(2,1) は雷。巡回に切り替わると、戻った3枚目が後から無効になる',
+        reason: '(2,1) は紫。巡回に切り替わると、戻った3枚目が後から無効になる',
       );
     });
 
     test('3色の鎖では直前2枚と同じ相は継げない', () {
-      // 熱→冷→雷→熱 と来たら、次は冷でなければならない。
+      // 赤→青→紫→赤 と来たら、次は青でなければならない。
       const ring = [Cell(0, 0), Cell(0, 1), Cell(0, 2), Cell(0, 3)];
       expect(
         board.canExtendPath(ring, const Cell(1, 3)),
         isFalse,
-        reason: '(1,3) は雷。直前2枚に雷が居る',
+        reason: '(1,3) は紫。直前2枚に紫が居る',
       );
     });
 
@@ -196,7 +196,7 @@ void main() {
       expect(
         two.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
         isTrue,
-        reason: '熱冷熱。2色では巡回の決まりが効かない',
+        reason: '赤青赤。2色では巡回の決まりが効かない',
       );
     });
   });
@@ -240,7 +240,7 @@ void main() {
     });
 
     test('守りを1上回るごとに1ダメージ', () {
-      final tile = Tile(id: 0, phase: Phase.heat, ward: 5, hp: 3);
+      final tile = Tile(id: 0, phase: Phase.red, ward: 5, hp: 3);
       expect(tile.damageFrom(4), 0);
       expect(tile.damageFrom(5), 1);
       expect(tile.damageFrom(7), 3);
@@ -316,7 +316,7 @@ void main() {
 
     test('体力1の敵は、体力を持たなかった頃と同じ挙動になる', () {
       for (var ward = Board.minWard; ward <= Board.maxWard; ward++) {
-        final tile = Tile(id: 0, phase: Phase.heat, ward: ward);
+        final tile = Tile(id: 0, phase: Phase.red, ward: ward);
         for (var power = 1; power <= 12; power++) {
           expect(
             tile.damageFrom(power) >= tile.hp,

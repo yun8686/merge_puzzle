@@ -91,7 +91,7 @@ void main() {
       tester,
       progress: Progress(
         owned: {MageKind.ember},
-        party: [MageKind.ember, MageKind.squireCold],
+        party: [MageKind.ember, MageKind.squireBlue],
       ),
     );
     await goTab(tester, '一党');
@@ -205,9 +205,9 @@ void main() {
         progress: Progress(
           owned: {MageKind.gale},
           party: [
-            MageKind.squireHeat,
-            MageKind.squireCold,
-            MageKind.squireBolt,
+            MageKind.squireRed,
+            MageKind.squireBlue,
+            MageKind.squireViolet,
           ],
         ),
       );
@@ -223,14 +223,14 @@ void main() {
         tester,
         progress: Progress(
           owned: {MageKind.ember, MageKind.blaze},
-          // 焔と烈火はどちらも熱。雷の従者が抜けると1色になる。
-          party: [MageKind.ember, MageKind.blaze, MageKind.squireBolt],
+          // 焔と烈火はどちらも赤。紫の従者が抜けると1色になる。
+          party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
         ),
       );
       await goTab(tester, '一党');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
-      await tapAt(tester, rosterCard(Mage.squireBolt));
+      await tapAt(tester, rosterCard(Mage.squireViolet));
       expect(
         find.text('3 / ${Progress.partySlots}'),
         findsOneWidget,
@@ -241,9 +241,9 @@ void main() {
 
   group('3色で潜るとき', () {
     const prismParty = [
-      MageKind.squireHeat,
-      MageKind.squireCold,
-      MageKind.squireBolt,
+      MageKind.squireRed,
+      MageKind.squireBlue,
+      MageKind.squireViolet,
     ];
 
     testWidgets('初めてなら、潜る前に3色の稽古が出る', (tester) async {

@@ -218,9 +218,9 @@ class Ability {
 
 enum MageKind {
   /// 相を1つ持つだけの従者。特殊な力は無い。始まりの3人。
-  squireHeat,
-  squireCold,
-  squireBolt,
+  squireRed,
+  squireBlue,
+  squireViolet,
   ember,
   rime,
   storm,
@@ -232,9 +232,9 @@ enum MageKind {
 
 /// 一党に加わる魔導士。能力は「鎖の戦果への反応」として書く。
 ///
-/// 熱や冷の枚数を条件にすると、交互ルールのせいで実質「長さ＋どちらの相から
-/// 始めたか」になる。長さ N の鎖に含まれる熱は、熱から始めれば ⌈N/2⌉、
-/// 冷から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
+/// 赤や青の枚数を条件にすると、交互ルールのせいで実質「長さ＋どちらの相から
+/// 始めたか」になる。長さ N の鎖に含まれる赤は、赤から始めれば ⌈N/2⌉、
+/// 青から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
   const Mage._(this.kind, this.phase, this.name, this.hp, [this.ability]);
@@ -271,63 +271,63 @@ class Mage {
 
   /// 始まりの3人。相を1つ持つだけで、特殊な力は無い。
   /// 3人とも別の相なので、開幕から盤面は3色になる。
-  static const squireHeat = Mage._(
-    MageKind.squireHeat,
-    Phase.heat,
-    '熱の従者',
+  static const squireRed = Mage._(
+    MageKind.squireRed,
+    Phase.red,
+    '赤の従者',
     squireHp,
   );
-  static const squireCold = Mage._(
-    MageKind.squireCold,
-    Phase.cold,
-    '冷の従者',
+  static const squireBlue = Mage._(
+    MageKind.squireBlue,
+    Phase.blue,
+    '青の従者',
     squireHp,
   );
-  static const squireBolt = Mage._(
-    MageKind.squireBolt,
-    Phase.bolt,
-    '雷の従者',
+  static const squireViolet = Mage._(
+    MageKind.squireViolet,
+    Phase.violet,
+    '紫の従者',
     squireHp,
   );
 
   static const ember = Mage._(
     MageKind.ember,
-    Phase.heat,
+    Phase.red,
     '焔の魔導士',
     40,
     Ability(SamePhase(emberSame), PowerUp(1)),
   );
   static const blaze = Mage._(
     MageKind.blaze,
-    Phase.heat,
+    Phase.red,
     '烈火の魔導士',
     30,
     Ability(SamePhase(blazeSame), PowerUp(2)),
   );
   static const gale = Mage._(
     MageKind.gale,
-    Phase.heat,
+    Phase.red,
     '風の魔導士',
     35,
     Ability(ChainLength(galeChain), TurnBack(1)),
   );
   static const rime = Mage._(
     MageKind.rime,
-    Phase.cold,
+    Phase.blue,
     '氷雨の魔導士',
     45,
     Ability(SamePhase(rimeSame), Mend(rimeMend)),
   );
   static const frost = Mage._(
     MageKind.frost,
-    Phase.cold,
+    Phase.blue,
     '霜の魔導士',
     40,
     Ability(StartsWith(), PowerUp(1)),
   );
   static const storm = Mage._(
     MageKind.storm,
-    Phase.bolt,
+    Phase.violet,
     '雷の魔導士',
     30,
     Ability(
@@ -337,14 +337,14 @@ class Mage {
   );
   static const aegis = Mage._(
     MageKind.aegis,
-    Phase.bolt,
+    Phase.violet,
     '盾の魔導士',
     40,
     Ability(Always(), Guard()),
   );
 
   /// 始まりの3人。ガチャの対象にはならない。
-  static const List<Mage> squires = [squireHeat, squireCold, squireBolt];
+  static const List<Mage> squires = [squireRed, squireBlue, squireViolet];
 
   /// ガチャで増える7人。
   static const List<Mage> summonable = [
@@ -480,7 +480,7 @@ class Party {
 
   /// 威力補正。重ねて乗る。
   ///
-  /// 焔（自分の相3枚以上 +1）と烈火（同5枚以上 +2）は同時に乗るので、熱を
+  /// 焔（自分の相3枚以上 +1）と烈火（同5枚以上 +2）は同時に乗るので、赤を
   /// 5枚継げば +3。霜は開始相だけを見るので、枚数を寄せる編み方とは
   /// 噛み合わない。「同じ相を長く継ぐ」か「決まった相から始める」かで
   /// 育て方が割れる。

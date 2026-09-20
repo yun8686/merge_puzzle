@@ -124,11 +124,11 @@ class TutorialScreen extends StatefulWidget {
   /// 「6枚つなぐ」がそのまま「威力6」になって説明と食い違わない。
   /// 盤面に出る相は編成で決まるので、3色の稽古は従者3人で組む。
   static List<Mage> rosterFor(TutorialCourse course) => switch (course) {
-    TutorialCourse.basics => const [Mage.squireHeat, Mage.squireCold],
+    TutorialCourse.basics => const [Mage.squireRed, Mage.squireBlue],
     TutorialCourse.prism => const [
-      Mage.squireHeat,
-      Mage.squireCold,
-      Mage.squireBolt,
+      Mage.squireRed,
+      Mage.squireBlue,
+      Mage.squireViolet,
     ],
   };
 
@@ -440,7 +440,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 3色で初めて潜る人の筋書き。
   ///
   /// 3色の盤面は `phases[(r + c) % 3]` で敷いてあるので、**右か下へ進めば
-  /// 相が 熱→冷→雷→熱… と回り、上か下へ折り返せば2色で往復する**。
+  /// 相が 赤→青→紫→赤… と回り、上か下へ折り返せば2色で往復する**。
   /// この2つの形が、そのまま2本立ての決まりに対応している。
   ///
   ///  - 右上へ階段（右・上・右・上…）… 使う相は2つ。**交互**で成立する
@@ -718,7 +718,7 @@ class _Banner extends StatelessWidget {
                   width: i == at ? 18 : 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: i <= at ? Palette.evenA : Palette.panelBorder,
+                    color: i <= at ? Palette.blueA : Palette.panelBorder,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -917,7 +917,7 @@ class _Reach extends StatelessWidget {
       color = Palette.gold;
     } else if (controller.willHurt(cell)) {
       text = '傷がつく';
-      color = Palette.evenA;
+      color = Palette.blueA;
     } else {
       text = 'あと ${tile.powerToHurt - controller.power} 枚で届く';
       color = Palette.textMuted;
@@ -1396,11 +1396,11 @@ class _DoneButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Palette.evenA, Palette.evenB]),
+        gradient: const LinearGradient(colors: [Palette.blueA, Palette.blueB]),
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Palette.evenB.withValues(alpha: 0.45),
+            color: Palette.blueB.withValues(alpha: 0.45),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),

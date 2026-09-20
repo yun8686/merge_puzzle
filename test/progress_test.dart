@@ -11,7 +11,7 @@ void main() {
     expect(progress.owned, {for (final m in Mage.squires) m.kind});
     expect(progress.party, Progress.startingParty);
     expect(progress.party.length, Progress.partySlots - 1, reason: '1枠空いている');
-    expect(progress.partyPhases, [Phase.heat, Phase.cold]);
+    expect(progress.partyPhases, [Phase.red, Phase.blue]);
     expect(progress.partyIsValid, isTrue);
     expect(progress.shards, 0);
     expect(progress.canRoll, isFalse);
@@ -64,12 +64,23 @@ void main() {
   });
 
   test('相が1種類しか無い編成は、読むときに直される', () {
-    // 熱の魔導士だけを並べた記録。このままでは鎖が1枚も編めない。
+    // 赤の魔導士だけを並べた記録。このままでは鎖が1枚も編めない。
     final progress = Progress.decode(
       '{"owned":["ember","blaze"],"party":["ember","blaze"]}',
     );
     expect(progress.partyIsValid, isTrue);
     expect(progress.partyPhases.length, greaterThanOrEqualTo(2));
+  });
+
+  test('相の呼び名を色に変える前の従者の名前も読める', () {
+    // 熱・冷・雷だった頃の保存。編成に入れていた従者がそのまま残ること。
+    final progress = Progress.decode(
+      '{"owned":["squireHeat","squireCold","squireBolt","ember"],'
+      '"party":["squireBolt","ember"]}',
+    );
+    expect(progress.party, [MageKind.squireViolet, MageKind.ember]);
+    expect(progress.owned, contains(MageKind.squireRed));
+    expect(progress.partyIsValid, isTrue);
   });
 
   test('知らない名前が入っていても落ちない', () {
@@ -157,7 +168,7 @@ void main() {
     test('枠が埋まっていれば、引いた魔導士は編成に入らない', () {
       final progress = Progress(
         owned: {MageKind.storm},
-        party: [MageKind.squireHeat, MageKind.squireCold, MageKind.storm],
+        party: [MageKind.squireRed, MageKind.squireBlue, MageKind.storm],
         shards: Progress.gachaCost * 10,
       );
       expect(progress.party.length, Progress.partySlots);
@@ -173,7 +184,7 @@ void main() {
     test('枠が埋まっていれば入らない', () {
       final progress = Progress(
         owned: {for (final m in Mage.roster) m.kind},
-        party: [MageKind.squireHeat, MageKind.squireCold, MageKind.squireBolt],
+        party: [MageKind.squireRed, MageKind.squireBlue, MageKind.squireViolet],
       );
       expect(progress.party.length, Progress.partySlots);
 
@@ -187,7 +198,7 @@ void main() {
         owned: {MageKind.ember, MageKind.rime, MageKind.storm},
         party: [MageKind.ember, MageKind.rime, MageKind.storm],
       );
-      // 熱・冷・雷。冷を外しても熱と雷が残るので外せる。
+      // 赤・青・紫。青を外しても赤と紫が残るので外せる。
       progress.toggleParty(MageKind.rime);
       expect(progress.party, [MageKind.ember, MageKind.storm]);
     });
@@ -197,12 +208,12 @@ void main() {
         owned: {MageKind.ember, MageKind.blaze, MageKind.storm},
         party: [MageKind.ember, MageKind.blaze, MageKind.storm],
       );
-      // 焔と烈火はどちらも熱。雷を外すと熱だけになるので、外せない。
+      // 焔と烈火はどちらも赤。紫を外すと赤だけになるので、外せない。
       expect(progress.canDrop(MageKind.storm), isFalse);
       progress.toggleParty(MageKind.storm);
       expect(progress.party, contains(MageKind.storm));
 
-      // 熱が2人居るので、片方は外してよい。
+      // 赤が2人居るので、片方は外してよい。
       expect(progress.canDrop(MageKind.blaze), isTrue);
       progress.toggleParty(MageKind.blaze);
       expect(progress.party, [MageKind.ember, MageKind.storm]);
@@ -218,9 +229,9 @@ void main() {
     });
 
     test('持っていない魔導士は編成に入らない', () {
-      final progress = Progress(party: [MageKind.squireHeat]);
+      final progress = Progress(party: [MageKind.squireRed]);
       progress.toggleParty(MageKind.storm);
-      expect(progress.party, [MageKind.squireHeat]);
+      expect(progress.party, [MageKind.squireRed]);
     });
 
     test('編成から一党の顔ぶれが出る', () {
@@ -229,7 +240,7 @@ void main() {
         party: [MageKind.storm, MageKind.ember],
       );
       expect(progress.partyMages, [Mage.storm, Mage.ember]);
-      expect(progress.partyPhases, [Phase.bolt, Phase.heat]);
+      expect(progress.partyPhases, [Phase.violet, Phase.red]);
     });
   });
 
@@ -260,12 +271,12 @@ void main() {
 
   test('編成の相の数を数える', () {
     final two = Progress(
-      party: [MageKind.squireHeat, MageKind.squireCold],
+      party: [MageKind.squireRed, MageKind.squireBlue],
     );
     expect(two.partyPhaseCount, 2);
 
     final three = Progress(
-      party: [MageKind.squireHeat, MageKind.squireCold, MageKind.squireBolt],
+      party: [MageKind.squireRed, MageKind.squireBlue, MageKind.squireViolet],
     );
     expect(three.partyPhaseCount, Progress.prismPhases);
   });

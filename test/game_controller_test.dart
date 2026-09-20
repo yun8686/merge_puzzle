@@ -21,7 +21,7 @@ void paintCheckerboard(
       final isHere = foe != null && foe.row == r && foe.col == c;
       board.grid[r][c] = Tile(
         id: id++,
-        phase: (r + c).isEven ? Phase.heat : Phase.cold,
+        phase: (r + c).isEven ? Phase.red : Phase.blue,
         ward: isHere ? ward : null,
         hp: isHere ? hp : 1,
       );
@@ -32,12 +32,12 @@ void paintCheckerboard(
 GameController newController([int seed = 3]) =>
     GameController(rng: Random(seed), roster: twoPhases);
 
-/// 熱と冷の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
+/// 赤と青の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
 /// 相を入れる前の盤面と規則も手触りも変わらない。市松の盤面を
 /// 決め打ちで置くテストは、この2相を前提にしている。
-const twoPhases = [Mage.squireHeat, Mage.squireCold];
+const twoPhases = [Mage.squireRed, Mage.squireBlue];
 
-/// 同じ2相を、従者ではなく焔と氷雨で揃えた一党。焔の補正（熱3枚で威力 +1）を
+/// 同じ2相を、従者ではなく焔と氷雨で揃えた一党。焔の補正（赤3枚で威力 +1）を
 /// 見たいテストはこちらを連れていく。
 const emberPair = [Mage.ember, Mage.rime];
 
@@ -45,7 +45,7 @@ GameController emberController([int seed = 3]) =>
     GameController(rng: Random(seed), roster: emberPair);
 
 /// 3相の一党。雷のように3色の盤面を要る能力は、これで確かめる。
-const threePhases = [Mage.squireHeat, Mage.squireCold, Mage.squireBolt];
+const threePhases = [Mage.squireRed, Mage.squireBlue, Mage.squireViolet];
 
 GameController prismController([int seed = 3]) =>
     GameController(rng: Random(seed), roster: threePhases);
@@ -53,7 +53,7 @@ GameController prismController([int seed = 3]) =>
 /// 盤面を3相の斜め縞に塗る。相は (r + c) を 3 で割った余りで決まる。
 ///
 /// 3相の決まりは「直前2枚と違う」なので、市松では繋がらない。この縞なら
-/// 右・下へ1歩ずつ進むかぎり相が 熱→冷→雷→熱… と回り、条件を満たし続ける。
+/// 右・下へ1歩ずつ進むかぎり相が 赤→青→紫→赤… と回り、条件を満たし続ける。
 /// 折り返し（右に進んでから左に戻る）は余りが 0 に戻って繋がらないので、
 /// 曲がるときは下へ降りること。
 void paintPrism(Board board, {Cell? foe, int ward = 8, int hp = 1}) {
@@ -230,7 +230,7 @@ void main() {
       expect(controller.board.foeAttack, 2);
       // 守りと違って、攻撃力は手で上書きできる。
       final board = Board(
-        phases: const [Phase.heat, Phase.cold],
+        phases: const [Phase.red, Phase.blue],
         rng: Random(1),
       );
       board.buildStage(foes: const [FoeSpec(3, atk: 9), FoeSpec(3)]);
@@ -524,17 +524,17 @@ void main() {
   group('一党', () {
     test('体力は連れていく顔ぶれの合計', () {
       // 力のある者ほど薄い。厚さを取るか力を取るかが編成の判断に乗る。
-      expect(Mage.squireHeat.hp, greaterThan(Mage.blaze.hp));
-      expect(Mage.squireHeat.hp, greaterThan(Mage.storm.hp));
+      expect(Mage.squireRed.hp, greaterThan(Mage.blaze.hp));
+      expect(Mage.squireRed.hp, greaterThan(Mage.storm.hp));
 
       expect(
-        Party.poolFor(const [Mage.squireHeat, Mage.squireCold]),
+        Party.poolFor(const [Mage.squireRed, Mage.squireBlue]),
         Mage.squireHp * 2,
       );
       // 3人目を入れれば厚くなる（そのぶん盤面は3色になる）。
       expect(
         Party.poolFor(Mage.squires),
-        greaterThan(Party.poolFor(const [Mage.squireHeat, Mage.squireCold])),
+        greaterThan(Party.poolFor(const [Mage.squireRed, Mage.squireBlue])),
       );
 
       final controller = GameController(
@@ -552,16 +552,16 @@ void main() {
       expect(controller.party.hp, Mage.squireHp * 2);
     });
 
-    test('焔は熱を3枚以上継いだ鎖に威力を1足す', () {
+    test('焔は赤を3枚以上継いだ鎖に威力を1足す', () {
       final controller = emberController();
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
-      // 熱（奇数）は (0,0) (0,2) の2枚だけ。まだ乗らない。
+      // 赤（奇数）は (0,0) (0,2) の2枚だけ。まだ乗らない。
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       expect(controller.powerBonus, 0);
       expect(controller.power, 3);
 
-      // 5枚まで伸ばすと熱が3枚になる。
+      // 5枚まで伸ばすと赤が3枚になる。
       controller.extendPath(const Cell(0, 3));
       controller.extendPath(const Cell(0, 4));
       expect(controller.powerBonus, 1);
@@ -584,13 +584,13 @@ void main() {
       expect(controller.power, 5);
     });
 
-    test('氷雨は冷を3枚以上継いだ鎖で体力を戻す', () {
+    test('氷雨は青を3枚以上継いだ鎖で体力を戻す', () {
       final controller = newController();
       controller.party.members.add(Mage.rime);
       controller.party.hp = 10;
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
-      // (0,1) (0,3) (0,5) が冷（偶数）。
+      // (0,1) (0,3) (0,5) が青（偶数）。
       trace(controller, const [
         Cell(0, 0),
         Cell(0, 1),
@@ -646,15 +646,15 @@ void main() {
     });
 
     test('焔の補正で威力8に届いても、7枚では雷は落ちない', () {
-      // 3色の盤面。雷の相の条件は満たしているので、枚数だけが争点になる。
+      // 3色の盤面。雷が要る色数は満たしているので、枚数だけが争点になる。
       final controller = GameController(
         rng: Random(3),
-        roster: const [Mage.ember, Mage.squireCold, Mage.squireBolt],
+        roster: const [Mage.ember, Mage.squireBlue, Mage.squireViolet],
       );
       controller.party.members.add(Mage.storm);
       paintPrism(controller.board, foe: const Cell(7, 5));
 
-      // 7枚。熱が3枚あるので焔の補正が乗り、威力は8になる。
+      // 7枚。赤が3枚あるので焔の補正が乗り、威力は8になる。
       trace(controller, boltPath.take(stormChain - 1).toList());
       expect(controller.pathLength, stormChain - 1);
       expect(controller.power, stormChain);
@@ -896,11 +896,11 @@ void main() {
     var id = 0;
     for (var r = 0; r < board.rows; r++) {
       for (var c = 0; c < board.cols; c++) {
-        board.grid[r][c] = Tile(id: id++, phase: Phase.heat);
+        board.grid[r][c] = Tile(id: id++, phase: Phase.red);
       }
     }
     // 敵を1体残しておく（制圧扱いにならないように）。
-    board.grid[7][5] = Tile(id: id++, phase: Phase.heat, ward: 8);
+    board.grid[7][5] = Tile(id: id++, phase: Phase.red, ward: 8);
 
     expect(board.hasAnyChain(), isFalse);
 
@@ -927,22 +927,22 @@ void main() {
       return GameController(rng: Random(3), roster: list);
     }
 
-    test('霜は冷から継ぎ始めた鎖にだけ乗る', () {
+    test('霜は青から継ぎ始めた鎖にだけ乗る', () {
       final controller = withRoster(const [Mage.frost]);
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
 
-      // (0,0) は熱。熱から始めたので乗らない。
+      // (0,0) は赤。赤から始めたので乗らない。
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       expect(controller.power, 3);
       controller.cancelPath();
 
-      // (0,1) は冷。冷から始めたので +1。
+      // (0,1) は青。青から始めたので +1。
       trace(controller, const [Cell(0, 1), Cell(0, 2), Cell(0, 3)]);
       expect(controller.power, 4);
     });
 
-    test('烈火は熱5枚から乗り、焔と重なる', () {
-      // 9枚で熱が5枚になる並び。
+    test('烈火は赤5枚から乗り、焔と重なる', () {
+      // 9枚で赤が5枚になる並び。
       const path = [
         Cell(0, 0),
         Cell(0, 1),
@@ -966,10 +966,10 @@ void main() {
       expect(both.power, 9 + 1 + 2, reason: '焔の +1 と重なって +3');
     });
 
-    test('烈火は熱が4枚では乗らない', () {
+    test('烈火は赤が4枚では乗らない', () {
       final controller = withRoster(const [Mage.blaze]);
       paintCheckerboard(controller.board, foe: const Cell(7, 5));
-      // 7枚で熱は4枚。
+      // 7枚で赤は4枚。
       trace(controller, const [
         Cell(0, 0),
         Cell(0, 1),

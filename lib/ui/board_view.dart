@@ -58,11 +58,11 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   /// 盤面の枠が消した色に光る量（0〜1）。フレーム全体が反応すると、
   /// 消えたのが盤面上の一部でも「盤ごと鳴った」感じになる。
   double _frameGlow = 0;
-  Color _frameColor = Palette.evenA;
+  Color _frameColor = Palette.blueA;
 
   /// 長いチェインのときだけ焚く盤面全体のフラッシュ。
   double _screenFlash = 0;
-  Color _screenFlashColor = Palette.evenA;
+  Color _screenFlashColor = Palette.blueA;
 
   double _cell = 0;
   double _originX = 0;
@@ -536,7 +536,7 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
                           core: const Color(0xD9FFF7E0),
                           glow: Palette.glowFor(
                             board.tileAt(controller.path.last)?.phase ??
-                                Phase.heat,
+                                Phase.red,
                           ),
                           width: cell * 0.15,
                         ),
@@ -1060,7 +1060,7 @@ class _Bolt {
 /// 雷の魔導士の追撃。盤面の上端から、当たった敵すべてに1本ずつ落ちる。
 ///
 /// 守りを無視して階層の敵すべてを削るという、鎖とは別の理屈で起きることなので、
-/// 鎖の色（熱／冷）ではなく魔導士の金で描き、盤面ごと光らせて別物だと見せる。
+/// 鎖の色（相の色）ではなく魔導士の金で描き、盤面ごと光らせて別物だと見せる。
 /// 討ち取れなかった敵にも落とす。当たったことが見えないと、体力だけ減っていて
 /// 何が起きたのか分からない。
 class _BoltView extends StatefulWidget {

@@ -6,7 +6,7 @@ import 'theme.dart';
 /// 最初に出る画面。
 ///
 /// 遊び方は書かない。**鎖が編まれるところを見せる**ほうが速い。題の上で
-/// 熱→冷→雷とマスが順に灯って線で繋がるので、「色を継いで繋げる遊びだ」が
+/// 赤→青→紫とマスが順に灯って線で繋がるので、「色を継いで繋げる遊びだ」が
 /// 押す前に伝わる。
 ///
 /// 記録は読まない。押されたら拠点（`HomeScreen`）に渡して、そこで読ませる。
@@ -89,8 +89,8 @@ class _Title extends StatelessWidget {
           shaderCallback: (rect) => const LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            // 熱から冷へ。題そのものが盤面の2色を名乗っている。
-            colors: [Palette.oddA, Palette.oddB, Palette.evenA],
+            // 赤から青へ。題そのものが盤面の2色を名乗っている。
+            colors: [Palette.redA, Palette.redB, Palette.blueA],
             stops: [0, 0.5, 1],
           ).createShader(rect),
           child: const Text(
@@ -152,7 +152,7 @@ class _StartButtonState extends State<_StartButton>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Palette.evenB.withValues(alpha: 0.35 + 0.35 * t),
+                color: Palette.blueB.withValues(alpha: 0.35 + 0.35 * t),
                 blurRadius: 22 + 16 * t,
                 offset: const Offset(0, 6),
               ),
@@ -164,7 +164,7 @@ class _StartButtonState extends State<_StartButton>
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Palette.evenA, Palette.evenB],
+            colors: [Palette.blueA, Palette.blueB],
           ),
           borderRadius: BorderRadius.circular(20),
         ),

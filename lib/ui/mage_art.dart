@@ -44,8 +44,8 @@ class _Line extends _Op {
   final double width;
 }
 
-/// 熱の従者。
-const _squireHeat = <_Op>[
+/// 赤の従者。
+const _squireRed = <_Op>[
   _Poly(_Layer.fill, [
     Offset(0.527, 0.200), Offset(0.592, 0.345),
     Offset(0.689, 0.510), Offset(0.765, 0.662),
@@ -68,8 +68,8 @@ const _squireHeat = <_Op>[
   ]),
 ];
 
-/// 冷の従者。
-const _squireCold = <_Op>[
+/// 青の従者。
+const _squireBlue = <_Op>[
   _Circle(_Layer.fill, Offset(0.500, 0.609), 0.211),
   _Poly(_Layer.fill, [
     Offset(0.500, 0.180), Offset(0.692, 0.644),
@@ -82,8 +82,8 @@ const _squireCold = <_Op>[
   ]),
 ];
 
-/// 雷の従者。
-const _squireBolt = <_Op>[
+/// 紫の従者。
+const _squireViolet = <_Op>[
   _Poly(_Layer.fill, [
     Offset(0.586, 0.195), Offset(0.275, 0.572),
     Offset(0.468, 0.572), Offset(0.392, 0.845),
@@ -239,9 +239,9 @@ const _aegis = <_Op>[
 ];
 
 const _byKind = <MageKind, List<_Op>>{
-  MageKind.squireHeat: _squireHeat,
-  MageKind.squireCold: _squireCold,
-  MageKind.squireBolt: _squireBolt,
+  MageKind.squireRed: _squireRed,
+  MageKind.squireBlue: _squireBlue,
+  MageKind.squireViolet: _squireViolet,
   MageKind.ember: _ember,
   MageKind.blaze: _blaze,
   MageKind.gale: _gale,

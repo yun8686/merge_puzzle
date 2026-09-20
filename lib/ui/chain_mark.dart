@@ -3,20 +3,20 @@ import 'package:flutter/material.dart';
 import '../game/phase.dart';
 import 'theme.dart';
 
-/// 題の上で編まれる鎖。熱→冷→雷→熱→冷 と順に灯り、線で繋がっていく。
+/// 題の上で編まれる鎖。赤→青→紫→赤→青 と順に灯り、線で繋がっていく。
 ///
 /// 盤面の決まりをそのまま小さく見せている。同じ相は続かない並びなので、
 /// 「隣り合う2枚は違う色」が絵として読める。
 class ChainMark extends StatefulWidget {
-  const ChainMark({super.key, this.order = heatColdBolt});
+  const ChainMark({super.key, this.order = redBlueViolet});
 
   /// 既定の並び。盤面で実際に編める形（同じ相が続かない）にしてある。
-  static const List<Phase> heatColdBolt = [
-    Phase.heat,
-    Phase.cold,
-    Phase.bolt,
-    Phase.heat,
-    Phase.cold,
+  static const List<Phase> redBlueViolet = [
+    Phase.red,
+    Phase.blue,
+    Phase.violet,
+    Phase.red,
+    Phase.blue,
   ];
 
   /// 灯る順。**同じ相を続けて入れないこと。** 盤面で編めない並びを見せると、

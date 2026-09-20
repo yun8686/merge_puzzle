@@ -34,11 +34,11 @@ class Progress {
   /// 誰かを外すところから始めることになる。1枠空けておけば、引いた人が
   /// そのまま入って、次の潜りで違いが出る。
   ///
-  /// 空けるのは雷の枠。熱と冷の2相なら継ぎ方は「直前1枚と違う」＝交互で、
+  /// 空けるのは紫の枠。赤と青の2相なら継ぎ方は「直前1枚と違う」＝交互で、
   /// 盤面はいちばん編みやすい形から始まる。
   static const List<MageKind> startingParty = [
-    MageKind.squireHeat,
-    MageKind.squireCold,
+    MageKind.squireRed,
+    MageKind.squireBlue,
   ];
 
   /// ガチャ1回の値段。
@@ -248,12 +248,29 @@ class Progress {
   static List<Object?> _list(Object? raw) =>
       raw is List<Object?> ? raw : const <Object?>[];
 
+  /// 相の呼び名を色に変える前の従者の名前。**古い記録を読むためだけに残す。**
+  ///
+  /// [toJson] は [MageKind.name] をそのまま書くので、名前を変えた分だけ
+  /// 古い保存が読めなくなる。従者は必ず所持している扱いなので欠けても
+  /// 壊れはしないが、編成に入れていた従者が黙って抜ける。ここで読み替える。
+  static const Map<String, MageKind> _renamed = {
+    'squireHeat': MageKind.squireRed,
+    'squireCold': MageKind.squireBlue,
+    'squireBolt': MageKind.squireViolet,
+  };
+
   static List<MageKind> _kinds(Object? raw) => [
     for (final v in _list(raw))
-      if (v is String)
-        for (final k in MageKind.values)
-          if (k.name == v) k,
+      if (v is String && _kindOf(v) != null) _kindOf(v)!,
   ];
+
+  /// 名前から魔導士を引く。読めない名前は null。
+  static MageKind? _kindOf(String name) {
+    for (final k in MageKind.values) {
+      if (k.name == name) return k;
+    }
+    return _renamed[name];
+  }
 
   String encode() => jsonEncode(toJson());
 

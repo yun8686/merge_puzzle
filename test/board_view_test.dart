@@ -21,7 +21,7 @@ void paintCheckerboard(Board board) {
   var id = 0;
   for (var r = 0; r < board.rows; r++) {
     for (var c = 0; c < board.cols; c++) {
-      board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
+      board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.red : Phase.blue);
     }
   }
   final corner = board.grid[board.rows - 1][board.cols - 1]!;
@@ -35,14 +35,14 @@ void paintCheckerboard(Board board) {
 GameController newController(int seed) =>
     GameController(rng: Random(seed), roster: twoPhases);
 
-/// 熱と冷の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
+/// 赤と青の2相だけの一党。この2色なら「直前1枚と違う」＝交互で、
 /// 相を入れる前の盤面と規則も手触りも変わらない。市松の盤面を
 /// 決め打ちで置くテストは、この2相を前提にしている。
-const twoPhases = [Mage.squireHeat, Mage.squireCold];
+const twoPhases = [Mage.squireRed, Mage.squireBlue];
 
-/// 同じ2相でも、従者ではなく焔と氷雨を連れた一党。従者の印は '熱' '冷' で
+/// 同じ2相でも、従者ではなく焔と氷雨を連れた一党。従者の印は '赤' '青' で
 /// 相の呼び名とぶつかるので、印と相の数を別々に読みたいときはこちら。
-/// 焔が居るぶん、熱を3枚以上継いだ鎖には威力が1乗る。
+/// 焔が居るぶん、赤を3枚以上継いだ鎖には威力が1乗る。
 const emberPair = [Mage.ember, Mage.rime];
 
 /// 盤面の相の見本。漢字ではなくマスと同じ色なので、型で探す。
@@ -56,7 +56,7 @@ Finder portraitOf(MageKind kind) => find.byWidgetPredicate(
 );
 
 /// 3相の一党。雷は3色の盤面でしか落ちないので、その確認はこちらで。
-const threePhases = [Mage.squireHeat, Mage.squireCold, Mage.squireBolt];
+const threePhases = [Mage.squireRed, Mage.squireBlue, Mage.squireViolet];
 
 /// 盤面を3相の斜め縞に塗る。相は (r + c) を 3 で割った余りで決まるので、
 /// 右・下へ1歩ずつ進むかぎり「直前2枚と違う」を満たし続ける。隅には
@@ -142,7 +142,7 @@ void main() {
         origin + Offset((col + 0.5) * 50, (row + 0.5) * 50);
 
     // 上段を右へ6マス、下段を左へ3マスなぞって9枚の鎖にする。
-    // 熱が5枚あるので焔の補正が乗り、表示される威力は10になる。
+    // 赤が5枚あるので焔の補正が乗り、表示される威力は10になる。
     final gesture = await tester.startGesture(centerOf(0, 0));
     await tester.pump();
     for (var col = 1; col < 6; col++) {
@@ -242,7 +242,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.heat);
+        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.red);
       }
     }
 
@@ -316,10 +316,10 @@ void main() {
     expect(find.text('TURNS'), findsOneWidget);
     expect(find.text('FOES'), findsOneWidget);
     // 盤面に敷かれた相の比率。呼び名ではなくマスと同じ色で出ていること。
-    expect(swatchOf(Phase.heat), findsOneWidget);
-    expect(swatchOf(Phase.cold), findsOneWidget);
-    expect(swatchOf(Phase.bolt), findsNothing, reason: '連れていない相');
-    expect(find.text(Phase.heat.label), findsNothing, reason: '漢字は出さない');
+    expect(swatchOf(Phase.red), findsOneWidget);
+    expect(swatchOf(Phase.blue), findsOneWidget);
+    expect(swatchOf(Phase.violet), findsNothing, reason: '連れていない相');
+    expect(find.text(Phase.red.label), findsNothing, reason: '漢字は出さない');
     // 階層をまたいで残る一党。連れてきた顔ぶれが姿で並ぶ。
     expect(find.text('PARTY'), findsOneWidget);
     expect(portraitOf(MageKind.ember), findsOneWidget);
@@ -332,7 +332,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.red : Phase.blue);
       }
     }
     // 守りを散らして最下段に並べる。重力で動かないので位置が読める。
@@ -387,7 +387,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.red : Phase.blue);
       }
     }
     final target = controller.board.grid[0][1]!;
@@ -668,7 +668,7 @@ void main() {
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.heat : Phase.cold);
+        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.red : Phase.blue);
       }
     }
     final target = controller.board.grid[0][1]!;

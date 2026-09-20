@@ -307,10 +307,10 @@ class _StatusStrip extends StatelessWidget {
             ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 colors: [
-                  Palette.oddA,
-                  Palette.oddB,
-                  Palette.evenB,
-                  Palette.evenA,
+                  Palette.redA,
+                  Palette.redB,
+                  Palette.blueB,
+                  Palette.blueA,
                 ],
               ).createShader(rect),
               child: Text(
@@ -407,7 +407,7 @@ class _TabBar extends StatelessWidget {
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  Palette.evenA.withValues(alpha: 0.16),
+                                  Palette.blueA.withValues(alpha: 0.16),
                                   Colors.transparent,
                                 ],
                               ),
@@ -421,7 +421,7 @@ class _TabBar extends StatelessWidget {
                               icon,
                               size: 22,
                               color: tab == current
-                                  ? Palette.evenA
+                                  ? Palette.blueA
                                   : Palette.textDim,
                             ),
                             const SizedBox(height: 4),
@@ -430,7 +430,7 @@ class _TabBar extends StatelessWidget {
                               style: AppFont.label(
                                 10,
                                 color: tab == current
-                                    ? Palette.evenA
+                                    ? Palette.blueA
                                     : Palette.textDim,
                               ),
                             ),
@@ -627,7 +627,7 @@ class _DungeonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = cleared ? Palette.gold : Palette.evenA;
+    final tint = cleared ? Palette.gold : Palette.blueA;
     return Opacity(
       opacity: locked ? 0.45 : 1,
       child: DecoratedBox(
@@ -713,7 +713,7 @@ class _DungeonCard extends StatelessWidget {
                           const Icon(
                             Icons.chevron_right,
                             size: 26,
-                            color: Palette.evenA,
+                            color: Palette.blueA,
                           ),
                       ],
                     ),

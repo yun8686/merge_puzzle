@@ -121,11 +121,11 @@ def cloud(cx, cy, w, h, layer='fill'):
     ]
 
 
-# ---- 熱 ---------------------------------------------------------------
+# ---- 赤 ---------------------------------------------------------------
 
 # 従者は**輪郭だけ**。塗り潰した招ける魔導士と、同じ相でも一目で分かれる。
 # 敵の「格の梯子」と同じで、格の差を形で出す。
-MAGES['squireHeat'] = ('熱の従者', [
+MAGES['squireRed'] = ('赤の従者', [
     flame(0.50, 0.53, 0.27, 0.33),
     flame(0.50, 0.545, 0.150, 0.185, 'hole'),
 ])
@@ -148,9 +148,9 @@ MAGES['gale'] = ('風の魔導士', [
     gust(0.55, 0.56, 0.29, 0.090),
 ])
 
-# ---- 冷 ---------------------------------------------------------------
+# ---- 青 ---------------------------------------------------------------
 
-MAGES['squireCold'] = ('冷の従者', [
+MAGES['squireBlue'] = ('青の従者', [
     *drop(0.50, 0.50, 0.32),
     *drop(0.50, 0.515, 0.175, 'hole'),
 ])
@@ -167,9 +167,9 @@ MAGES['frost'] = ('霜の魔導士', [
     ('circle', 'glow', (0.50, 0.50, 0.085)),
 ])
 
-# ---- 雷 ---------------------------------------------------------------
+# ---- 紫 ---------------------------------------------------------------
 
-MAGES['squireBolt'] = ('雷の従者', [
+MAGES['squireViolet'] = ('紫の従者', [
     bolt(0.50, 0.52, 0.225, 0.325),
     bolt(0.50, 0.52, 0.105, 0.155, 'hole'),
 ])
@@ -189,16 +189,16 @@ MAGES['aegis'] = ('盾の魔導士', [
 
 # 並び順。名簿と同じ（従者が先、招ける魔導士が後）。
 ORDER = [
-    'squireHeat', 'squireCold', 'squireBolt',
+    'squireRed', 'squireBlue', 'squireViolet',
     'ember', 'blaze', 'gale', 'rime', 'frost', 'storm', 'aegis',
 ]
 
 # 相。色はここから引く。
 PHASE = {
-    'squireHeat': 'heat', 'ember': 'heat', 'blaze': 'heat', 'gale': 'heat',
-    'squireCold': 'cold', 'rime': 'cold', 'frost': 'cold',
-    'squireBolt': 'bolt', 'storm': 'bolt', 'aegis': 'bolt',
+    'squireRed': 'red', 'ember': 'red', 'blaze': 'red', 'gale': 'red',
+    'squireBlue': 'blue', 'rime': 'blue', 'frost': 'blue',
+    'squireViolet': 'violet', 'storm': 'violet', 'aegis': 'violet',
 }
 
 # Palette.baseFor(phase) と同じ色。
-PHASE_COLORS = {'heat': '#FFA83D', 'cold': '#45DBFF', 'bolt': '#C9A6FF'}
+PHASE_COLORS = {'red': '#FFA83D', 'blue': '#45DBFF', 'violet': '#C9A6FF'}

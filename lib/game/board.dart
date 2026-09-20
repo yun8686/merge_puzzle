@@ -220,7 +220,7 @@ class Board {
     Random? rng,
   }) : phases = List.unmodifiable(
          phases == null || phases.isEmpty
-             ? const [Phase.heat, Phase.cold]
+             ? const [Phase.red, Phase.blue]
              : phases,
        ),
        _weights = List.unmodifiable(

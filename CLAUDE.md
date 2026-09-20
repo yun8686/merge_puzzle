@@ -35,7 +35,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 | パス | 中身 |
 |---|---|
-| `lib/game/phase.dart` | 相（熱・冷・雷）の呼び名と並び。盤面も一党も UI もここを読む |
+| `lib/game/phase.dart` | 相（赤・青・紫）の呼び名と並び。盤面も一党も UI もここを読む |
 | `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
