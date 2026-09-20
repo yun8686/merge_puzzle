@@ -203,12 +203,14 @@ void main() {
     expect(controller.lockedPath, contains(hurt));
     expect(controller.lockedPath, isNot(route));
 
+    final felled = controller.felledWards.length;
     traceRoute(controller);
     await tester.pump();
 
-    expect(toughFoe(controller.board), isNull, reason: '削り切った');
+    // 2本目で討ち切れる。次の稽古が始まっているので、盤面ではなく戦果を見る。
+    expect(controller.felledWards.length - felled, 1, reason: '削り切った');
     expect(controller.felledWards, contains(TutorialScreen.toughWard));
-    expect(find.textContaining('残った敵を討ち取ろう'), findsOneWidget);
+    expect(find.textContaining('一撃で討とう'), findsOneWidget);
   });
 
   testWidgets('威力が守りを上回れば、体力2でも一撃で討てる', (tester) async {
