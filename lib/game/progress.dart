@@ -16,6 +16,7 @@ class Progress {
     List<MageKind>? party,
     this.shards = 0,
     this.taughtTutorial = false,
+    this.taughtPrism = false,
   }) : // 従者は常に居る。ここが欠けると編成が組めなくなる。
        owned = <MageKind>{
          ...?owned,
@@ -67,6 +68,13 @@ class Progress {
   /// 記録」だから。拠点が読み込んだあとに見て、立っていなければ出す。
   bool taughtTutorial;
 
+  /// 3色の稽古を一度通したか。**初めて3色で潜るときだけ出す**ための印。
+  ///
+  /// 相が2つの間は継ぎ方が「交互」1本で、2色だった頃と何も変わらない。
+  /// 3つ目を入れて初めて巡回の決まりが効きはじめるので、そこで一度だけ
+  /// 教える。
+  bool taughtPrism;
+
   /// まだ持っていない魔導士。ガチャはここから引く。
   /// 従者は最初から居るので、引く対象は [Mage.summonable] だけ。
   List<Mage> get unowned =>
@@ -74,6 +82,12 @@ class Progress {
 
   /// 引ける状態か。値段が足りていて、まだ引く相手が居ること。
   bool get canRoll => shards >= gachaCost && unowned.isNotEmpty;
+
+  /// 盤面が3色になる相の数。これ以上で巡回の決まりが効きはじめる。
+  static const int prismPhases = 3;
+
+  /// 編成に含まれる相の数。そのまま盤面の色数になる。
+  int get partyPhaseCount => {for (final m in partyMages) m.phase}.length;
 
   /// 編成に入っている魔導士。順番は編成した順。
   List<Mage> get partyMages => [
@@ -171,6 +185,7 @@ class Progress {
     'party': [for (final k in party) k.name],
     'shards': shards,
     'taught': taughtTutorial,
+    'taughtPrism': taughtPrism,
   };
 
   static Progress fromJson(Map<String, Object?> json) {
@@ -199,6 +214,7 @@ class Progress {
       // 印が無い古い記録は「まだ教えていない」扱い。一度出るだけなので、
       // 続きから始めた人に出てしまっても害は小さい。
       taughtTutorial: json['taught'] == true,
+      taughtPrism: json['taughtPrism'] == true,
     );
   }
 

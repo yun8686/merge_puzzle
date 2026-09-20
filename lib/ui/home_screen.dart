@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -49,6 +50,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _load();
   }
+
+  /// 3色の稽古を出しているあいだ、潜るのを待たせておく約束。
+  /// 通し終えた（かとばした）ら完了して、そのまま潜る。
+  Completer<void>? _prismDone;
 
   /// 記録が読めるのを待つ上限。これを過ぎたら、まっさらな記録で拠点を開く。
   ///
@@ -104,6 +109,29 @@ class _HomeScreenState extends State<HomeScreen> {
     _save();
   }
 
+  /// 初めて3色で潜るときだけ、先に3色の稽古を通す。
+  ///
+  /// 相が2つの間は継ぎ方が「交互」1本で、2色だった頃と何も変わらない。
+  /// 3つ目を入れて初めて巡回の決まりが効きはじめるので、**その形で潜る
+  /// 直前**に一度だけ出す。拠点で編成を組んだ時点では出さない――組み替えて
+  /// いる最中に覆いかぶさると、何をしていたのか分からなくなる。
+  Future<void> _teachPrism() {
+    final done = Completer<void>();
+    setState(() => _prismDone = done);
+    return done.future;
+  }
+
+  void _prismTaught() {
+    final done = _prismDone;
+    final progress = _progress;
+    setState(() => _prismDone = null);
+    if (progress != null && !progress.taughtPrism) {
+      progress.taughtPrism = true;
+      _save();
+    }
+    done?.complete();
+  }
+
   /// ダンジョンに潜って、帰ってくるまで。
   Future<void> _dive(Dungeon dungeon) async {
     final progress = _progress;
@@ -112,6 +140,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _drawn = null;
       _spoils = null;
     });
+
+    if (!progress.taughtPrism &&
+        progress.partyPhaseCount >= Progress.prismPhases) {
+      await _teachPrism();
+    }
+    // 稽古を挟んだぶん、潜る前にもう一度確かめる。
+    if (!mounted) return;
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -177,6 +212,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           if (_teaching && progress != null)
             TutorialScreen(onDone: _taught),
+          if (_prismDone != null)
+            TutorialScreen(
+              course: TutorialCourse.prism,
+              onDone: _prismTaught,
+            ),
         ],
       ),
     );

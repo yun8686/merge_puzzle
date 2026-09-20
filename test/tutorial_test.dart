@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/board.dart';
 import 'package:parity_chain/game/game_controller.dart';
 import 'package:parity_chain/game/party.dart';
+import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/tutorial.dart';
 
@@ -36,6 +37,31 @@ Cell? toughFoe(Board board) {
     if (board.tileAt(at)!.maxHp > 1) return at;
   }
   return null;
+}
+
+/// 3色の稽古場と同じ顔ぶれ・同じ階層で組む。
+GameController prismController() => GameController(
+  rng: Random(4),
+  dungeon: TutorialScreen.prismDungeon,
+  roster: TutorialScreen.rosterFor(TutorialCourse.prism),
+);
+
+/// いま決められている道が通る相。**2色で編む道か、3色を巡る道か**が分かる。
+Set<Phase> phasesOnRoute(GameController c) => {
+  for (final cell in c.lockedPath) c.board.tileAt(cell)!.phase,
+};
+
+Future<void> openPrism(WidgetTester tester, GameController controller) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: TutorialScreen(
+        onDone: () {},
+        controller: controller,
+        course: TutorialCourse.prism,
+      ),
+    ),
+  );
+  await tester.pump();
 }
 
 Future<void> open(WidgetTester tester, GameController controller) async {
@@ -246,6 +272,61 @@ void main() {
     await tester.pump();
 
     expect(find.text('あと 2 枚で届く'), findsOneWidget);
+  });
+
+  group('3色の稽古', () {
+    testWidgets('2色で編む道から始まる', (tester) async {
+      final controller = prismController();
+      await openPrism(tester, controller);
+
+      expect(controller.board.phases.length, 3, reason: '盤面は3色');
+      expect(find.textContaining('使う相が2つだけなら'), findsOneWidget);
+      // 道は3色の盤面の上を、2色だけで往復する。
+      expect(controller.lockedPath.length, 5);
+      expect(phasesOnRoute(controller).length, 2);
+
+      traceRoute(controller);
+      await tester.pump();
+      expect(controller.chains, 1, reason: '交互で成立する');
+    });
+
+    testWidgets('3つ目を踏む道は、3色を順に巡る', (tester) async {
+      final controller = prismController();
+      await openPrism(tester, controller);
+      traceRoute(controller);
+      await tester.pump();
+
+      expect(find.textContaining('直前2枚と同じ相は継げない'), findsOneWidget);
+      expect(controller.lockedPath.length, 6);
+      expect(phasesOnRoute(controller).length, 3);
+
+      traceRoute(controller);
+      await tester.pump();
+      expect(controller.chains, 2, reason: '巡回で成立する');
+    });
+
+    testWidgets('7枚で厚い守りを破って終わる', (tester) async {
+      final controller = prismController();
+      await openPrism(tester, controller);
+      for (var i = 0; i < 2; i++) {
+        traceRoute(controller);
+        await tester.pump();
+      }
+
+      expect(find.textContaining('守り6の敵を討ち取ろう'), findsOneWidget);
+      expect(controller.lockedPath.length, 7);
+      expect(phasesOnRoute(controller).length, 3);
+
+      traceRoute(controller);
+      await tester.pump();
+
+      expect(controller.felledWards, contains(6));
+      expect(controller.remainingFoes, 0);
+      // 締めは3色の話だけ。潜り方や編成の話はここでは出さない。
+      expect(find.text('3色を覚えた'), findsOneWidget);
+      expect(find.textContaining('雷の魔導士は、3色の盤面でだけ'), findsOneWidget);
+      expect(find.textContaining('体力は持ち越し'), findsNothing);
+    });
   });
 
   testWidgets('とばせる', (tester) async {

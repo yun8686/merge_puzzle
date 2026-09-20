@@ -246,4 +246,27 @@ void main() {
     expect(back.shards, 42);
     expect(back.owned, contains(MageKind.aegis));
   });
+
+  test('3色の稽古を通した印も保存される', () {
+    final progress = Progress();
+    expect(progress.taughtPrism, isFalse);
+    progress.taughtPrism = true;
+
+    final back = Progress.fromJson(progress.toJson());
+    expect(back.taughtPrism, isTrue);
+    // 印が無い古い記録は「まだ教えていない」扱い。
+    expect(Progress.fromJson(const {}).taughtPrism, isFalse);
+  });
+
+  test('編成の相の数を数える', () {
+    final two = Progress(
+      party: [MageKind.squireHeat, MageKind.squireCold],
+    );
+    expect(two.partyPhaseCount, 2);
+
+    final three = Progress(
+      party: [MageKind.squireHeat, MageKind.squireCold, MageKind.squireBolt],
+    );
+    expect(three.partyPhaseCount, Progress.prismPhases);
+  });
 }

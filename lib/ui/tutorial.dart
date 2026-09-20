@@ -7,6 +7,7 @@ import '../game/board.dart';
 import '../game/dungeon.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
+import '../game/phase.dart';
 import 'board_view.dart';
 import 'mage_art.dart';
 import 'theme.dart';
@@ -46,8 +47,27 @@ import 'theme.dart';
 ///
 /// 記録は読み書きしない。通し終えたことを [onDone] で知らせるだけで、印を
 /// 付けて保存するのは拠点の仕事。
+/// 稽古の種類。**出すきっかけが違うので、筋書きも別に持つ。**
+enum TutorialCourse {
+  /// 初めて遊ぶ人に。継ぎ方から毎ターンの反撃まで。
+  basics,
+
+  /// 初めて3色で潜る人に。巡回の決まりだけ。相が2つの間は継ぎ方が
+  /// 「交互」1本で、2色だった頃と何も変わらない。3つ目を入れて初めて
+  /// 効きはじめる決まりなので、そこで一度だけ教える。
+  prism,
+}
+
 class TutorialScreen extends StatefulWidget {
-  const TutorialScreen({super.key, required this.onDone, this.controller});
+  const TutorialScreen({
+    super.key,
+    required this.onDone,
+    this.controller,
+    this.course = TutorialCourse.basics,
+  });
+
+  /// どの稽古を通すか。
+  final TutorialCourse course;
 
   final VoidCallback onDone;
 
@@ -71,6 +91,32 @@ class TutorialScreen extends StatefulWidget {
       FloorSpec([FoeSpec(3, atk: 1)], moves: 40),
     ],
   );
+
+  /// 3色の稽古場。敵も相の並びも稽古の側が決めるので、ここで要るのは手数だけ。
+  static const Dungeon prismDungeon = Dungeon(
+    id: 'tutorial-prism',
+    name: '稽古場',
+    floors: [
+      FloorSpec([FoeSpec(3, atk: 1)], moves: 30),
+    ],
+  );
+
+  static Dungeon dungeonFor(TutorialCourse course) => switch (course) {
+    TutorialCourse.basics => dungeon,
+    TutorialCourse.prism => prismDungeon,
+  };
+
+  /// その稽古で連れる一党。**能力を持たない従者だけ。** 威力＝枚数になるので、
+  /// 「6枚つなぐ」がそのまま「威力6」になって説明と食い違わない。
+  /// 盤面に出る相は編成で決まるので、3色の稽古は従者3人で組む。
+  static List<Mage> rosterFor(TutorialCourse course) => switch (course) {
+    TutorialCourse.basics => const [Mage.squireHeat, Mage.squireCold],
+    TutorialCourse.prism => const [
+      Mage.squireHeat,
+      Mage.squireCold,
+      Mage.squireBolt,
+    ],
+  };
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -125,8 +171,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 課題が変わった直後だけ出す「できた」。
   bool _cheering = false;
 
-  /// 横に1列ぶんの道。盤面は市松に敷き直してあるので、まっすぐでも折れても
-  /// 隣どうしで相が入れ替わり、必ず成立する。
+  /// 横に1列ぶんの道。2色の盤面は市松なので、まっすぐでも折れても隣どうしで
+  /// 相が入れ替わり、必ず成立する。
   static List<Cell> _row(int r, int from, int to) => [
     for (var c = from; c <= to; c++) Cell(r, c),
   ];
@@ -144,7 +190,13 @@ class _TutorialScreenState extends State<TutorialScreen> {
     return _row(at.row, from, from + 4);
   }
 
-  static final List<_Lesson> _lessons = [
+  late final List<_Lesson> _lessons = switch (widget.course) {
+    TutorialCourse.basics => _basics,
+    TutorialCourse.prism => _prism,
+  };
+
+  /// 初めて遊ぶ人の筋書き。
+  static final List<_Lesson> _basics = [
     _Lesson(
       label: '鎖を編む',
       text: '隣り合うマスを指でなぞって継ぐ。\n'
@@ -207,6 +259,62 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
   ];
 
+  /// 3色で初めて潜る人の筋書き。
+  ///
+  /// 3色の盤面は `phases[(r + c) % 3]` で敷いてあるので、**右か下へ進めば
+  /// 相が 熱→冷→雷→熱… と回り、上か下へ折り返せば2色で往復する**。
+  /// この2つの形が、そのまま2本立ての決まりに対応している。
+  ///
+  ///  - 右上へ階段（右・上・右・上…）… 使う相は2つ。**交互**で成立する
+  ///  - 右下へ階段（右・下・右・下…）… 3色を順に踏む。**巡回**で成立する
+  static final List<_Lesson> _prism = [
+    _Lesson(
+      label: '2色なら今までどおり',
+      text: '3つ目の相が盤面に出ている。\n'
+          'それでも**使う相が2つだけなら**、\n'
+          'これまでどおり交互に継げる。',
+      foes: const [_Foe(Cell(0, 0), 3)],
+      route: (b) => const [
+        Cell(5, 1),
+        Cell(5, 2),
+        Cell(4, 2),
+        Cell(4, 3),
+        Cell(3, 3),
+      ],
+    ),
+    _Lesson(
+      label: '3つ目を踏む',
+      text: '3つ目の相を踏むと、決まりが入れ替わる。\n'
+          '**直前2枚と同じ相は継げない。**\n'
+          '3色を順に踏む道をなぞろう。',
+      foes: const [_Foe(Cell(0, 0), 3)],
+      route: (b) => const [
+        Cell(2, 1),
+        Cell(2, 2),
+        Cell(3, 2),
+        Cell(3, 3),
+        Cell(4, 3),
+        Cell(4, 4),
+      ],
+    ),
+    _Lesson(
+      label: '巡って長く編む',
+      text: '同じ相に戻らないぶん、**巡回は長く伸びる**。\n'
+          '長い鎖ほど、厚い守りを破れる。\n'
+          '7枚つないで、守り6の敵を討ち取ろう。',
+      foes: const [_Foe(Cell(4, 3), 6)],
+      route: (b) => const [
+        Cell(1, 0),
+        Cell(1, 1),
+        Cell(2, 1),
+        Cell(2, 2),
+        Cell(3, 2),
+        Cell(3, 3),
+        Cell(4, 3),
+      ],
+    ),
+  ];
+
   bool get _finished => _at >= _lessons.length;
 
   @override
@@ -217,10 +325,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
         widget.controller ??
         GameController(
           rng: Random(4),
-          dungeon: TutorialScreen.dungeon,
-          // 能力を持たない従者だけ。威力＝枚数になるので、「6枚つなぐ」が
-          // そのまま「威力6」になって説明と食い違わない。
-          roster: const [Mage.squireHeat, Mage.squireCold],
+          dungeon: TutorialScreen.dungeonFor(widget.course),
+          roster: TutorialScreen.rosterFor(widget.course),
         );
     _controller.addListener(_check);
     // 最初の稽古の盤面をここで組む。描く前なので知らせる必要はない。
@@ -235,26 +341,26 @@ class _TutorialScreenState extends State<TutorialScreen> {
     super.dispose();
   }
 
-  /// 稽古の盤面を組む。マナは市松に敷き直し、[foes] があれば敵を置き直す。
+  /// 稽古の盤面を組む。マナを敷き直し、[foes] があれば敵を置き直す。
   ///
-  /// **市松なので、上下左右どちらへ進んでも相が入れ替わる。** 決めた道が
-  /// 必ず成立するのはこのため。鎖を1本編むたびに重力と補充で並びが崩れる
-  /// ので、稽古ごとに敷き直す。
+  /// 相は `phases[(r + c) % 相の数]` で置く。**2色なら市松**で、上下左右
+  /// どちらへ進んでも相が入れ替わる。**3色なら斜めの縞**で、右か下へ進めば
+  /// 相が順に回り（巡回）、右・上と折り返せば2色で往復する（交互）。どちらの
+  /// 決まりで編む道も引けるのはこのため。鎖を1本編むたびに重力と補充で並びが
+  /// 崩れるので、稽古ごとに敷き直す。
   ///
   /// [foes] が null なら敵はそのまま残す。**前の稽古でつけた傷を持ち越す**
   /// ための逃げ道で、「削って討つ」がこれを使う。
   void _paint(List<_Foe>? foes) {
     final board = _controller.board;
     final phases = board.phases;
+    final n = phases.length;
     for (var r = 0; r < board.rows; r++) {
       for (var c = 0; c < board.cols; c++) {
         final tile = board.grid[r][c];
         if (tile == null) continue;
         if (foes == null && tile.isFoe) continue;
-        board.grid[r][c] = Tile(
-          id: tile.id,
-          phase: (r + c).isEven ? phases.first : phases[1],
-        );
+        board.grid[r][c] = Tile(id: tile.id, phase: phases[(r + c) % n]);
       }
     }
     if (foes == null) return;
@@ -300,7 +406,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     // 覚える前に投げられる。
     if (_controller.phase == GamePhase.floorLost ||
         _controller.phase == GamePhase.defeated) {
-      _controller.enterDungeon(TutorialScreen.dungeon);
+      _controller.enterDungeon(TutorialScreen.dungeonFor(widget.course));
       _enterScene();
       return;
     }
@@ -390,6 +496,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
           if (_finished)
             _Finish(
               onDone: widget.onDone,
+              course: widget.course,
               learned: [for (final l in _lessons) l.label],
             ),
         ],
@@ -735,9 +842,14 @@ class _Cheer extends StatelessWidget {
 ///
 /// 盤面では教えられない編成の話だけ、最後にここで足す。
 class _Finish extends StatefulWidget {
-  const _Finish({required this.onDone, required this.learned});
+  const _Finish({
+    required this.onDone,
+    required this.course,
+    required this.learned,
+  });
 
   final VoidCallback onDone;
+  final TutorialCourse course;
   final List<String> learned;
 
   @override
@@ -796,7 +908,11 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                     opacity: title,
                     child: Transform.scale(
                       scale: 0.7 + 0.3 * title,
-                      child: const _Crest(),
+                      child: _Crest(
+                        text: widget.course == TutorialCourse.basics
+                            ? 'ひととおり覚えた'
+                            : '3色を覚えた',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -808,21 +924,32 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                       at: _stage(0.26 + i * 0.06, 0.38 + i * 0.06),
                     ),
                   const SizedBox(height: 26),
-                  Opacity(
-                    opacity: dive,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - dive) * 12),
-                      child: const _DiveNote(),
+                  // 盤面では試せない話だけを、送り出す前に言い添える。
+                  // 3色の稽古はそこだけ差し替える。
+                  if (widget.course == TutorialCourse.basics) ...[
+                    Opacity(
+                      opacity: dive,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - dive) * 12),
+                        child: const _DiveNote(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Opacity(
-                    opacity: party,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - party) * 12),
-                      child: _PartyNote(party: _party),
+                    const SizedBox(height: 14),
+                    Opacity(
+                      opacity: party,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - party) * 12),
+                        child: _PartyNote(party: _party),
+                      ),
                     ),
-                  ),
+                  ] else
+                    Opacity(
+                      opacity: party,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - party) * 12),
+                        child: const _PrismNote(),
+                      ),
+                    ),
                   const SizedBox(height: 28),
                   Opacity(
                     opacity: button,
@@ -840,7 +967,9 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
 
 /// 終いの紋。金の輪の中に一言。
 class _Crest extends StatelessWidget {
-  const _Crest();
+  const _Crest({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -867,7 +996,7 @@ class _Crest extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('ひととおり覚えた', style: AppFont.number(21, color: Palette.gold)),
+            Text(text, style: AppFont.number(21, color: Palette.gold)),
             const SizedBox(height: 6),
             Text('READY', style: AppFont.label(10, color: Palette.textDim)),
           ],
@@ -918,6 +1047,53 @@ class _Learned extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 3色の稽古の締め。**なぜ3色にするのか**を、盤面と同じ色で言い添える。
+///
+/// 巡回は長く伸びるぶん、厚い守りに届く。雷の魔導士が落ちるのも3色のときだけ
+/// で、盤面では試せない（稽古場の一党は能力を持たない従者だけなので）。
+class _PrismNote extends StatelessWidget {
+  const _PrismNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 盤面と同じ色・同じ形。ここだけの飾りを作ると繋がらない。
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final phase in Phase.values) ...[
+                  if (phase != Phase.values.first)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 5),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Palette.textDim,
+                        size: 14,
+                      ),
+                    ),
+                  PhaseSwatch(phase: phase, size: 22),
+                ],
+              ],
+            ),
+            const SizedBox(height: 14),
+            const _Body(
+              '3色の盤面は、**巡って編めば長く伸びる**。\n'
+              '長い鎖ほど、厚い守りに届く。\n'
+              '雷の魔導士は、3色の盤面でだけ雷を落とす。',
+            ),
+          ],
         ),
       ),
     );
