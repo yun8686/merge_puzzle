@@ -75,14 +75,35 @@ class _BoardViewState extends State<BoardView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _ticker = createTicker(_onTick);
+    widget.controller.addListener(_onChange);
+  }
+
+  @override
+  void didUpdateWidget(BoardView old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onChange);
+      widget.controller.addListener(_onChange);
+    }
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onChange);
     _strikeTimer?.cancel();
     _impactTimer?.cancel();
     _ticker.dispose();
     super.dispose();
+  }
+
+  /// 盤面は自分で描き直す。外の画面の描き直しに相乗りしない。
+  ///
+  /// お手本（`hintPath`）は**手が止まってから**出る。指も演出も止まっていて、
+  /// 誰も描き直していない時刻に盤面だけが変わるので、外側の描き直しに
+  /// 頼ると「盤面に出したのに描かれない」が起きる。別のタブから戻るなど、
+  /// 関係のない出来事で木が組み直されたときに初めて出てくる。
+  void _onChange() {
+    if (mounted) setState(() {});
   }
 
   void _ensureTicking() {

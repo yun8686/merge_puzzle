@@ -449,13 +449,10 @@ void main() {
             child: SizedBox(
               width: 300,
               height: 400,
-              // BoardView は controller を購読しない。本番と同じく、外側が
-              // 同じ通知で描き直す。包まずに置くと showHint しても盤面が
-              // 描き直されず、お手本が出ているかを見られない。
-              child: AnimatedBuilder(
-                animation: controller,
-                builder: (context, _) => BoardView(controller: controller),
-              ),
+              // 外側で包まない。お手本は手が止まってから出るので、外側の
+              // 描き直しに頼ると盤面に出したものが描かれない。BoardView が
+              // 自分で controller を購読していることを、ここで見ている。
+              child: BoardView(controller: controller),
             ),
           ),
         ),
