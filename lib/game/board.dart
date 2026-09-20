@@ -807,6 +807,9 @@ class Board {
     return const [];
   }
 
+  /// 2体を結ぶのに許す隔たり（マス数）。これより離れた組は探さない。
+  static const int _pairReach = 9;
+
   /// 2体の敵を通る手。どちらにも傷がつく長さを探す。無ければ空。
   ///
   /// 1本の鎖は通った敵すべてに当たる、というのは言葉より道を見たほうが早い。
@@ -819,11 +822,15 @@ class Board {
         final b = foes[j];
         // 両方に傷がつく長さと、2体を結ぶのに要る枚数の、大きいほう。
         final reach = (a.row - b.row).abs() + (a.col - b.col).abs() + 1;
+        // 離れすぎた2体は探さない。道が無いことを確かめるのに時間が掛かる
+        // わりに、見つかっても長すぎて稽古にならない。
+        if (reach > _pairReach) continue;
         var need = tileAt(a)!.powerToHurt;
         if (tileAt(b)!.powerToHurt > need) need = tileAt(b)!.powerToHurt;
         if (reach > need) need = reach;
-        // 遠回りの余地を少しだけ残す。広げるほど探索が伸びる。
-        final p = findPathThrough(a, need, also: b, cap: need + 4);
+        // 遠回りの余地を少しだけ残す。広げるほど探索が伸びる（枝は1枚
+        // 伸ばすごとに増えるので、上限は効き目が大きい）。
+        final p = findPathThrough(a, need, also: b, cap: need + 3);
         if (p.isNotEmpty) return p;
       }
     }

@@ -121,6 +121,8 @@ void main() {
     expect(controller.remainingFoes, 0);
     expect(find.text('ひととおり覚えた'), findsOneWidget);
     expect(find.textContaining('連れていった魔導士で決まる'), findsOneWidget);
+    // 盤面では試せない話も言い添えてから送り出す。
+    expect(find.textContaining('体力は持ち越し'), findsOneWidget);
     expect(find.text('拠点へ'), findsOneWidget);
 
     // 覚えたことが順に並ぶ。あっさり閉じると何も残らない。
@@ -129,6 +131,7 @@ void main() {
       '長いほど強い',
       '守りを破る',
       'まとめて当てる',
+      '削って討つ',
       '毎ターンの反撃',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
@@ -220,6 +223,56 @@ void main() {
     await tester.pump();
 
     expect(find.textContaining('残りの敵も討ち取ろう'), findsOneWidget);
+  });
+
+  testWidgets('1本で討てない敵は、傷が残る', (tester) async {
+    final controller = newController();
+    await open(tester, controller);
+    paintCheckerboard(controller.board);
+
+    // まず6枚。1つ目と2つ目の課題が片付く。
+    play(controller, const [
+      Cell(0, 0),
+      Cell(0, 1),
+      Cell(0, 2),
+      Cell(0, 3),
+      Cell(0, 4),
+      Cell(0, 5),
+    ]);
+    await tester.pump();
+
+    // 削る稽古の局面を作る。隅の敵を退かし、体力2・守り5の敵を1体だけ置く。
+    // 敵が1体なら「まとめて当てる」は試しようがないので畳まれ、
+    // 「削って討つ」が出る。
+    final corner = controller.board.grid[7][5]!;
+    controller.board.grid[7][5] = Tile(id: corner.id, phase: corner.phase);
+    final base = controller.board.grid[2][2]!;
+    controller.board.grid[2][2] = Tile(
+      id: base.id,
+      phase: base.phase,
+      ward: TutorialScreen.toughWard,
+      hp: 2,
+    );
+    controller.felledWards.add(3);
+
+    // 5枚で守り5に届く。傷は1つぶんで、まだ討ち切れない。
+    play(controller, const [
+      Cell(2, 0),
+      Cell(2, 1),
+      Cell(2, 2),
+      Cell(2, 3),
+      Cell(2, 4),
+    ]);
+    await tester.pump();
+
+    expect(controller.felledWards, isNot(contains(TutorialScreen.toughWard)));
+    expect(find.textContaining('削り切ろう'), findsOneWidget);
+
+    // 傷は盤面に残る。同じ威力でもう一度当てれば討てる。
+    final hurt = controller.board.foeCells.firstWhere(
+      (c) => controller.board.tileAt(c)!.ward == TutorialScreen.toughWard,
+    );
+    expect(controller.board.tileAt(hurt)!.hp, 1);
   });
 
   testWidgets('なぞると、いまの威力と敵の守りが並ぶ', (tester) async {

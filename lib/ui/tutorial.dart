@@ -19,7 +19,29 @@ import 'theme.dart';
 ///
 /// 課題は**盤面の状態だけ**で判定する（何枚継いだか、討ったか）。なぞる道を
 /// 指定しないので、詰まっても自分で見つけた手で先へ進める。迷ったときのため
-/// に、しばらく手が止まると通る道が光る。
+/// に、通る道がずっと光っている。
+///
+/// ## 稽古の筋書き
+///
+/// 目指すのは「1回目の潜りで、何が起きているか分かる」ところまで。
+/// **覚えることを1つずつ積む**。前の課題で作った盤面が、次の課題の材料に
+/// なるように並べてある。
+///
+/// 1. **鎖を編む** … 指でなぞって継ぐ。同じ相は続けて継げない。3枚で成立
+/// 2. **長いほど強い** … 枚数がそのまま威力。まず6枚
+/// 3. **守りを破る** … マスの数字は越えるべき線。守り3を討つ
+/// 4. **まとめて当てる** … 1本の鎖は通った敵すべてに当たる。2体を通す
+/// 5. **削って討つ** … 1本で討てない敵が居る。傷は残るので、もう一度当てる
+/// 6. **毎ターンの反撃** … 敵は毎手殴ってくる。残りを討ち果たす
+///
+/// 4 が 5 を用意する。2体を通した鎖は、厚いほうを討ち切れずに傷だけ残す
+/// ことが多い。**その傷ついた敵がそのまま 5 の教材になる**ので、「傷は
+/// 残る」を言葉ではなく盤面で見せられる。3 で1体討ったあとにも2体残る
+/// よう、敵は3体置いてある。
+///
+/// 盤面で試せないことだけ、終いの画面で言い添える（[_DiveNote] は階層と
+/// 手数、[_PartyNote] は編成）。手数切れの痛手は**わざと味わわせない**。
+/// 覚える前に落とされると、覚えたことごと投げられる。
 ///
 /// 記録は読み書きしない。通し終えたことを [onDone] で知らせるだけで、印を
 /// 付けて保存するのは拠点の仕事。
@@ -31,6 +53,10 @@ class TutorialScreen extends StatefulWidget {
   /// 差し込むと、画面が自前で作る代わりにこれを使う。特定の局面から始めたい
   /// テスト用（`GameScreen` と同じ約束）。
   final GameController? controller;
+
+  /// 1本では討ち切れない敵の守り。**「削って討つ」の教材。** 体力2なので、
+  /// 討ち取るには威力5の鎖を2本（または威力6以上の1本）要る。
+  static const int toughWard = 5;
 
   /// 稽古場。敵は3体で、手数はたっぷり取ってある。
   ///
@@ -54,7 +80,7 @@ class TutorialScreen extends StatefulWidget {
         [
           FoeSpec(3, atk: 1, at: Cell(1, 1)),
           FoeSpec(3, atk: 1, at: Cell(5, 1)),
-          FoeSpec(5, hp: 2, atk: 1, at: Cell(4, 4)),
+          FoeSpec(toughWard, hp: 2, atk: 1, at: Cell(4, 4)),
         ],
         moves: 40,
       ),
@@ -126,6 +152,20 @@ class _TutorialScreenState extends State<TutorialScreen> {
       // 詰ませない。
       done: (c) => c.lastFoesHit >= 2 || c.remainingFoes < 2,
       pairHint: true,
+    ),
+    _Lesson(
+      label: '削って討つ',
+      text: '守りの厚い敵は、1本では討ち切れない。\n'
+          '**つけた傷はそのまま残る。**粒が残りの体力。\n'
+          'もう一度当てて、削り切ろう。',
+      // 前の課題（まとめて当てる）で傷だけ残っていることが多い。その敵が
+      // そのまま教材になる。先に討ててしまっていれば、ここは素通りする。
+      //
+      // 体力を持つ敵が盤面から居なくなったら畳む。討ち取ったのなら覚えた
+      // ことだし、そうでなくても、もう試しようがない。
+      done: (c) =>
+          c.felledWards.contains(TutorialScreen.toughWard) ||
+          !c.board.foeCells.any((at) => c.board.tileAt(at)!.maxHp > 1),
     ),
     _Lesson(
       label: '毎ターンの反撃',
@@ -645,7 +685,8 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
     super.initState();
     _c = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      // 名札を1つずつ点け、そのあと盤面で試せなかった話を2枚。
+      duration: const Duration(milliseconds: 3000),
     )..forward();
   }
 
@@ -666,10 +707,11 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
-        final veil = _stage(0, 0.10);
-        final title = _stage(0.05, 0.30);
-        final party = _stage(0.62, 0.82);
-        final button = _stage(0.80, 1.0);
+        final veil = _stage(0, 0.08);
+        final title = _stage(0.05, 0.26);
+        final dive = _stage(0.66, 0.78);
+        final party = _stage(0.78, 0.90);
+        final button = _stage(0.90, 1.0);
         return ColoredBox(
           color: Palette.background.withValues(alpha: 0.95 * veil),
           child: Center(
@@ -694,9 +736,17 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                       label: widget.learned[i],
                       // 1つずつ順に点く。全部まとめて出すと、何を覚えたのか
                       // 目が追えないまま終わる。
-                      at: _stage(0.30 + i * 0.07, 0.42 + i * 0.07),
+                      at: _stage(0.26 + i * 0.06, 0.38 + i * 0.06),
                     ),
                   const SizedBox(height: 26),
+                  Opacity(
+                    opacity: dive,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - dive) * 12),
+                      child: const _DiveNote(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Opacity(
                     opacity: party,
                     child: Transform.translate(
@@ -799,6 +849,59 @@ class _Learned extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 盤面では試せない話その1。**階層・体力・手数。**
+///
+/// 手数切れの痛手は稽古場でわざと味わわせない（覚える前に落とされると、
+/// 覚えたことごと投げられる）。だからここで言葉にして送り出す。
+class _DiveNote extends StatelessWidget {
+  const _DiveNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 階層は続く。盤面の画面と同じ呼び方で並べる。
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < 3; i++) ...[
+                  if (i > 0)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Palette.textDim,
+                        size: 14,
+                      ),
+                    ),
+                  Text(
+                    'B${i + 1}F',
+                    style: AppFont.number(
+                      15,
+                      color: i == 0 ? Palette.gold : Palette.textDim,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 14),
+            const _Body(
+              'ダンジョンは階層が続く。**体力は持ち越し**で、\n'
+              '制圧するたび祝福をひとつ選んで戻せる。\n'
+              '手数が尽きると、討ち漏らした敵の守りぶんを浴びる。',
+            ),
+          ],
         ),
       ),
     );
