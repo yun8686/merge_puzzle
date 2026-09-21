@@ -312,8 +312,7 @@ void main() {
     expect(find.text('SCORE'), findsOneWidget);
     expect(find.text('DEPTH'), findsOneWidget);
     expect(find.byType(BoardView), findsOneWidget);
-    // 残りターンと残りの敵。階層の進行がそのまま出ていること。
-    expect(find.text('TURNS'), findsOneWidget);
+    // 残りの敵。手数の制限は無いので、盤面の上に出る数はこれだけ。
     expect(find.text('FOES'), findsOneWidget);
     // 盤面に敷かれた相の比率。呼び名ではなくマスと同じ色で出ていること。
     expect(swatchOf(Phase.red), findsOneWidget);
@@ -358,10 +357,12 @@ void main() {
 
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
+    // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、
+    // 手数の制限が無くなってからは他に落とし方が無い。
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(id: id++, phase: (r + c).isEven ? Phase.red : Phase.blue);
+        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.red);
       }
     }
     // 守りを散らして最下段に並べる。重力で動かないので位置が読める。
@@ -375,11 +376,7 @@ void main() {
       );
     }
 
-    controller.movesLeft = 1;
-    controller.beginPath(const Cell(0, 0));
-    controller.extendPath(const Cell(0, 1));
-    controller.extendPath(const Cell(0, 2));
-    controller.commitPath();
+    controller.isSettling = true;
     controller.settle();
     controller.strike();
     expect(controller.phase, GamePhase.floorLost);

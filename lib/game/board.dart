@@ -251,16 +251,6 @@ class Board {
   static const int minWard = minPathLength;
   static const int maxWard = 8;
 
-  /// 階層に置かれた敵の体力の合計から手数を決める。
-  ///
-  /// シミュレーション（敵の周辺を崩して周囲を入れ替える打ち方）で、
-  /// この手数のときクリア率が 78〜93% になる。×2+2 だと 69% まで落ちて
-  /// 理不尽寄り、×4+2 にしても 86% 止まりで緩めた分だけ間延びする。
-  ///
-  /// 体力を持つ敵は1体で複数ターンを要求するので、体数ではなく体力の合計で
-  /// 数える。全員の体力が 1 なら体数で数えていた頃と同じ値になる。
-  static int movesFor(int totalFoeHp) => totalFoeHp * 3 + 2;
-
   /// 守り [ward] の敵の攻撃力。**盤面には出さない隠し値。**
   ///
   /// 守り 3〜5 が 1、6〜8 が 2。守りは鎖の長さを決める値なのでマスに出すが、
@@ -645,7 +635,7 @@ class Board {
 
   int get remainingFoes => foeCells.length;
 
-  /// 残っている敵の体力の合計。階層の手数はこれで決まる。
+  /// 残っている敵の体力の合計。この階層にあと何手かかるかの目安。
   int get totalFoeHp {
     var n = 0;
     for (final cell in foeCells) {

@@ -8,14 +8,20 @@
 いじったときに黙って古くなる）。攻撃力も守りから同じ式で出す
 （`Board.attackFor`：守り3〜5が1、6〜8が2）。
 
-手数は2通りで見積もる。**実際はこの間に収まる。**
+**手数に制限は無い。** 上限が無いぶん、浴びる痛手は「どう打つか」でしか
+決まらないので、2通りで挟む。
 
-- **ゆるい**（README 第9段階の見立て）… その階層の手数（`Board.movesFor` ＝
-  体力の合計 × 3 + 2）の6割を使う。手探りで打つ人の側
+- **ゆるい**（手探りで打つ人）… 体力の合計 × 3 + 2 の6割を使う。この
+  ×3+2 は手数の制限があった頃の上限で、シミュレーションで「敵の周辺を
+  崩して周囲を入れ替える打ち方」のクリア率が 78〜93% になる値として
+  測ったもの。制限をやめたので**上限ではなく見立て**になったが、手探りで
+  打つ人の手数としてはそのまま使える
 - **きつい**（最短）… 体力の合計ぶんの鎖 ＋ 立て直しの2手。1本で1点ずつ削る
   勘定なので、これより速くは討てない
 
 どちらも「敵は順に落ちるので、平均して攻撃力の半分が生きている」とみなす。
+制限が無いので**ゆるい側は天井ではない**。手間取ればいくらでも上に行く
+――その代わり、そこで払うのは体力だけになった。
 
     python3 tools/sim/damage.py
 """
@@ -32,8 +38,12 @@ def attack_for(ward: int) -> int:
     return 1 + (ward - MIN_WARD) // 3
 
 
-def moves_for(total_hp: int) -> int:
-    """`Board.movesFor` と同じ式。"""
+def loose_moves(total_hp: int) -> int:
+    """手探りで打つ人の手数の見立て。
+
+    手数の制限があった頃の上限の式（体力の合計 × 3 + 2）をそのまま使う。
+    ゲームの側からは消えたので、いまはこの見積もりの中にしか無い。
+    """
     return total_hp * 3 + 2
 
 
@@ -46,15 +56,14 @@ def parse_foe(args: str) -> tuple[int, int, int]:
 
 
 def parse_dungeons(source: str):
-    """`dungeon.dart` から（名前, 階層）を読む。階層は敵の並びと手数。"""
+    """`dungeon.dart` から（名前, 階層）を読む。階層は敵の並び。"""
     out = []
     for chunk in re.split(r"static const \w+ = Dungeon\(", source)[1:]:
         chunk = chunk.split("\n  );")[0]
         name = re.search(r"name: '([^']*)'", chunk).group(1)
         floors = []
-        for spec in re.finditer(r"FloorSpec\(\s*(\[.*?\])\s*(?:,\s*moves:\s*(\d+))?\s*,?\s*\)", chunk, re.S):
-            foes = [parse_foe(a) for a in re.findall(r"FoeSpec\(([^)]*)\)", spec.group(1))]
-            floors.append((foes, int(spec.group(2)) if spec.group(2) else None))
+        for spec in re.finditer(r"FloorSpec\(\s*(\[.*?\])\s*,?\s*\)", chunk, re.S):
+            floors.append([parse_foe(a) for a in re.findall(r"FoeSpec\(([^)]*)\)", spec.group(1))])
         out.append((name, floors))
     return out
 
@@ -89,31 +98,31 @@ def main() -> int:
     print(f"   3人で厚いほう         {sum(hps[:3])}")
     print(f"   3人で薄いほう         {sum(hps[-3:])}")
     print()
-    print("| ダンジョン | ゆるい（手数の6割） | きつい（最短） |")
+    print("| ダンジョン | ゆるい（手探り） | きつい（最短） |")
     print("|---|---|---|")
     totals = []
     for name, floors in dungeons:
         loose = tight = 0.0
         rows = []
-        for foes, moves in floors:
+        for foes in floors:
             total_hp = sum(f[1] for f in foes)
-            limit = moves if moves is not None else moves_for(total_hp)
+            guess = loose_moves(total_hp)
             half = sum(f[2] for f in foes) / 2
-            a = round(limit * 0.6) * half
+            a = round(guess * 0.6) * half
             b = (total_hp + 2) * half
             loose += a
             tight += b
-            rows.append((total_hp, limit, half * 2, a, b))
+            rows.append((total_hp, guess, half * 2, a, b))
         totals.append((name, loose, tight, rows))
         print(f"| {name} | {loose:.0f} | {tight:.0f} |")
 
     print()
     for name, loose, tight, rows in totals:
         print(f"== {name}  ゆるい {loose:.0f} / きつい {tight:.0f}")
-        for i, (total_hp, limit, full, a, b) in enumerate(rows, 1):
+        for i, (total_hp, guess, full, a, b) in enumerate(rows, 1):
             print(
-                f"   B{i}F 体力計 {total_hp}  手数 {limit}  攻撃力の合計 {full:.0f}"
-                f"  → {a:.0f} / {b:.0f}"
+                f"   B{i}F 体力計 {total_hp}  手数の見立て {guess}"
+                f"  攻撃力の合計 {full:.0f}  → {a:.0f} / {b:.0f}"
             )
     return 0
 

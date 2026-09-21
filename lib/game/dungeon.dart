@@ -7,7 +7,7 @@ import 'board.dart';
 /// 作れない。自動生成の側（[Board.buildStage] の `foeCount` 側）は消して
 /// いないので、無限に潜る遊び方を足したくなったらそちらを使う。
 ///
-/// ここは盤面の値（守り・体力・手数）しか持たない。UI も一党も読まない。
+/// ここは盤面の値（守り・体力）しか持たない。UI も一党も読まない。
 class Dungeon {
   const Dungeon({required this.id, required this.name, required this.floors});
 
@@ -37,18 +37,14 @@ class Dungeon {
 
 /// 階層1つぶん。
 class FloorSpec {
-  const FloorSpec(this.foes, {this.moves});
+  const FloorSpec(this.foes);
 
   /// 置く敵。並びは置く順で、場所は毎回変わる。
   final List<FoeSpec> foes;
 
-  /// この階層の手数。省くと敵の体力の合計から決まる（[Board.movesFor]）。
-  ///
-  /// ×3+2 という係数は体力1の敵しか居ない盤面で測った値なので、体力2以上が
-  /// 混ざる階層では外挿になる。詰めたい階層だけここで上書きする。
-  final int? moves;
-
-  /// この階層の敵の体力の合計。手数の既定値がここから決まる。
+  /// この階層の敵の体力の合計。**この階層に何手かかるかの目安**で、
+  /// 1手ごとに殴られる以上そのまま痛手の見積もりになる
+  /// （`tools/sim/damage.py`）。
   int get totalFoeHp {
     var n = 0;
     for (final f in foes) {
@@ -56,8 +52,6 @@ class FloorSpec {
     }
     return n;
   }
-
-  int get moveLimit => moves ?? Board.movesFor(totalFoeHp);
 }
 
 /// 用意してあるダンジョン。並びがそのまま挑む順になる。

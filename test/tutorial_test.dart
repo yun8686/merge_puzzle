@@ -90,7 +90,7 @@ void main() {
     expect(find.textContaining('光っている道を3枚なぞろう'), findsOneWidget);
     // 下の目盛りは盤面の画面と同じ読み方。
     expect(find.text('体力'), findsOneWidget);
-    expect(find.text('残り手数'), findsOneWidget);
+    expect(find.text('敵'), findsOneWidget);
 
     // 道は決まっていて、お手本はその道そのもの。
     expect(controller.lockedPath.length, 3);
@@ -123,15 +123,13 @@ void main() {
   testWidgets('途中で離しても何も起きない', (tester) async {
     final controller = newController();
     await open(tester, controller);
-    final moves = controller.movesLeft;
 
     controller.beginPath(controller.lockedPath.first);
     controller.extendPath(controller.lockedPath[1]);
     expect(controller.commitPath(), isNull);
 
     expect(controller.path, isEmpty);
-    expect(controller.chains, 0);
-    expect(controller.movesLeft, moves, reason: '手数も減らない');
+    expect(controller.chains, 0, reason: '鎖も増えない');
   });
 
   testWidgets('なぞり切ると次の稽古に移る', (tester) async {

@@ -11,7 +11,7 @@ import 'party.dart';
 ///
 ///  - [stageCleared] … その階層の敵を討ち果たした。そのまま次の階層へ
 ///  - [dungeonCleared] … 最下層まで討ち果たした。ダンジョンの踏破
-///  - [floorLost] … ターン切れか手詰まり。討ち漏らした敵の反撃を受けて編み直す
+///  - [floorLost] … 手詰まり。討ち漏らした敵の反撃を受けて編み直す
 ///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
 enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 
@@ -54,9 +54,6 @@ class GameController extends ChangeNotifier {
   /// 1から始まる階層番号。[Dungeon.depth] まで降りれば踏破。
   late int floor;
 
-  /// この階層に残っている手数。
-  late int movesLeft;
-
   final List<Cell> path = <Cell>[];
   int score = 0;
   int best = 0;
@@ -71,6 +68,12 @@ class GameController extends ChangeNotifier {
 
   /// 直近の1手で敵から受けた痛手。0 なら何も起きていない。
   int lastHit = 0;
+
+  /// 直近の鎖が風の条件を満たして、その手の反撃を凌いだか。
+  ///
+  /// **[lastHit] が 0 なだけでは理由が読めない。** 討ち果たした手も 0 に
+  /// なるので、凌いだことは別に持って帯に出す。
+  bool lastEvaded = false;
 
   /// 盤面は詰み終わっていて、敵の反撃を待っている。
   ///
@@ -128,7 +131,6 @@ class GameController extends ChangeNotifier {
       rng: _rng,
     );
     board.buildStage(foes: dungeon.floorAt(floor).foes);
-    movesLeft = dungeon.floorAt(floor).moveLimit;
     path.clear();
     hintPath = const [];
     lockedPath = const [];
@@ -138,6 +140,7 @@ class GameController extends ChangeNotifier {
     isStriking = false;
     lastHealed = 0;
     lastHit = 0;
+    lastEvaded = false;
     felledWards.clear();
     phase = GamePhase.playing;
   }
@@ -320,7 +323,7 @@ class GameController extends ChangeNotifier {
   /// 演出が終わったら [settle] を呼ぶこと。
   ClearResult? commitPath() {
     if (!acceptsInput) return null;
-    // 縛られているときは、途中で離しても何も起きない。手数も減らない。
+    // 縛られているときは、途中で離しても何も起きない。殴られもしない。
     // もう一度なぞればよい。
     if (lockedPath.isNotEmpty && path.length != lockedPath.length) {
       cancelPath();
@@ -355,8 +358,9 @@ class GameController extends ChangeNotifier {
     }
 
     score += result.gained;
-    // 風が居れば長い鎖でターンが戻る。使った1手より戻りが多くなることは無い。
-    movesLeft += party.turnGainFor(tally) - 1;
+    // 風が居れば、長い鎖を編んだ手は殴られずに済む。効かせるのは毎ターンの
+    // 反撃だけで、階層を落としたときの締めには効かない。
+    lastEvaded = party.evadesFor(tally);
     if (score > best) best = score;
     if (result.power > bestChain) bestChain = result.power;
 
@@ -395,11 +399,14 @@ class GameController extends ChangeNotifier {
     if (!isStriking) return;
     isStriking = false;
 
-    lastHit = party.damageFor(board.foeAttack);
+    lastHit = lastEvaded ? 0 : party.damageFor(board.foeAttack);
     var taken = lastHit;
     party.takeDamage(lastHit);
 
-    if (!party.isDown && (movesLeft <= 0 || !board.hasAnyChain())) {
+    // 手数の制限は無い。落ちるのは**盤面から手が消えたとき**だけで、
+    // それ以外はいくらでも編み直せる――ただし1手ごとに殴られるので、
+    // 長居そのものが体力で値段を払っている。
+    if (!party.isDown && !board.hasAnyChain()) {
       // 落とした階層の締め。討ち漏らした敵の守りぶんをまとめて浴びる。
       // 守りが厚い敵を残すほど高くつく。
       lastBacklash = party.damageFor(board.foeThreat);

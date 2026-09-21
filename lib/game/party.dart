@@ -155,14 +155,16 @@ final class PowerUp extends Boon {
   String describe() => 'は威力 +$amount';
 }
 
-/// 使った手を返す。
-final class TurnBack extends Boon {
-  const TurnBack(this.amount);
-
-  final int amount;
+/// その手の反撃を受けない。
+///
+/// 手数の制限があった頃は「使った手を返す」だった（`TurnBack`）。手数を
+/// やめて**1手の値段が体力になった**ので、同じ意味を体力で書き直してある。
+/// 手が1つ戻るということは、**その手のぶんの痛手を払わずに済む**ということ。
+final class Evade extends Boon {
+  const Evade();
 
   @override
-  String describe() => 'はターンを $amount 返す';
+  String describe() => 'を編んだ手は反撃を受けない';
 }
 
 /// 一党の体力を戻す。
@@ -309,7 +311,7 @@ class Mage {
     Phase.red,
     '風の魔導士',
     35,
-    Ability(ChainLength(galeChain), TurnBack(1)),
+    Ability(ChainLength(galeChain), Evade()),
   );
   static const rime = Mage._(
     MageKind.rime,
@@ -379,9 +381,10 @@ const int rimeMend = 3;
 /// 烈火が応える、自分の相の枚数。焔の上に重ねて乗る。
 const int blazeSame = 5;
 
-/// 風がターンを返す枚数。ここを下げると、長い鎖を編めるうちは
-/// ターンが減らなくなって階層の制限が意味を失う。少ない側の相を
-/// 食い潰す長さに置いてあるのは、枯渇そのものが歯止めになるため。
+/// 風が反撃を凌ぐ枚数。ここを下げると、長い鎖を編めるうちは一度も殴られ
+/// なくなって、**早く討つ理由が消える**。少ない側の相を食い潰す長さに
+/// 置いてあるのは、枯渇そのものが歯止めになるため。7枚を毎手続けることは
+/// できない。
 const int galeChain = 7;
 
 /// 雷が落ちる枚数。ここだけ威力ではなく**継いだ枚数**で見る。
@@ -487,9 +490,12 @@ class Party {
   int powerBonusFor(ChainTally tally) =>
       _total<PowerUp>(tally, (b) => b.amount);
 
-  /// 鎖が返すターン。
-  int turnGainFor(ChainTally tally) =>
-      _total<TurnBack>(tally, (b) => b.amount);
+  /// この鎖を編んだ手が、敵の反撃を受けずに済むか。
+  ///
+  /// 量ではないので足し合わせない。**1人でも応えれば、その手は痛手を
+  /// 受けない。** 階層を落としたときの締めの痛手には効かない（あれは手の
+  /// 値段ではなく、討ち漏らしの代償）。
+  bool evadesFor(ChainTally tally) => _boons<Evade>(tally).isNotEmpty;
 
   /// 鎖が戻す体力。
   int healFor(ChainTally tally) => _total<Mend>(tally, (b) => b.amount);

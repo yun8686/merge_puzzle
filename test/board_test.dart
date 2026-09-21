@@ -451,12 +451,6 @@ void main() {
   });
 
   group('階層の数値', () {
-    test('手数は敵の体力の合計から決まる', () {
-      expect(Board.movesFor(1), 5);
-      expect(Board.movesFor(3), 11);
-      expect(Board.movesFor(5), 17);
-    });
-
     test('威力が高いほど点が伸びる', () {
       expect(Board.scoreFor(4, 0), greaterThan(Board.scoreFor(3, 0)));
       expect(Board.scoreFor(6, 0), greaterThan(Board.scoreFor(4, 0)));

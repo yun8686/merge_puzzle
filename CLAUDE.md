@@ -39,14 +39,14 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
-| `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵と手数を手で書く。増やすのはここ |
+| `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
 | `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
 | `lib/ui/tutorial.dart` | 遊び方。**本物の盤面をなぞらせる**稽古場。初回だけ拠点の上に出す |
 | `lib/ui/chain_mark.dart` | 鎖が編まれる絵。タイトルと遊び方で使う |
 | `lib/ui/home_screen.dart` | 拠点。ガチャ・編成・ダンジョン選択。記録を持つのはここだけ |
 | `lib/ui/board_view.dart` | 盤面の描画と、消える演出のタイミング |
-| `lib/ui/game_screen.dart` | 画面全体。SCORE / TURNS / FOES / 相の割合 / 一党 / 決着画面 |
+| `lib/ui/game_screen.dart` | 画面全体。SCORE / DEPTH / FOES / 相の割合 / 一党 / 決着画面 |
 | `lib/ui/foe_art.dart` | 敵の姿。**生成物**。`tools/foe/` から作るので手で直さない |
 | `lib/ui/mage_art.dart` | 魔導士の姿。**生成物**。`tools/mage/` から作るので手で直さない |
 | `lib/ui/particles.dart`, `lib/ui/theme.dart` | エフェクトと配色 |
@@ -87,7 +87,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | 効き目 | 集計先 |
 |---|---|
 | `PowerUp(n)` | `powerBonusFor` |
-| `TurnBack(n)` | `turnGainFor` |
+| `Evade()` | `evadesFor`（その手は毎ターンの反撃を受けない） |
 | `Mend(n)` | `healFor` |
 | `Strike(n)` | `boltFor`（階層の敵すべてに n） |
 | `Guard()` | `damageFor`（受ける痛手すべてが半分・切り上げ） |
@@ -121,6 +121,13 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **敵は毎ターン殴ってくる。** 1手ごとに、生きている敵の攻撃力の合計
 （`Board.foeAttack`）だけ体力が減る。討ち取れば減るので、早く討つほど後が楽になる。
 **制圧した手だけは殴られない**（討ち果たしたのに体力が減ると腑に落ちない）。
+風が応えた手も殴られない（`Party.evadesFor` → `GameController.lastEvaded`）。
+
+**手数の制限は無い。** 時間の値段は体力1本で測る――1手ごとに殴られるので、手間取る
+こと自体が高くつく。**階層を落とすのは `hasAnyChain` が false になったときだけ。**
+手数と体力の両方で時間を測っていた頃は、落ちる理由が2つあって**どちらで落ちたのか
+読めなかった**（README 第14段階）。ここに手数を戻すなら、体力の側をどうするか
+まで決めること。
 
 **攻撃力は盤面に出さない隠し値。** マスに出ているのは守りだけで、これは鎖の長さを
 決める唯一の値だから見せている。40〜50px のマスに数字を2つ並べると両方読めない。
@@ -130,8 +137,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **`Board.attackFor` と名簿の体力（`Mage.hp`）は対で動かすこと。** 階層あたりの痛手は
 「攻撃力の合計 × その階層に使った手数」で積み上がるので、片方だけ変えると桁が
 合わなくなる。**見積もりは手で書かない。** `python3 tools/sim/damage.py` が
-`dungeon.dart` を読んで出す（README 第9段階の表はこれ）。いま道中で戻る手立ては
-氷雨の回復だけなので、深いダンジョンはそこも込みで見ること。
+`dungeon.dart` を読んで出す（README 第9段階の表はこれ）。手数に制限が無いので
+**「ゆるい」側は天井ではない**――手間取ればいくらでも上に行く。いま道中で戻る
+手立ては氷雨の回復と風の凌ぎだけなので、深いダンジョンはそこも込みで見ること。
 
 一党は**潜る前に決まり、道中では何も増えない**。制圧しても増えるものは無く、
 体力も階層をまたいで戻らない（戻すのは氷雨の回復だけ）。ここを緩めると編成が
@@ -194,7 +202,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **稽古は筋書きにする。** 稽古ごとに盤面を組み、なぞらせる道を1本用意して、
 **その道以外はなぞれないようにする**（`GameController.lockedPath`）。始まりの
 マスも次の1マスも決まっていて、全部なぞり切るまで `commitPath` も通らない
-（途中で離しても手数は減らない）。自由になぞらせていた頃は、たとえば「2体を
+（途中で離しても鎖にはならない）。自由になぞらせていた頃は、たとえば「2体を
 通る鎖」を課題にしても**その形の道が盤面に無いことがあった**。教えたい形は、
 出してやらないと出ない。
 
@@ -274,10 +282,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 **最後の稽古まで盤面を空にしない。** 敵が居なくなると `stageCleared` になって
 そこで終いになるので、どの稽古にも控えの1体を置いてある。
 
-**手数切れの痛手はわざと味わわせない。** 覚える前に落とされると、覚えた
-ことごと投げられる。階層・体力の持ち越し・手数切れの痛手は、終いの画面で
-言葉にして送り出す（`_DiveNote`）。編成の話も同じ扱い（`_PartyNote`）。
-倒れても手数が尽きても黙って組み直すのは今までどおり。
+**盤面で試せない話は終いの画面で言葉にする。** 階層と体力の持ち越し、1手ごとに
+値段がかかること（`_DiveNote`）。編成の話も同じ扱い（`_PartyNote`）。倒れても
+手詰まりでも黙って組み直すのは今までどおり。
 
 **稽古場ではお手本を出しっぱなしにする**（`tutorial.dart` の `_keepHint`）。
 ここは覚えるための場所なので、道を隠して考えさせる理由がない。開いた瞬間から
@@ -311,7 +318,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 自分でやっていたことがそのまま出てくる。1つずつ順に点けるのは、まとめて出すと
 何を覚えたのか目が追えないまま終わるため。
 
-**稽古場では躓かせない。** 倒れても手数が尽きても黙って組み直して、同じ稽古の
+**稽古場では躓かせない。** 倒れても手詰まりでも黙って組み直して、同じ稽古の
 盤面をもう一度組む（`GamePhase.floorLost` / `defeated` を見て `enterDungeon`）。
 盤面から敵が居なくなったらそこで終い――残した稽古はもう試しようがない。
 

@@ -196,7 +196,6 @@ class _GameScreenState extends State<GameScreen> {
                         _StatusBar(
                           phases: board.phases,
                           counts: board.phaseCounts,
-                          movesLeft: _controller.movesLeft,
                           remainingFoes: _controller.remainingFoes,
                         ),
                         // 体力は盤面の上。**殴られた側が盤面の上に居る**ので、
@@ -206,6 +205,7 @@ class _GameScreenState extends State<GameScreen> {
                           healed: _controller.lastHealed,
                           hit: _controller.lastHit,
                           hitTick: _controller.hitTick,
+                          evaded: _controller.lastEvaded,
                           onInspect: _inspect,
                         ),
                         Expanded(
@@ -400,7 +400,7 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 残りターン、残りの敵、相ごとの枚数。
+/// 残りの敵と、相ごとの枚数。
 ///
 /// 相のバーは「強い鎖をまだ編めるか」の目安。鎖は同じ相を続けて継げないので、
 /// **いちばん少ない相の枚数が、編める長さの上限を決める**。だから危ないのは
@@ -409,13 +409,11 @@ class _StatusBar extends StatelessWidget {
   const _StatusBar({
     required this.phases,
     required this.counts,
-    required this.movesLeft,
     required this.remainingFoes,
   });
 
   final List<Phase> phases;
   final List<int> counts;
-  final int movesLeft;
   final int remainingFoes;
 
   @override
@@ -432,18 +430,6 @@ class _StatusBar extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _StatPanel(
-              label: 'TURNS',
-              accent: movesLeft <= 2 ? Palette.danger : null,
-              value: Text(
-                '$movesLeft',
-                style: AppFont.number(
-                  24,
-                  color: movesLeft <= 2 ? Palette.danger : Palette.textMuted,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
             _StatPanel(
               label: 'FOES',
               accent: Palette.gold,
@@ -785,7 +771,7 @@ class _Curtain extends StatelessWidget {
   }
 }
 
-/// 階層を落とした。ターン切れか手詰まり。
+/// 階層を落とした。盤面から継げる手が消えたとき。
 /// 討ち漏らした敵の反撃を受けるが、一党が立っている限り編み直せる。
 class _FloorLostOverlay extends StatelessWidget {
   const _FloorLostOverlay({required this.controller, required this.onRetry});
@@ -802,9 +788,9 @@ class _FloorLostOverlay extends StatelessWidget {
           style: AppFont.number(26, color: Palette.danger),
         ),
         const SizedBox(height: 6),
-        Text(
-          controller.movesLeft <= 0 ? 'ターンを使い切った' : '継げる相がなくなった',
-          style: const TextStyle(
+        const Text(
+          '継げる相がなくなった',
+          style: TextStyle(
             color: Palette.textMuted,
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -972,8 +958,6 @@ class _StageClearOverlay extends StatelessWidget {
         const SizedBox(height: 8),
         Text('${controller.score}', style: AppFont.number(44)),
         const SizedBox(height: 14),
-        _ResultRow(label: '残ったターン', value: '${controller.movesLeft}'),
-        const SizedBox(height: 8),
         _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
         const SizedBox(height: 8),
         _ResultRow(
@@ -1316,6 +1300,7 @@ class _PartyBar extends StatelessWidget {
     required this.healed,
     required this.hit,
     required this.hitTick,
+    required this.evaded,
     required this.onInspect,
   });
 
@@ -1330,6 +1315,10 @@ class _PartyBar extends StatelessWidget {
 
   /// 痛手を受けた回数。[_HitTag] がこれを見て出方を流し直す。
   final int hitTick;
+
+  /// 直近の鎖で風が反撃を凌いだ。**痛手が 0 なだけでは理由が読めない**ので、
+  /// 凌いだことを風の色で名乗らせる。
+  final bool evaded;
 
   /// 姿を押したときに開く。能力を確かめる道はここしか無い。
   final ValueChanged<Mage> onInspect;
@@ -1368,6 +1357,17 @@ class _PartyBar extends StatelessWidget {
                               style: AppFont.number(
                                 12,
                                 color: Palette.mageColor(MageKind.rime),
+                              ),
+                            ),
+                          ),
+                        if (evaded)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              '反撃なし',
+                              style: AppFont.label(
+                                9,
+                                color: Palette.mageColor(MageKind.gale),
                               ),
                             ),
                           ),

@@ -18,7 +18,7 @@ void main() {
       // 手で書いた文ではないので、数値を変えれば文も動く。
       expect(Mage.ember.effect, '赤を3枚以上継いだ鎖は威力 +1');
       expect(Mage.blaze.effect, '赤を5枚以上継いだ鎖は威力 +2');
-      expect(Mage.gale.effect, '7枚以上継いだ鎖はターンを 1 返す');
+      expect(Mage.gale.effect, '7枚以上継いだ鎖を編んだ手は反撃を受けない');
       expect(Mage.rime.effect, '青を3枚以上継いだ鎖で体力を 3 戻す');
       expect(Mage.frost.effect, '青から継ぎ始めた鎖は威力 +1');
       expect(Mage.storm.effect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
@@ -161,7 +161,7 @@ void main() {
         party.powerBonusFor(tally(length: 9, counts: {Phase.red: 5})),
         0,
       );
-      expect(party.turnGainFor(tally(length: 9)), 0);
+      expect(party.evadesFor(tally(length: 9)), isFalse);
       expect(
         party.boltFor(
           tally(length: 9, counts: {Phase.red: 3, Phase.blue: 3, Phase.violet: 3}),
@@ -171,10 +171,10 @@ void main() {
       expect(party.healFor(tally(length: 9, counts: {Phase.blue: 5})), 0);
     });
 
-    test('ターン・体力・雷も同じ形で数える', () {
+    test('反撃・体力・雷も同じ形で数える', () {
       final party = partyOf([Mage.gale, Mage.rime, Mage.storm]);
-      expect(party.turnGainFor(tally(length: galeChain)), 1);
-      expect(party.turnGainFor(tally(length: galeChain - 1)), 0);
+      expect(party.evadesFor(tally(length: galeChain)), isTrue);
+      expect(party.evadesFor(tally(length: galeChain - 1)), isFalse);
       expect(
         party.healFor(tally(length: 6, counts: {Phase.blue: rimeSame})),
         rimeMend,

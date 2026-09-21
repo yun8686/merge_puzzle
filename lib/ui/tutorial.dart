@@ -52,8 +52,8 @@ import 'theme.dart';
 /// 縦へ変える。同じなのは道ではなく敵のほう）。
 ///
 /// 盤面で試せないことだけ、終いの画面で言い添える（[_DiveNote] は階層と
-/// 手数、[_PartyNote] は編成）。手数切れの痛手は**わざと味わわせない**。
-/// 覚える前に落とされると、覚えたことごと投げられる。
+/// 体力の持ち越し、[_PartyNote] は編成）。覚える前に落とされると、覚えた
+/// ことごと投げられる。
 ///
 /// 記録は読み書きしない。通し終えたことを [onDone] で知らせるだけで、印を
 /// 付けて保存するのは拠点の仕事。
@@ -96,22 +96,22 @@ class TutorialScreen extends StatefulWidget {
   /// 稽古場の階層。**ここに書いた敵は始まりの姿でしかない。**
   ///
   /// 稽古はひとつずつ盤面を組み直す（[_TutorialScreenState._paint]）ので、
-  /// 置かれる敵も相の並びも稽古の側が決める。ここで要るのは手数だけ。
-  /// たっぷり取ってあるのは、覚えるより先に手数で詰まらせないため。
+  /// 置かれる敵も相の並びも稽古の側が決める。ここに書く敵は、盤面を
+  /// 組み直すまでの繋ぎでしかない。
   static const Dungeon dungeon = Dungeon(
     id: 'tutorial',
     name: '稽古場',
     floors: [
-      FloorSpec([FoeSpec(3, atk: 1)], moves: 40),
+      FloorSpec([FoeSpec(3, atk: 1)]),
     ],
   );
 
-  /// 3色の稽古場。敵も相の並びも稽古の側が決めるので、ここで要るのは手数だけ。
+  /// 3色の稽古場。敵も相の並びも稽古の側が決める。
   static const Dungeon prismDungeon = Dungeon(
     id: 'tutorial-prism',
     name: '稽古場',
     floors: [
-      FloorSpec([FoeSpec(3, atk: 1)], moves: 30),
+      FloorSpec([FoeSpec(3, atk: 1)]),
     ],
   );
 
@@ -583,7 +583,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
 
   void _check() {
     if (!mounted || _finished) return;
-    // 倒れても手数が尽きても、稽古場なので黙って組み直す。ここで躓かせると
+    // 倒れても手詰まりでも、稽古場なので黙って組み直す。ここで躓かせると
     // 覚える前に投げられる。
     if (_controller.phase == GamePhase.floorLost ||
         _controller.phase == GamePhase.defeated) {
@@ -932,7 +932,7 @@ class _Reach extends StatelessWidget {
   }
 }
 
-/// 下の目盛り。体力・残りの手数・残りの敵。
+/// 下の目盛り。体力と残りの敵。
 ///
 /// 盤面の画面と同じものを並べてある。ここで覚えた読み方が、そのまま本番で
 /// 効くようにするため。
@@ -968,13 +968,6 @@ class _Gauges extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text('残り手数', style: AppFont.label(9)),
-              const SizedBox(width: 6),
-              Text(
-                '${controller.movesLeft}',
-                style: AppFont.number(15, color: Palette.textMuted),
-              ),
-              const SizedBox(width: 14),
               Text('敵', style: AppFont.label(9, color: Palette.gold)),
               const SizedBox(width: 6),
               Text(
@@ -1284,10 +1277,10 @@ class _PrismNote extends StatelessWidget {
   }
 }
 
-/// 盤面では試せない話その1。**階層・体力・手数。**
+/// 盤面では試せない話その1。**階層と、持ち越す体力。**
 ///
-/// 手数切れの痛手は稽古場でわざと味わわせない（覚える前に落とされると、
-/// 覚えたことごと投げられる）。だからここで言葉にして送り出す。
+/// 稽古場は1階層しか無いので、体力が階層をまたいで減ったままなことも、
+/// 1手ごとに値段がかかることも、ここでしか言えない。
 class _DiveNote extends StatelessWidget {
   const _DiveNote();
 
@@ -1327,8 +1320,8 @@ class _DiveNote extends StatelessWidget {
             const SizedBox(height: 14),
             const _Body(
               'ダンジョンは階層が続く。**体力は持ち越し**で、\n'
-              '削られたぶんは戻らない。早く討つほど楽になる。\n'
-              '手数が尽きると、討ち漏らした敵の守りぶんを浴びる。',
+              '削られたぶんは戻らない。**手数に制限は無い**が、\n'
+              '1手ごとに殴られる。早く討つほど楽になる。',
             ),
           ],
         ),
