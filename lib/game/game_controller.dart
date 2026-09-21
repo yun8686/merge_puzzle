@@ -15,12 +15,12 @@ import 'party.dart';
 ///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
 enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 
-/// 押して使う力を使った結果。
+/// アクティブスキルを使った結果。
 ///
 /// **[missed] と [unavailable] を分けるのは、言うことが違うから。**
 /// 使えないのは編成や場面の話で、届かなかったのは盤面の話。同じ「使えません」
 /// にまとめると、どちらを直せばいいのか分からない。
-enum CastResult {
+enum ActiveResult {
   /// 通った。回数を1つ使った。
   done,
 
@@ -119,7 +119,7 @@ class GameController extends ChangeNotifier {
 
   List<Cell> hintPath = <Cell>[];
 
-  /// 押して使う力（[Foresee]）が見せた道。**鎖を1本編むまで消えない。**
+  /// アクティブスキル（[Foresee]）が見せた道。**鎖を1本編むまで消えない。**
   ///
   /// [hintPath] はなぞり始めると引っ込む（自分の指と重なって読めない）が、
   /// 潜り1本に1回しか使えないものを、指が触れただけで失わせるのは酷い。
@@ -224,7 +224,7 @@ class GameController extends ChangeNotifier {
   /// [cells] を1本の鎖として見たときの戦果。
   ///
   /// なぞり中の道だけでなく、**まだなぞっていない道**にも使う
-  /// （[castSpell] が候補の威力を測るのに要る）。
+  /// （[useActive] が候補の威力を測るのに要る）。
   ChainTally tallyOf(List<Cell> cells) {
     final counts = <Phase, int>{};
     for (final c in cells) {
@@ -243,28 +243,28 @@ class GameController extends ChangeNotifier {
   int powerOf(List<Cell> cells) =>
       cells.length + party.powerBonusFor(tallyOf(cells));
 
-  /// 押して使う力を使う。
+  /// アクティブスキルを使う。
   ///
   /// **回数を数えるのは [Party]。** 潜るたびに組み直されるので、
   /// 「1ダンジョンに1回」はそこに置くだけで成り立つ。
   ///
-  /// **どの力かで分岐しない。** 何をするかは [Spell] 自身が知っていて、
-  /// ここは [SpellStage] を渡して結果を受け取るだけ。力が100種類に増えても
-  /// このメソッドは変わらない（`spells.dart`）。
+  /// **どの力かで分岐しない。** 何をするかは [Active] 自身が知っていて、
+  /// ここは [ActiveStage] を渡して結果を受け取るだけ。力が100種類に増えても
+  /// このメソッドは変わらない（`actives.dart`）。
   ///
-  /// **空振りでは何も減らさない**（[CastResult.missed]）。敵に1でも届く道が
+  /// **空振りでは何も減らさない**（[ActiveResult.missed]）。敵に1でも届く道が
   /// 無いときに、成立するだけの道を見せてお茶を濁さない――知りたいのは
   /// 「どこを通れば効くか」であって、「どこかは繋がる」ではない。
-  CastResult castSpell(MageKind kind) {
-    if (!acceptsInput) return CastResult.unavailable;
+  ActiveResult useActive(MageKind kind) {
+    if (!acceptsInput) return ActiveResult.unavailable;
     final mage = party.memberOf(kind);
-    final spell = mage?.spell;
-    if (spell == null || !party.canCast(kind)) return CastResult.unavailable;
+    final active = mage?.active;
+    if (active == null || !party.canUse(kind)) return ActiveResult.unavailable;
     // 相は持ち主から渡す。力の側は誰のものかを知らない。
-    if (!spell.cast(_Stage(this), mage!.phase)) return CastResult.missed;
-    party.spendCast(kind);
+    if (!active.cast(_Stage(this), mage!.phase)) return ActiveResult.missed;
+    party.spendUse(kind);
     notifyListeners();
-    return CastResult.done;
+    return ActiveResult.done;
   }
 
   /// いまの鎖に乗っている魔導士の威力補正。
@@ -505,15 +505,15 @@ class GameController extends ChangeNotifier {
   }
 }
 
-/// 押して使う力に渡す舞台。**盤面を知っているのはこちら側。**
+/// アクティブスキルに渡す舞台。**盤面を知っているのはこちら側。**
 ///
-/// [SpellStage] の動詞をここで実装する。[GameController] に直に持たせないのは、
+/// [ActiveStage] の動詞をここで実装する。[GameController] に直に持たせないのは、
 /// 力が増えて動詞が増えるたびに、進行の表向きの API まで太っていくため。
 ///
-/// 画面の描き直しは呼び出し側（[GameController.castSpell]）が1回だけ行う。
+/// 画面の描き直しは呼び出し側（[GameController.useActive]）が1回だけ行う。
 /// ここで [ChangeNotifier.notifyListeners] を呼ぶと、動詞を2つ使う力を
 /// 足したときに途中の盤面が一度描かれてしまう。
-class _Stage implements SpellStage {
+class _Stage implements ActiveStage {
   const _Stage(this._game);
 
   final GameController _game;

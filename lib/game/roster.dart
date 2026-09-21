@@ -2,8 +2,8 @@ part of 'party.dart';
 
 // 名簿。**誰が居るかはここだけ。**
 //
-// 仕組み（party.dart）は名簿の中身を知らない。能力は条件と効き目の組で、
-// 押して使う力は [Spell] の実体で書くので、ここに1人足しても [Party] も
+// 仕組み（party.dart）は名簿の中身を知らない。パッシブスキルは条件と効き目の組で、
+// アクティブスキルは [Active] の実体で書くので、ここに1人足しても [Party] も
 // 進行も画面も変わらない。**100人に増えても伸びるのはこのファイルだけ。**
 //
 // 1人足すときは4つ。MageKind に1つ／下の const を1つ／[Mage.roster] に
@@ -28,7 +28,7 @@ enum MageKind {
   blaze,
 }
 
-/// 一党に加わる魔導士。能力は「鎖の戦果への反応」として書く。
+/// 一党に加わる魔導士。パッシブスキルは「鎖の戦果への反応」として書く。
 ///
 /// 赤や青の枚数を条件にすると、交互ルールのせいで実質「長さ＋どちらの相から
 /// 始めたか」になる。長さ N の鎖に含まれる赤は、赤から始めれば ⌈N/2⌉、
@@ -36,21 +36,21 @@ enum MageKind {
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
   /// **名前付きで渡す。** 100人並ぶ表なので、位置で読ませると
-  /// `Mage._(k, p, n, 40, ability, spell)` の 40 が何なのか分からなくなる。
+  /// `Mage._(k, p, n, 40, passive, active)` の 40 が何なのか分からなくなる。
   const Mage._({
     required this.kind,
     required this.phase,
     required this.name,
     required this.hp,
-    this.ability,
-    this.spell,
+    this.passive,
+    this.active,
     this.starting = false,
   });
 
   final MageKind kind;
 
   /// この魔導士の相。**編成に入れた相だけが盤面に敷かれる。**
-  /// 能力が「自分の相を N 枚以上」という形なのは、連れていく顔ぶれと
+  /// パッシブスキルが「自分の相を N 枚以上」という形なのは、連れていく顔ぶれと
   /// 盤面の色がひと続きになるようにするため。
   final Phase phase;
 
@@ -58,23 +58,23 @@ class Mage {
 
   /// この魔導士の体力。**一党の体力は連れていく面々の合計**（[Party.poolFor]）。
   ///
-  /// **強い力を持つ者ほど薄い。** 能力を持たない従者がいちばん厚く、盤面を
+  /// **強い力を持つ者ほど薄い。** スキルを持たない従者がいちばん厚く、盤面を
   /// ひっくり返す力（威力+2、階層の敵すべてに一撃）を持つ者は薄い。連れて
   /// いく顔ぶれが、そのまま「何手ぶん耐えられるか」になる。
   final int hp;
 
-  /// この魔導士の能力。持たない者は null。
+  /// パッシブスキル。持たない者は null（従者）。
   ///
-  /// **[Party] は能力の中身で分岐しない。** ここに [Ability] を1つ置けば、
-  /// 集計は [Boon] の種類だけで回る。
-  final Ability? ability;
+  /// 鎖を編むたび、条件を満たせば勝手に効く。**[Party] は中身で分岐しない**
+  /// ――ここに [Passive] を1つ置けば、集計は [Boon] の種類だけで回る。
+  final Passive? passive;
 
-  /// 押して使う力。持たない者は null。**潜り1本に1回だけ**。
+  /// アクティブスキル。持たない者は null。**潜り1本に1回だけ**。
   ///
-  /// [ability] と違って鎖を見ないので、条件と効き目の組には収まらない。
-  /// 増やすときは `spells.dart` に [Spell] を1つ足して、ここで持たせる
+  /// 一党の帯から手で使う。鎖を見ないので条件と効き目の組には収まらない。
+  /// 増やすときは `actives.dart` に [Active] を1つ足して、ここで持たせる
   /// だけ――呼ぶ側に分岐は増えない。
-  final Spell? spell;
+  final Active? active;
 
   /// 最初から持っている従者か。
   ///
@@ -82,12 +82,19 @@ class Mage {
   /// 並べ忘れて「所持しているのにガチャにも出る」ような食い違いが起きない。
   final bool starting;
 
-  /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
-  String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
+  /// パッシブスキルの名前。持たない者は null。
+  String? get passiveName => passive?.name;
 
-  /// 押して使う力の説明。持たない者は null。
+  /// パッシブスキルの効き目。画面にそのまま出す。
+  /// 条件と効き目の組から作るので、数値とずれない。
+  String get passiveEffect => passive?.describe(phase) ?? '特殊な力は持たない';
+
+  /// アクティブスキルの名前。持たない者は null。
+  String? get activeName => active?.name;
+
+  /// アクティブスキルの効き目。持たない者は null。
   /// **相はここで埋める**ので、力の側は誰のものかを知らないままでいられる。
-  String? get spellEffect => spell?.describe(phase);
+  String? get activeEffect => active?.describe(phase);
 
   /// 従者の体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
   /// 始まりの2人で 90 あり、1本目のダンジョンはこれで通る。
@@ -125,44 +132,45 @@ class Mage {
     phase: Phase.red,
     name: '焔の魔導士',
     hp: 40,
-    ability: Ability(SamePhase(emberSame), PowerUp(1)),
+    passive: Passive('熾火', SamePhase(emberSame), PowerUp(1)),
   );
   static const blaze = Mage._(
     kind: MageKind.blaze,
     phase: Phase.red,
     name: '烈火の魔導士',
     hp: 30,
-    ability: Ability(SamePhase(blazeSame), PowerUp(2)),
-    spell: Spread(),
+    passive: Passive('業火', SamePhase(blazeSame), PowerUp(2)),
+    active: Spread(),
   );
   static const gale = Mage._(
     kind: MageKind.gale,
     phase: Phase.red,
     name: '風の魔導士',
     hp: 35,
-    ability: Ability(ChainLength(galeChain), Evade()),
-    spell: Foresee(),
+    passive: Passive('疾風', ChainLength(galeChain), Evade()),
+    active: Foresee(),
   );
   static const rime = Mage._(
     kind: MageKind.rime,
     phase: Phase.blue,
     name: '氷雨の魔導士',
     hp: 45,
-    ability: Ability(SamePhase(rimeSame), Mend(rimeMend)),
+    passive: Passive('慈雨', SamePhase(rimeSame), Mend(rimeMend)),
   );
   static const frost = Mage._(
     kind: MageKind.frost,
     phase: Phase.blue,
     name: '霜の魔導士',
     hp: 40,
-    ability: Ability(StartsWith(), PowerUp(1)),
+    passive: Passive('初霜', StartsWith(), PowerUp(1)),
   );
   static const storm = Mage._(
     kind: MageKind.storm,
     phase: Phase.violet,
     name: '雷の魔導士',
     hp: 30,
-    ability: Ability(
+    passive: Passive(
+      '落雷',
       Every([DistinctPhases(stormPhases), ChainLength(stormChain)]),
       Strike(1),
     ),
@@ -172,7 +180,7 @@ class Mage {
     phase: Phase.violet,
     name: '盾の魔導士',
     hp: 40,
-    ability: Ability(Always(), Guard()),
+    passive: Passive('鉄壁', Always(), Guard()),
   );
 
   /// 名簿。**この並びがそのまま画面に出る順**で、従者が先。
@@ -216,7 +224,7 @@ class Mage {
   static Mage of(MageKind kind) => _byKind[kind]!;
 }
 // ---- 調整の定数 ------------------------------------------------------
-// 能力の説明文はここから作られるので、数値を変えれば画面の文も動く。
+// スキルの説明文はここから作られるので、数値を変えれば画面の文も動く。
 
 /// 焔が応える、**自分の相**の枚数。
 const int emberSame = 3;
@@ -250,6 +258,6 @@ const int stormChain = 8;
 ///
 /// 3色の盤面は継ぎ先が薄くなるぶん鎖が短くなる（最長の中央値 9・8枚以上
 /// 77%。2色なら 11・89%。README 第7段階）。それまで3色にする理由がどこにも
-/// 無かったので、いちばん派手な能力をここに結んだ。雷は「3色にしてでも
+/// 無かったので、いちばん派手なスキルをここに結んだ。雷は「3色にしてでも
 /// 8枚編む」ための報酬で、2色の編成に入れても一度も落ちない。
 const int stormPhases = 3;

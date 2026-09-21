@@ -337,22 +337,22 @@ void main() {
     await tester.pump();
 
     // 潜っている最中に能力を確かめる道はここしか無い（名簿は拠点にある）。
-    expect(find.text(Mage.ember.effect), findsNothing, reason: '押すまでは出ない');
+    expect(find.text(Mage.ember.passiveEffect), findsNothing, reason: '押すまでは出ない');
 
     await tester.tap(find.byKey(const ValueKey('party-ember')));
     await tester.pump();
     expect(find.text(Mage.ember.name), findsOneWidget);
-    expect(find.text(Mage.ember.effect), findsOneWidget);
+    expect(find.text(Mage.ember.passiveEffect), findsOneWidget);
 
     // 閉じて開き直さずに、もう1人へ移れる。
     await tester.tap(find.byKey(const ValueKey('sheet-rime')));
     await tester.pump();
-    expect(find.text(Mage.rime.effect), findsOneWidget);
-    expect(find.text(Mage.ember.effect), findsNothing);
+    expect(find.text(Mage.rime.passiveEffect), findsOneWidget);
+    expect(find.text(Mage.ember.passiveEffect), findsNothing);
 
     await tester.tap(find.text('閉じる'));
     await tester.pump();
-    expect(find.text(Mage.rime.effect), findsNothing);
+    expect(find.text(Mage.rime.passiveEffect), findsNothing);
   });
 
   testWidgets('風の札から先読みを使うと、盤面にお手本が出る', (tester) async {
@@ -433,7 +433,7 @@ void main() {
     expect(find.byKey(const ValueKey('hint-path')), findsNothing);
     // 減っていないので、もう一度押せる。
     expect(find.text('使う'), findsOneWidget);
-    expect(controller.party.canCast(MageKind.gale), isTrue);
+    expect(controller.party.canUse(MageKind.gale), isTrue);
   });
 
   testWidgets('延焼を使うと、盤面の下の決まりが入れ替わる', (tester) async {

@@ -111,7 +111,7 @@ void main() {
 
     // 枠と名簿で1枚ずつ。枠の中だけでも誰なのかが読める。
     expect(find.text(Mage.ember.name), findsNWidgets(2));
-    expect(find.text(Mage.ember.effect), findsNWidgets(2));
+    expect(find.text(Mage.ember.passiveEffect), findsNWidgets(2));
     // 3枠目は空いたまま。
     expect(find.text('空き'), findsOneWidget);
   });
@@ -127,14 +127,14 @@ void main() {
     await goTab(tester, '一党');
 
     // 名簿の札は3枚並びで狭いので、名前だけ。
-    expect(rosterText(Mage.blaze, Mage.blaze.spell!.label), findsOneWidget);
-    expect(rosterText(Mage.blaze, Mage.blaze.spellEffect!), findsNothing);
+    expect(rosterText(Mage.blaze, Mage.blaze.active!.name), findsOneWidget);
+    expect(rosterText(Mage.blaze, Mage.blaze.activeEffect!), findsNothing);
 
     // 連れていく枠では中身まで読める。**潜る前に判断できないと意味がない。**
-    expect(find.text(Mage.blaze.spellEffect!), findsOneWidget);
+    expect(find.text(Mage.blaze.activeEffect!), findsOneWidget);
 
     // 持たない者には出ない。
-    expect(rosterText(Mage.ember, Mage.blaze.spell!.label), findsNothing);
+    expect(rosterText(Mage.ember, Mage.blaze.active!.name), findsNothing);
   });
 
   testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {

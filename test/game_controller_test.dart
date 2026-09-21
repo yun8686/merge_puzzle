@@ -1044,13 +1044,13 @@ void main() {
       final controller = galeController();
       expect(controller.hintPath, isEmpty, reason: '使うまでは出ない');
 
-      expect(controller.castSpell(MageKind.gale), CastResult.done);
+      expect(controller.useActive(MageKind.gale), ActiveResult.done);
       expect(controller.hintPath, isNotEmpty);
       expect(controller.hintPath, contains(const Cell(0, 1)), reason: '敵を通る');
 
       expect(
-        controller.castSpell(MageKind.gale),
-        CastResult.unavailable,
+        controller.useActive(MageKind.gale),
+        ActiveResult.unavailable,
         reason: '2回目',
       );
     });
@@ -1060,20 +1060,20 @@ void main() {
       // 1色で塗り潰すと3枚も繋がらない。届く道がどこにも無い盤面。
       paintDead(controller.board, foe: const Cell(0, 1), ward: 3);
 
-      expect(controller.castSpell(MageKind.gale), CastResult.missed);
+      expect(controller.useActive(MageKind.gale), ActiveResult.missed);
       expect(controller.hintPath, isEmpty, reason: '成立するだけの道でお茶を濁さない');
       expect(controller.revealedPath, isEmpty);
-      expect(controller.party.canCast(MageKind.gale), isTrue, reason: '減らない');
+      expect(controller.party.canUse(MageKind.gale), isTrue, reason: '減らない');
 
       // 盤面が戻れば、同じ札がそのまま使える。
       paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
-      expect(controller.castSpell(MageKind.gale), CastResult.done);
-      expect(controller.party.canCast(MageKind.gale), isFalse);
+      expect(controller.useActive(MageKind.gale), ActiveResult.done);
+      expect(controller.party.canUse(MageKind.gale), isFalse);
     });
 
     test('見せた道は、なぞって離しただけでは失われない', () {
       final controller = galeController();
-      expect(controller.castSpell(MageKind.gale), CastResult.done);
+      expect(controller.useActive(MageKind.gale), ActiveResult.done);
       final shown = List<Cell>.of(controller.hintPath);
 
       // 自分の指と重なると読めないので、なぞっている間は引っ込む。
@@ -1087,7 +1087,7 @@ void main() {
 
     test('鎖を1本編むと、見せた道は捨てる', () {
       final controller = galeController();
-      controller.castSpell(MageKind.gale);
+      controller.useActive(MageKind.gale);
 
       trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
       controller.commitPath();
@@ -1112,7 +1112,7 @@ void main() {
       const run = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
       expect(board.isConnected(run), isFalse);
 
-      expect(controller.castSpell(MageKind.blaze), CastResult.done);
+      expect(controller.useActive(MageKind.blaze), ActiveResult.done);
       expect(board.spreadPhase, Phase.red);
       expect(board.isConnected(run), isTrue);
 
@@ -1120,7 +1120,7 @@ void main() {
       trace(controller, run);
       expect(controller.commitPath(), isNotNull);
       expect(board.spreadPhase, isNull, reason: '延焼は1本きり');
-      expect(controller.party.canCast(MageKind.blaze), isFalse);
+      expect(controller.party.canUse(MageKind.blaze), isFalse);
     });
 
     test('その相だけで3枚つながらなければ空振りで、回数も減らない', () {
@@ -1132,28 +1132,28 @@ void main() {
       paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 3);
       expect(controller.board.hasSamePhaseRun(Phase.red), isFalse);
 
-      expect(controller.castSpell(MageKind.blaze), CastResult.missed);
+      expect(controller.useActive(MageKind.blaze), ActiveResult.missed);
       expect(controller.board.spreadPhase, isNull);
-      expect(controller.party.canCast(MageKind.blaze), isTrue, reason: '減らない');
+      expect(controller.party.canUse(MageKind.blaze), isTrue, reason: '減らない');
     });
 
     test('連れていない魔導士の力は使えない', () {
       final controller = newController();
       paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
-      expect(controller.castSpell(MageKind.gale), CastResult.unavailable);
+      expect(controller.useActive(MageKind.gale), ActiveResult.unavailable);
       expect(controller.hintPath, isEmpty);
     });
 
     test('階層をまたいでも戻らず、潜り直すと戻る', () {
       final controller = galeController();
-      expect(controller.castSpell(MageKind.gale), CastResult.done);
-      expect(controller.party.canCast(MageKind.gale), isFalse);
+      expect(controller.useActive(MageKind.gale), ActiveResult.done);
+      expect(controller.party.canUse(MageKind.gale), isFalse);
 
       controller.nextFloor();
-      expect(controller.party.canCast(MageKind.gale), isFalse, reason: '階層は跨ぐ');
+      expect(controller.party.canUse(MageKind.gale), isFalse, reason: '階層は跨ぐ');
 
       controller.enterDungeon(controller.dungeon);
-      expect(controller.party.canCast(MageKind.gale), isTrue, reason: '潜り直し');
+      expect(controller.party.canUse(MageKind.gale), isTrue, reason: '潜り直し');
     });
   });
 

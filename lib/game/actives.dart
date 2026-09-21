@@ -1,12 +1,12 @@
 part of 'party.dart';
 
-// 押して使う力の中身。**増やすのはこのファイルだけ。**
+// アクティブスキルの中身。**増やすのはこのファイルだけ。**
 //
-// [Spell] を1つ継いで、[Spell.cast] に「[SpellStage] のどの動詞を呼ぶか」を
+// [Active] を1つ継いで、[Active.cast] に「[ActiveStage] のどの動詞を呼ぶか」を
 // 書く。名簿（roster.dart）で魔導士に持たせれば、それで終わり――進行
 // （game_controller.dart）も画面（game_screen.dart）も触らない。
 //
-// [SpellStage] に無いことをしたくなったら、あちらに動詞を1つ足すこと。
+// [ActiveStage] に無いことをしたくなったら、あちらに動詞を1つ足すこと。
 // 進行の側に「この力ならこうする」という分岐を書くと、力が増えるたびに
 // 進行が太っていく。
 
@@ -15,17 +15,17 @@ part of 'party.dart';
 /// **盤面を変えない。** 手数の制限が無くなってからは、値段を払うのは体力
 /// だけなので、道を1本知ったところで1手ぶんの反撃は必ず払う。教えるのは
 /// 「どこを通れば一番効くか」であって、無料の1手ではない。
-final class Foresee extends Spell {
+final class Foresee extends Active {
   const Foresee();
 
   @override
-  String get label => '先読み';
+  String get name => '先読み';
 
   @override
   String describe(Phase phase) => 'いまの盤面で、敵にいちばん深く届く道を1本見せる';
 
   @override
-  bool cast(SpellStage stage, Phase phase) => stage.revealBestRoute();
+  bool cast(ActiveStage stage, Phase phase) => stage.revealBestRoute();
 }
 
 /// **次の1本だけ、自分の相だけで鎖を編めるようにする。**
@@ -42,15 +42,15 @@ final class Foresee extends Spell {
 /// **決まりそのものを緩めているので、永く効かせてはいけない。** 常時これが
 /// 通ると敵マスを通る最長パスが跳ね上がり、希少な相のジレンマも雷の8枚条件も
 /// 意味を失う（README 第8段階）。だから**1本だけ**で、潜り1本に1回だけ。
-final class Spread extends Spell {
+final class Spread extends Active {
   const Spread();
 
   @override
-  String get label => '延焼';
+  String get name => '延焼';
 
   @override
   String describe(Phase phase) => '次の1本だけ、${phase.label}どうしを継げるようになる';
 
   @override
-  bool cast(SpellStage stage, Phase phase) => stage.spread(phase);
+  bool cast(ActiveStage stage, Phase phase) => stage.spread(phase);
 }

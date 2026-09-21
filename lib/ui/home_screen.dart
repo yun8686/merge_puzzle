@@ -952,12 +952,12 @@ class _PhaseNote extends StatelessWidget {
   }
 }
 
-/// 連れていく枠1つ。**印だけでは誰なのか読めない**ので、名前と能力と相を
+/// 連れていく枠1つ。**印だけでは誰なのか読めない**ので、名前とスキルと相を
 /// 一緒に並べる。名簿の札を見に行かなくても、いまの編成が何をする一党なのかが
 /// ここだけで分かるようにする。
 ///
-/// 横に3つ並べると1枠あたりが狭く、名前も能力も入らない。縦に3本の帯にして、
-/// 幅を能力の説明に使う。
+/// 横に3つ並べると1枠あたりが狭く、名前もスキルも入らない。縦に3本の帯にして、
+/// 幅をスキルの説明に使う。
 class _PartySlot extends StatelessWidget {
   const _PartySlot({required this.mage});
 
@@ -1033,41 +1033,19 @@ class _PartySlot extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    mage.effect,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Palette.textMuted,
-                      fontSize: 9.5,
-                      height: 1.3,
-                    ),
+                  // パッシブとアクティブを**同じ形**で並べる。名前を前に
+                  // 出しておけば、どちらがどちらかは色と並びで読める。
+                  _SkillLine(
+                    name: mage.passiveName,
+                    text: mage.passiveEffect,
+                    tint: Palette.textDim,
                   ),
-                  // 押して使う力も編成の判断に乗る。**鎖に勝手に応える能力
-                  // とは別物**なので、名前を前に出して別の行にする。
-                  if (mage.spellEffect case final text?) ...[
+                  if (mage.activeEffect case final text?) ...[
                     const SizedBox(height: 3),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          mage.spell!.label,
-                          style: AppFont.label(8, color: Palette.gold),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            text,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Palette.textMuted,
-                              fontSize: 9.5,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
+                    _SkillLine(
+                      name: mage.activeName,
+                      text: text,
+                      tint: Palette.gold,
                     ),
                   ],
                 ],
@@ -1078,6 +1056,47 @@ class _PartySlot extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// スキル1つぶんの行。**名前を前に、効き目を後ろに。**
+///
+/// パッシブもアクティブも同じ形で並べる。違うのは名前の色だけなので、
+/// どちらがどちらかは並びで読める。名前を持たない者（従者）は効き目だけ。
+class _SkillLine extends StatelessWidget {
+  const _SkillLine({
+    required this.name,
+    required this.text,
+    required this.tint,
+  });
+
+  final String? name;
+  final String text;
+  final Color tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (name case final label?) ...[
+          Text(label, style: AppFont.label(8, color: tint)),
+          const SizedBox(width: 6),
+        ],
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Palette.textMuted,
+              fontSize: 9.5,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1162,8 +1181,8 @@ class _MageCard extends StatelessWidget {
                         // 体力は名簿ごとに違う。力のある者ほど薄いので、
                         // ここに出しておかないと編成の判断ができない。
                         //
-                        // 押して使う力は**名前だけ**。札は3枚並びで狭く、
-                        // 説明まで入れると行が増えて札から溢れる。中身は
+                        // スキルは**名前だけ**。札は3枚並びで狭く、効き目の
+                        // 文まで入れると行が増えて札から溢れる。中身は
                         // 連れていく枠（[_PartySlot]）で読める。
                         // 狭い端末でも溢れないよう、入らなければ縮める。
                         FittedBox(
@@ -1175,10 +1194,20 @@ class _MageCard extends StatelessWidget {
                                 '体力 ${mage.hp}',
                                 style: AppFont.label(8, color: Palette.life),
                               ),
-                              if (mage.spell case final spell?) ...[
+                              if (mage.passiveName case final name?) ...[
                                 const SizedBox(width: 6),
                                 Text(
-                                  spell.label,
+                                  name,
+                                  style: AppFont.label(
+                                    8,
+                                    color: Palette.textMuted,
+                                  ),
+                                ),
+                              ],
+                              if (mage.activeName case final name?) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  name,
                                   style: AppFont.label(8, color: Palette.gold),
                                 ),
                               ],
@@ -1187,7 +1216,7 @@ class _MageCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          mage.effect,
+                          mage.passiveEffect,
                           maxLines: 2,
                           textAlign: TextAlign.center,
                           overflow: TextOverflow.ellipsis,
@@ -1285,9 +1314,12 @@ class _GachaTab extends StatelessWidget {
             _Notice(
               text: [
                 '${drawn!.name} が加わった',
-                drawn!.effect,
-                if (drawn!.spellEffect case final text?)
-                  '${drawn!.spell!.label}（押して使う）　$text',
+                if (drawn!.passiveName case final name?)
+                  '$name（パッシブ）　${drawn!.passiveEffect}'
+                else
+                  drawn!.passiveEffect,
+                if (drawn!.activeEffect case final text?)
+                  '${drawn!.activeName}（アクティブ）　$text',
               ].join('\n'),
               tint: Palette.mageColor(drawn!.kind),
             ),

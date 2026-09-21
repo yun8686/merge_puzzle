@@ -7,10 +7,10 @@ library;
 
 import 'phase.dart';
 
-// 名簿（誰が居るか）と、押して使う力の中身は別のファイルに置いてある。
+// 名簿（誰が居るか）と、アクティブスキルの中身は別のファイルに置いてある。
 // **ここは仕組みだけ**――名簿が100人に増えても、この上下は1行も変わらない。
 part 'roster.dart';
-part 'spells.dart';
+part 'actives.dart';
 
 /// 鎖1本の戦果。魔導士が見るのはこれだけ。
 class ChainTally {
@@ -34,7 +34,7 @@ class ChainTally {
 
   int countOf(Phase phase) => counts[phase] ?? 0;
 
-  /// 鎖が1本も無い状態。鎖を見ない能力（[Always]）を数えるときに渡す。
+  /// 鎖が1本も無い状態。鎖を見ないスキル（[Always]）を数えるときに渡す。
   static const none = ChainTally(
     length: 0,
     counts: <Phase, int>{},
@@ -42,7 +42,7 @@ class ChainTally {
   );
 }
 
-/// 能力が応える条件。**見るのは鎖の戦果と、その魔導士自身の相だけ。**
+/// パッシブスキルが応える条件。**見るのは鎖の戦果と、その魔導士自身の相だけ。**
 ///
 /// 盤面も一党も見ないので、条件を1つ足しても他に波及しない。魔導士を
 /// 増やすときは、ここにある条件と [Boon] を組み合わせるだけで済む。
@@ -51,7 +51,7 @@ sealed class Trigger {
 
   bool met(Phase phase, ChainTally tally);
 
-  /// 「〜な」まで。[Ability.describe] が「鎖」を足して1文にする。
+  /// 「〜な」まで。[Passive.describe] が「鎖」を足して1文にする。
   /// 条件を重ねたとき（[Every]）に前から順に繋がるよう、ここでは
   /// 「鎖」を書かない。
   String describe(Phase phase);
@@ -203,7 +203,7 @@ final class Guard extends Boon {
   String describe() => '受ける痛手が半分になる';
 }
 
-/// 押して使う力が触れられること。**盤面そのものは渡さない。**
+/// アクティブスキルが触れられること。**盤面そのものは渡さない。**
 ///
 /// 一党が盤面を読まない線は、ここでも引いてある。渡すのは**やってほしいこと
 /// の名前**だけで、どう実現するかは盤面を持っている側（`GameController`）の
@@ -212,7 +212,7 @@ final class Guard extends Boon {
 /// **力を増やすときは、ここに動詞を1つ足すか、既にある動詞を使う。**
 /// 進行の側に「この力ならこうする」という分岐を書かない――それをやると、
 /// 力が増えるたびに `GameController` が太っていく。
-abstract interface class SpellStage {
+abstract interface class ActiveStage {
   /// 敵にいちばん深く届く道を探して、お手本として盤面に出す。
   ///
   /// 1でも届く道が無ければ false。**そのときは何も起きていない**ので、
@@ -230,20 +230,23 @@ abstract interface class SpellStage {
   bool spread(Phase phase);
 }
 
-/// 押して使う力。**鎖を見ない。押して使う。**
+/// **アクティブスキル。** 鎖を見ない。一党の帯から手で使う。
 ///
-/// [Ability] が鎖の戦果に勝手に応えるのに対して、こちらは一党の帯から手で
-/// 使う。**1本の潜りで [Party.spellUses] 回だけ**（[Party.canCast]）。回数を
+/// [Passive] が鎖の戦果に勝手に応えるのに対して、こちらは押して使う。
+/// **1本の潜りで [Party.activeUses] 回だけ**（[Party.canUse]）。回数を
 /// 持つのは [Party] で、潜るたびに組み直されるので、数えるところは1つで済む。
 ///
 /// **sealed にしていない。** 何をするかは [cast] が自分で言うので、呼ぶ側に
 /// 型で分岐する場所が無い。力が100種類に増えても、増えるのはこの下の実体
-/// （`spells.dart`）だけで、進行も画面も名簿も変わらない。
-abstract class Spell {
-  const Spell();
+/// （`actives.dart`）だけで、進行も画面も名簿も変わらない。
+abstract class Active {
+  const Active();
 
-  /// 札に出す名前。
-  String get label;
+  /// 札に出す名前。**手で付ける。**
+  ///
+  /// 効き目の文（[describe]）は型と相から作れるが、名前はそこからは出て
+  /// こない。呼び名が無いと、画面でも会話でも「風のあれ」としか指せない。
+  String get name;
 
   /// 何が起きるか。説明文も型から作るので、手で書いた文とずれない。
   ///
@@ -253,14 +256,22 @@ abstract class Spell {
   String describe(Phase phase);
 
   /// 使う。**何も起きなければ false**（呼んだ側は回数を減らさない）。
-  bool cast(SpellStage stage, Phase phase);
+  bool cast(ActiveStage stage, Phase phase);
 }
 
-/// 能力ひとつ。**条件と効き目の組でしか書けない。**
+/// **パッシブスキル。** 鎖を編むたび、条件を満たせば勝手に効く。
 ///
-/// 説明文は組から作る。手で書いた文と数値がずれることが無い。
-class Ability {
-  const Ability(this.when, this.then);
+/// **条件（[Trigger]）と効き目（[Boon]）の組でしか書けない。** [Party] は
+/// 効き目の種類ごとに足し合わせるだけなので、名簿を増やしてもそこは変わらない。
+///
+/// 説明文は組から作る（[describe]）。手で書いた文と数値がずれることが無い。
+/// **名前だけは手で付ける**――組からは出てこないし、呼び名が無いと画面でも
+/// 会話でも指せない。
+class Passive {
+  const Passive(this.name, this.when, this.then);
+
+  /// 札に出す名前。[Active.name] と同じ扱い。
+  final String name;
 
   final Trigger when;
   final Boon then;
@@ -310,36 +321,36 @@ class Party {
   int hp;
   int maxHp;
 
-  /// 1本の潜りで、[Spell] を1人につき何回使えるか。
+  /// 1本の潜りで、[Active] を1人につき何回使えるか。
   ///
   /// **潜る前に決まって道中では増えない**のは体力と同じ。使い切った先は
   /// 編成をやり直すか、潜り直すかしかない。
-  static const int spellUses = 1;
+  static const int activeUses = 1;
 
   /// この潜りで押した力を、誰が何回使ったか。
   ///
   /// [Party] は潜るたびに組み直される（`GameController._freshParty`）ので、
   /// **ここに置くだけで「1ダンジョンに1回」になる**。階層をまたいでも
   /// 戻らないのは体力と同じ扱い。
-  final Map<MageKind, int> spellsSpent = <MageKind, int>{};
+  final Map<MageKind, int> activesSpent = <MageKind, int>{};
 
-  /// [kind] の押して使う力が、まだ残っているか。
+  /// [kind] のアクティブスキルが、まだ残っているか。
   /// 連れていない者、力を持たない者は false。
-  bool canCast(MageKind kind) =>
-      spellOf(kind) != null && castsLeft(kind) > 0;
+  bool canUse(MageKind kind) =>
+      activeOf(kind) != null && usesLeft(kind) > 0;
 
   /// [kind] に残っている回数。持たない者は 0。
-  int castsLeft(MageKind kind) => spellOf(kind) == null
+  int usesLeft(MageKind kind) => activeOf(kind) == null
       ? 0
-      : spellUses - (spellsSpent[kind] ?? 0);
+      : activeUses - (activesSpent[kind] ?? 0);
 
-  /// 連れている [kind] の押して使う力。連れていなければ null。
-  Spell? spellOf(MageKind kind) => memberOf(kind)?.spell;
+  /// 連れている [kind] のアクティブスキル。連れていなければ null。
+  Active? activeOf(MageKind kind) => memberOf(kind)?.active;
 
   /// 1回ぶん使う。残っていなければ false（何も減らさない）。
-  bool spendCast(MageKind kind) {
-    if (!canCast(kind)) return false;
-    spellsSpent[kind] = (spellsSpent[kind] ?? 0) + 1;
+  bool spendUse(MageKind kind) {
+    if (!canUse(kind)) return false;
+    activesSpent[kind] = (activesSpent[kind] ?? 0) + 1;
     return true;
   }
 
@@ -386,10 +397,10 @@ class Party {
   /// どの効き目が応えたかだけを数える。名簿に何人足しても変わらない。
   Iterable<T> _boons<T extends Boon>(ChainTally tally) sync* {
     for (final mage in members) {
-      final ability = mage.ability;
-      if (ability == null || ability.then is! T) continue;
-      if (!ability.firesOn(mage.phase, tally)) continue;
-      yield ability.then as T;
+      final passive = mage.passive;
+      if (passive == null || passive.then is! T) continue;
+      if (!passive.firesOn(mage.phase, tally)) continue;
+      yield passive.then as T;
     }
   }
 
@@ -420,7 +431,7 @@ class Party {
   int boltFor(ChainTally tally) => _total<Strike>(tally, (b) => b.amount);
 
   /// [raw] の痛手を実際に受ける量。[Guard] ひとつにつき半分（切り上げ）に
-  /// なる。鎖を見ない能力なので [ChainTally.none] で数える。
+  /// なる。鎖を見ないスキルなので [ChainTally.none] で数える。
   ///
   /// 毎ターンの反撃にも、階層を落としたときの痛手にも同じものを通す。
   int damageFor(int raw) {

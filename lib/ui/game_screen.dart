@@ -104,42 +104,42 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() => _controller.restart();
 
-  /// 能力を開いている魔導士。null なら閉じている。
+  /// スキルを開いている魔導士。null なら閉じている。
   ///
-  /// **潜っている最中に能力を確かめる道はここしか無い。** 名簿は拠点にあって
+  /// **潜っている最中にスキルを確かめる道はここしか無い。** 名簿は拠点にあって
   /// 途中では開けないので、無いと「誰を連れてきたか」は姿で分かるのに
   /// 「何をする人か」が確かめられない。
   MageKind? _inspecting;
 
-  /// 押して使う力が空振りしたときの一言。**札の中に出す。**
+  /// アクティブスキルが空振りしたときの一言。**札の中に出す。**
   ///
   /// 盤面に何も起きないので、閉じてしまうと「押したのに無反応」に見える。
   /// 札を開いたまま、なぜ何も起きなかったかを言う。
-  String? _castNote;
+  String? _useNote;
 
   void _inspect(Mage mage) => setState(() {
     _inspecting = mage.kind;
-    _castNote = null;
+    _useNote = null;
   });
 
   void _closeInspect() => setState(() {
     _inspecting = null;
-    _castNote = null;
+    _useNote = null;
   });
 
-  /// 押して使う力を使う。通ったら札を閉じて、見せた道を盤面に出す。
+  /// アクティブスキルを使う。通ったら札を閉じて、見せた道を盤面に出す。
   ///
   /// **空振りでは閉じない。** 回数も減っていないので、盤面を崩してから
   /// もう一度押せばよい――そのことごと札の中で言う。
-  void _cast(MageKind kind) {
-    final result = _controller.castSpell(kind);
+  void _use(MageKind kind) {
+    final result = _controller.useActive(kind);
     setState(() {
-      _castNote = switch (result) {
-        CastResult.done => null,
-        CastResult.missed => 'どの道も敵に届かなかった。回数は減っていない',
-        CastResult.unavailable => 'いまは使えない',
+      _useNote = switch (result) {
+        ActiveResult.done => null,
+        ActiveResult.missed => 'どの道も敵に届かなかった。回数は減っていない',
+        ActiveResult.unavailable => 'いまは使えない',
       };
-      if (result == CastResult.done) _inspecting = null;
+      if (result == ActiveResult.done) _inspecting = null;
     });
   }
 
@@ -295,10 +295,10 @@ class _GameScreenState extends State<GameScreen> {
                         onSelect: (kind) => setState(() {
                           _inspecting = kind;
                           // 別の人に移ったら、前の人の空振りの話は消す。
-                          _castNote = null;
+                          _useNote = null;
                         }),
-                        onCast: _cast,
-                        note: _castNote,
+                        onUse: _use,
+                        note: _useNote,
                         onClose: _closeInspect,
                       ),
                   ],
@@ -1389,7 +1389,7 @@ class _PartyBar extends StatelessWidget {
   /// 凌いだことを風の色で名乗らせる。
   final bool evaded;
 
-  /// 姿を押したときに開く。能力を確かめる道はここしか無い。
+  /// 姿を押したときに開く。スキルを確かめる道はここしか無い。
   final ValueChanged<Mage> onInspect;
 
   @override
@@ -1462,7 +1462,7 @@ class _PartyBar extends StatelessWidget {
                   child: _MageChip(
                     key: ValueKey('party-${mage.kind.name}'),
                     mage: mage,
-                    ready: party.canCast(mage.kind),
+                    ready: party.canUse(mage.kind),
                     onTap: () => onInspect(mage),
                   ),
                 ),
@@ -1520,7 +1520,7 @@ class _LifeBar extends StatelessWidget {
 
 /// 一党に並ぶ魔導士。色はその魔導士が見ている相。
 ///
-/// **押すと能力が開く**（[_MageSheet]）。指で遊ぶので、被せの札
+/// **押すとスキルが開く**（[_MageSheet]）。指で遊ぶので、被せの札
 /// （[Tooltip]）だけでは長押ししないと出ず、あることに気付けない。
 class _MageChip extends StatelessWidget {
   const _MageChip({
@@ -1537,7 +1537,7 @@ class _MageChip extends StatelessWidget {
   /// いま開いている魔導士。切り替えの列で、どれを見ているかを示す。
   final bool selected;
 
-  /// 押して使う力がまだ残っている。**印が無いと気付けない。**
+  /// アクティブスキルがまだ残っている。**印が無いと気付けない。**
   /// 潜り1本に1回しか使えないものを、押してみるまで分からない場所に
   /// 置くと、そのまま使われずに終わる。
   final bool ready;
@@ -1546,7 +1546,15 @@ class _MageChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final tint = Palette.mageColor(mage.kind);
     return Tooltip(
-      message: '${mage.name}／${mage.effect}',
+      message: [
+        mage.name,
+        if (mage.passiveName case final name?)
+          '$name（パッシブ）　${mage.passiveEffect}'
+        else
+          mage.passiveEffect,
+        if (mage.activeEffect case final text?)
+          '${mage.activeName}（アクティブ）　$text',
+      ].join('\n'),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -1594,7 +1602,7 @@ class _MageChip extends StatelessWidget {
 
 /// 連れている魔導士1人の詳細。一党の帯の姿を押すと開く。
 ///
-/// **潜っている最中に能力を確かめられる唯一の場所。** 名簿は拠点にあって
+/// **潜っている最中にスキルを確かめられる唯一の場所。** 名簿は拠点にあって
 /// 途中では開けないので、ここが無いと「誰を連れてきたか」は姿で分かるのに
 /// 「何をする人か」が確かめられない。
 ///
@@ -1608,7 +1616,7 @@ class _MageSheet extends StatelessWidget {
     required this.controller,
     required this.kind,
     required this.onSelect,
-    required this.onCast,
+    required this.onUse,
     required this.note,
     required this.onClose,
   });
@@ -1620,8 +1628,8 @@ class _MageSheet extends StatelessWidget {
 
   final ValueChanged<MageKind> onSelect;
 
-  /// 押して使う力を使う。
-  final ValueChanged<MageKind> onCast;
+  /// アクティブスキルを使う。
+  final ValueChanged<MageKind> onUse;
 
   /// 空振りしたときの一言。無ければ出さない。
   final String? note;
@@ -1633,7 +1641,7 @@ class _MageSheet extends StatelessWidget {
     final party = controller.party;
     final mage = Mage.of(kind);
     final tint = Palette.mageColor(kind);
-    final spell = mage.spell;
+    final active = mage.active;
     return _Curtain(
       onDismiss: onClose,
       children: [
@@ -1658,10 +1666,14 @@ class _MageSheet extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        Text('能力', style: AppFont.label(10, color: Palette.gold)),
+        Text('パッシブスキル', style: AppFont.label(10, color: Palette.textDim)),
         const SizedBox(height: 8),
+        if (mage.passiveName case final name?) ...[
+          Text(name, style: AppFont.number(17, color: Palette.gold)),
+          const SizedBox(height: 6),
+        ],
         Text(
-          mage.effect,
+          mage.passiveEffect,
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Palette.textPrimary,
@@ -1676,14 +1688,17 @@ class _MageSheet extends StatelessWidget {
         _ResultRow(label: 'この人の体力', value: '${mage.hp}'),
         const SizedBox(height: 8),
         _ResultRow(label: '一党の体力', value: '${party.hp} / ${party.maxHp}'),
-        if (spell != null) ...[
+        if (active != null) ...[
           const SizedBox(height: 22),
-          Text('押して使う力', style: AppFont.label(10, color: Palette.life)),
+          Text(
+            'アクティブスキル',
+            style: AppFont.label(10, color: Palette.textDim),
+          ),
           const SizedBox(height: 8),
-          Text(spell.label, style: AppFont.number(17, color: Palette.life)),
+          Text(active.name, style: AppFont.number(17, color: Palette.life)),
           const SizedBox(height: 6),
           Text(
-            mage.spellEffect!,
+            mage.activeEffect!,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Palette.textMuted,
@@ -1694,15 +1709,15 @@ class _MageSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '潜り1本に ${Party.spellUses} 回',
+            '潜り1本に ${Party.activeUses} 回',
             style: AppFont.label(9, color: Palette.textDim),
           ),
           const SizedBox(height: 12),
-          if (party.canCast(kind) && controller.acceptsInput)
-            _PrimaryButton(label: '使う', onTap: () => onCast(kind))
+          if (party.canUse(kind) && controller.acceptsInput)
+            _PrimaryButton(label: '使う', onTap: () => onUse(kind))
           else
             Text(
-              party.canCast(kind) ? '盤面が動いている' : 'この潜りではもう使った',
+              party.canUse(kind) ? '盤面が動いている' : 'この潜りではもう使った',
               style: AppFont.label(10, color: Palette.textDim),
             ),
           if (note != null) ...[
@@ -1730,7 +1745,7 @@ class _MageSheet extends StatelessWidget {
                   key: ValueKey('sheet-${other.kind.name}'),
                   mage: other,
                   selected: other.kind == kind,
-                  ready: party.canCast(other.kind),
+                  ready: party.canUse(other.kind),
                   onTap: () => onSelect(other.kind),
                 ),
               ),

@@ -15,7 +15,7 @@ Party partyOf(List<Mage> members) =>
 /// 盤面の代わり。**押して使う力が何を頼んだかだけ数える。**
 ///
 /// `party.dart` は盤面を読まないので、力の試験に盤面は要らない。
-class _FakeStage implements SpellStage {
+class _FakeStage implements ActiveStage {
   int revealed = 0;
 
   /// 延焼を頼まれた相。頼まれていなければ null。
@@ -38,67 +38,78 @@ class _FakeStage implements SpellStage {
 }
 
 void main() {
-  group('能力の書き方', () {
+  group('スキルの書き方', () {
     test('説明文は条件と効き目から作られる', () {
       // 手で書いた文ではないので、数値を変えれば文も動く。
-      expect(Mage.ember.effect, '赤を3枚以上継いだ鎖は威力 +1');
-      expect(Mage.blaze.effect, '赤を5枚以上継いだ鎖は威力 +2');
-      expect(Mage.gale.effect, '7枚以上継いだ鎖を編んだ手は反撃を受けない');
-      expect(Mage.rime.effect, '青を3枚以上継いだ鎖で体力を 3 戻す');
-      expect(Mage.frost.effect, '青から継ぎ始めた鎖は威力 +1');
-      expect(Mage.storm.effect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
-      expect(Mage.aegis.effect, '受ける痛手が半分になる');
+      expect(Mage.ember.passiveEffect, '赤を3枚以上継いだ鎖は威力 +1');
+      expect(Mage.blaze.passiveEffect, '赤を5枚以上継いだ鎖は威力 +2');
+      expect(Mage.gale.passiveEffect, '7枚以上継いだ鎖を編んだ手は反撃を受けない');
+      expect(Mage.rime.passiveEffect, '青を3枚以上継いだ鎖で体力を 3 戻す');
+      expect(Mage.frost.passiveEffect, '青から継ぎ始めた鎖は威力 +1');
+      expect(Mage.storm.passiveEffect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
+      expect(Mage.aegis.passiveEffect, '受ける痛手が半分になる');
     });
 
     test('説明文には効き目の数値もそのまま出る', () {
       // 定数を動かしたのに文が古いまま、という食い違いが起きない。
-      expect(Mage.rime.effect, contains('体力を $rimeMend 戻す'));
+      expect(Mage.rime.passiveEffect, contains('体力を $rimeMend 戻す'));
     });
 
     test('説明文には条件の枚数がそのまま出る', () {
       // 定数を動かしたのに文が古いまま、という食い違いが起きない。
-      expect(Mage.ember.effect, contains('$emberSame枚'));
-      expect(Mage.blaze.effect, contains('$blazeSame枚'));
-      expect(Mage.rime.effect, contains('$rimeSame枚'));
-      expect(Mage.gale.effect, contains('$galeChain枚'));
-      expect(Mage.storm.effect, contains('$stormChain枚'));
+      expect(Mage.ember.passiveEffect, contains('$emberSame枚'));
+      expect(Mage.blaze.passiveEffect, contains('$blazeSame枚'));
+      expect(Mage.rime.passiveEffect, contains('$rimeSame枚'));
+      expect(Mage.gale.passiveEffect, contains('$galeChain枚'));
+      expect(Mage.storm.passiveEffect, contains('$stormChain枚'));
     });
 
-    test('押して使う力は、条件と効き目の組とは別に持つ', () {
-      // 鎖を見ないので [Ability] には収まらない。
-      expect(Mage.gale.spell, isA<Foresee>());
-      expect(Mage.gale.spell!.label, '先読み');
-      expect(Mage.blaze.spell, isA<Spread>());
-      expect(Mage.blaze.spell!.label, '延焼');
-      const withSpell = {MageKind.gale, MageKind.blaze};
+    test('アクティブスキルは、条件と効き目の組とは別に持つ', () {
+      // 鎖を見ないので [Passive] には収まらない。
+      expect(Mage.gale.active, isA<Foresee>());
+      expect(Mage.gale.active!.name, '先読み');
+      expect(Mage.blaze.active, isA<Spread>());
+      expect(Mage.blaze.active!.name, '延焼');
+      const withActive = {MageKind.gale, MageKind.blaze};
       for (final mage in Mage.roster) {
-        if (withSpell.contains(mage.kind)) continue;
-        expect(mage.spell, isNull, reason: mage.name);
+        if (withActive.contains(mage.kind)) continue;
+        expect(mage.active, isNull, reason: mage.name);
       }
     });
 
-    test('押して使う力の説明にも、持ち主の相が入る', () {
+    test('スキルには名前がある。名前だけは手で付ける', () {
+      // 効き目の文は組から作れるが、名前はそこからは出てこない。
+      // 呼び名が無いと、画面でも会話でも「風のあれ」としか指せない。
+      expect(Mage.blaze.passiveName, '業火');
+      expect(Mage.aegis.passiveName, '鉄壁');
+      expect(Mage.gale.activeName, '先読み');
+      expect(Mage.blaze.activeName, '延焼');
+      expect(Mage.squireRed.passiveName, isNull, reason: '従者は持たない');
+      expect(Mage.ember.activeName, isNull, reason: '持たない者は null');
+    });
+
+    test('アクティブスキルの説明にも、持ち主の相が入る', () {
       // 力の側は誰のものかを知らない。相を受け取るから、同じ力を別の相の
       // 魔導士に持たせても文が付いてくる。
-      expect(Mage.blaze.spellEffect, '次の1本だけ、赤どうしを継げるようになる');
+      expect(Mage.blaze.activeEffect, '次の1本だけ、赤どうしを継げるようになる');
       expect(
         const Spread().describe(Phase.blue),
         '次の1本だけ、青どうしを継げるようになる',
       );
-      expect(Mage.ember.spellEffect, isNull, reason: '持たない者は null');
+      expect(Mage.ember.activeEffect, isNull, reason: '持たない者は null');
     });
 
-    test('従者は能力を持たない', () {
+    test('従者はスキルを持たない', () {
       for (final squire in Mage.squires) {
-        expect(squire.ability, isNull, reason: squire.name);
-        expect(squire.effect, '特殊な力は持たない');
+        expect(squire.passive, isNull, reason: squire.name);
+        expect(squire.passiveEffect, '特殊な力は持たない');
       }
     });
 
-    test('招ける7人は全員が能力を持つ', () {
+    test('招ける7人は全員がパッシブスキルを持つ', () {
       for (final mage in Mage.summonable) {
-        expect(mage.ability, isNotNull, reason: mage.name);
-        expect(mage.effect, isNot('特殊な力は持たない'), reason: mage.name);
+        expect(mage.passive, isNotNull, reason: mage.name);
+        expect(mage.passiveEffect, isNot('特殊な力は持たない'), reason: mage.name);
       }
     });
   });
@@ -212,6 +223,26 @@ void main() {
       expect(names.toSet().length, names.length);
     });
 
+    test('スキルには全部名前が付いていて、重ならない', () {
+      // 100人に増えると、名前の付け忘れも被りも目で追えない。
+      final skills = <String>[];
+      for (final mage in Mage.roster) {
+        if (mage.passive case final passive?) {
+          expect(passive.name, isNotEmpty, reason: mage.name);
+          skills.add(passive.name);
+        }
+        if (mage.active case final active?) {
+          expect(active.name, isNotEmpty, reason: mage.name);
+          skills.add(active.name);
+        }
+      }
+      expect(skills.toSet().length, skills.length, reason: '被らない');
+      // 魔導士の名前ともぶつからない。札に並ぶので、同じだと読めない。
+      for (final mage in Mage.roster) {
+        expect(skills, isNot(contains(mage.name)), reason: mage.name);
+      }
+    });
+
     test('体力は 30〜45 に収める', () {
       // 強い能力に厚い体力を重ねると、その1人を入れるだけの編成になる。
       for (final mage in Mage.roster) {
@@ -230,7 +261,7 @@ void main() {
   group('押して使う力', () {
     test('舞台の動詞を呼ぶだけ。盤面は要らない', () {
       // **呼ぶ側に「この力ならこうする」は無い。** 力を増やしても
-      // `GameController.castSpell` は変わらない。
+      // `GameController.useActive` は変わらない。
       final stage = _FakeStage();
       expect(const Foresee().cast(stage, Phase.red), isTrue);
       expect(stage.revealed, 1);
@@ -251,29 +282,29 @@ void main() {
 
     test('潜り1本に1回だけ。使い切ったら戻らない', () {
       final party = partyOf([Mage.gale, Mage.rime]);
-      expect(party.castsLeft(MageKind.gale), Party.spellUses);
-      expect(party.canCast(MageKind.gale), isTrue);
+      expect(party.usesLeft(MageKind.gale), Party.activeUses);
+      expect(party.canUse(MageKind.gale), isTrue);
 
-      expect(party.spendCast(MageKind.gale), isTrue);
-      expect(party.castsLeft(MageKind.gale), 0);
-      expect(party.canCast(MageKind.gale), isFalse);
-      expect(party.spendCast(MageKind.gale), isFalse, reason: '2回目は通らない');
+      expect(party.spendUse(MageKind.gale), isTrue);
+      expect(party.usesLeft(MageKind.gale), 0);
+      expect(party.canUse(MageKind.gale), isFalse);
+      expect(party.spendUse(MageKind.gale), isFalse, reason: '2回目は通らない');
     });
 
     test('力を持たない者と、連れていない者は使えない', () {
       final party = partyOf([Mage.gale, Mage.rime]);
-      expect(party.canCast(MageKind.rime), isFalse, reason: '持っていない');
-      expect(party.canCast(MageKind.storm), isFalse, reason: '連れていない');
-      expect(party.spellOf(MageKind.storm), isNull);
+      expect(party.canUse(MageKind.rime), isFalse, reason: '持っていない');
+      expect(party.canUse(MageKind.storm), isFalse, reason: '連れていない');
+      expect(party.activeOf(MageKind.storm), isNull);
     });
 
     test('組み直せば戻る。潜るたびに一党は組み直される', () {
       final spent = Party.of(const [Mage.gale, Mage.rime]);
-      spent.spendCast(MageKind.gale);
-      expect(spent.canCast(MageKind.gale), isFalse);
+      spent.spendUse(MageKind.gale);
+      expect(spent.canUse(MageKind.gale), isFalse);
 
       final fresh = Party.of(const [Mage.gale, Mage.rime]);
-      expect(fresh.canCast(MageKind.gale), isTrue);
+      expect(fresh.canUse(MageKind.gale), isTrue);
     });
   });
 
