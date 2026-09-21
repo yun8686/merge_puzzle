@@ -241,6 +241,31 @@ void main() {
       expect(progress.party, [MageKind.ember]);
     });
 
+    test('外せない訳は、外せるかどうかと一緒に言える', () {
+      // 押しても動かないとき、**何が駄目なのかを言えないと直しようがない**。
+      final progress = Progress(
+        owned: {MageKind.ember, MageKind.blaze, MageKind.storm},
+        party: [MageKind.ember, MageKind.blaze, MageKind.storm],
+      );
+      // 外せる相手には訳が無い。
+      expect(progress.dropBlockedReason(MageKind.blaze), isNull);
+      // 編成に入っていない者は「外す」話ではない。
+      expect(progress.dropBlockedReason(MageKind.rime), isNull);
+      // 紫を外すと赤だけになる。
+      expect(progress.dropBlockedReason(MageKind.storm), contains('1色'));
+      expect(
+        progress.dropBlockedReason(MageKind.storm),
+        contains(Mage.storm.name),
+        reason: '誰の話なのかを言う',
+      );
+
+      final alone = Progress(
+        owned: {MageKind.ember},
+        party: [MageKind.ember],
+      );
+      expect(alone.dropBlockedReason(MageKind.ember), contains('最後'));
+    });
+
     test('持っていない魔導士は編成に入らない', () {
       final progress = Progress(party: [MageKind.squireRed]);
       progress.toggleParty(MageKind.storm);

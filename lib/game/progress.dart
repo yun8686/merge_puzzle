@@ -151,20 +151,33 @@ class Progress {
 
   bool get partyIsValid => partyPhases.length >= minPhases;
 
-  /// [kind] を編成から外せるか。外した結果が1色になるなら外せない。
-  bool canDrop(MageKind kind) {
-    if (!party.contains(kind)) return false;
+  /// [kind] を外せないなら、その理由。外せるなら null。
+  ///
+  /// **外せない訳は1つではない。** 押しても動かないときに何が駄目なのかを
+  /// 言えないと、編成を直しようがない。だから理由の側を本体にして、
+  /// [canDrop] はそこから割る。編成に入っていない者は「外す」話ではないので
+  /// null（押されたら入れる側の話になる）。
+  String? dropBlockedReason(MageKind kind) {
+    if (!party.contains(kind)) return null;
     final rest = [
       for (final k in party)
         if (k != kind) k,
     ];
-    if (rest.isEmpty) return false;
+    if (rest.isEmpty) return '最後のひとりは外せない。誰も連れずには潜れない。';
     final seen = <Phase>{};
     for (final k in rest) {
       seen.add(Mage.of(k).phase);
     }
-    return seen.length >= minPhases;
+    if (seen.length < minPhases) {
+      return '${Mage.of(kind).name}を外すと相が1色になる。'
+          '同じ相は続けて継げないので、鎖が1枚も編めなくなる。';
+    }
+    return null;
   }
+
+  /// [kind] を編成から外せるか。外した結果が1色になるなら外せない。
+  bool canDrop(MageKind kind) =>
+      party.contains(kind) && dropBlockedReason(kind) == null;
 
   /// 編成に入れる／外す。入っていれば外し、入っていなければ入れる。
   /// 枠が埋まっているとき、外すと1色になってしまうときは何もしない。

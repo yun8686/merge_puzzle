@@ -271,6 +271,47 @@ void main() {
         reason: '1色になるので外せない',
       );
     });
+
+    testWidgets('連れていく枠を押すと外れる', (tester) async {
+      // **外す相手はここに3人しか並んでいない。** 名簿から探し直させない。
+      final store = await openBase(
+        tester,
+        progress: Progress(
+          owned: {MageKind.storm},
+          party: [MageKind.squireRed, MageKind.squireBlue, MageKind.storm],
+        ),
+      );
+      await goTab(tester, '一党');
+      expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
+
+      await tapAt(tester, find.byKey(partySlotKey(MageKind.storm)));
+      expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
+      expect(find.byKey(partySlotKey(MageKind.storm)), findsNothing);
+      expect((await store.load()).party, isNot(contains(MageKind.storm)));
+    });
+
+    testWidgets('外せない枠を押すと、外せない理由が出る', (tester) async {
+      final store = await openBase(
+        tester,
+        progress: Progress(
+          owned: {MageKind.ember, MageKind.blaze},
+          // 焔と烈火はどちらも赤。紫の従者が抜けると1色になる。
+          party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
+        ),
+      );
+      await goTab(tester, '一党');
+
+      // 黙って動かないのがいちばん困る。押させたうえで訳を出す。
+      await tapAt(tester, find.byKey(partySlotKey(MageKind.squireViolet)));
+      expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
+      expect((await store.load()).party, contains(MageKind.squireViolet));
+      expect(find.textContaining('1色になる'), findsOneWidget);
+
+      // 外せる相手を外せば、訳は引っ込む。
+      await tapAt(tester, find.byKey(partySlotKey(MageKind.blaze)));
+      expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
+      expect(find.textContaining('1色になる'), findsNothing);
+    });
   });
 
   group('3色で潜るとき', () {

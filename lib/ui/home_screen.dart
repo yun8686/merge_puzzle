@@ -48,6 +48,12 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 直前に持ち帰った魔晶。潜って帰ってきた直後だけ出す。
   String? _spoils;
 
+  /// 直前に外そうとして外せなかった理由。押した直後だけ出す。
+  ///
+  /// **黙って動かないのがいちばん困る。** 連れていく枠を押したのに何も
+  /// 起きなければ、押す場所を間違えたのか、外せない誰かなのかが分からない。
+  String? _blocked;
+
   /// 遊び方を出しているか。初回と、上の帯から呼ばれたとき。
   bool _teaching = false;
 
@@ -111,8 +117,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _toggle(MageKind kind) {
     final progress = _progress;
     if (progress == null) return;
-    setState(() => progress.toggleParty(kind));
-    _save();
+    // 外せない相手なら、記録は動かさずに理由だけ出す。
+    final blocked = progress.dropBlockedReason(kind);
+    setState(() {
+      _blocked = blocked;
+      if (blocked == null) progress.toggleParty(kind);
+    });
+    if (blocked == null) _save();
   }
 
   /// 初めて3色で潜るときだけ、先に3色の稽古を通す。
@@ -210,7 +221,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     tab: _tab,
                     drawn: _drawn,
                     spoils: _spoils,
-                    onTab: (tab) => setState(() => _tab = tab),
+                    blocked: _blocked,
+                    onTab: (tab) => setState(() {
+                      _tab = tab;
+                      _blocked = null;
+                    }),
                     onRoll: _roll,
                     onToggle: _toggle,
                     onDive: _dive,
@@ -242,6 +257,7 @@ class _Base extends StatelessWidget {
     required this.tab,
     required this.drawn,
     required this.spoils,
+    required this.blocked,
     required this.onTab,
     required this.onRoll,
     required this.onToggle,
@@ -257,6 +273,9 @@ class _Base extends StatelessWidget {
   final _Tab tab;
   final Mage? drawn;
   final String? spoils;
+
+  /// 外そうとして外せなかった理由。無ければ出さない。
+  final String? blocked;
   final void Function(_Tab) onTab;
   final VoidCallback onRoll;
   final void Function(MageKind) onToggle;
@@ -279,7 +298,11 @@ class _Base extends StatelessWidget {
               onDive: onDive,
               onParty: () => onTab(_Tab.party),
             ),
-            _Tab.party => _PartyTab(progress: progress, onToggle: onToggle),
+            _Tab.party => _PartyTab(
+              progress: progress,
+              blocked: blocked,
+              onToggle: onToggle,
+            ),
             _Tab.gacha => _GachaTab(
               progress: progress,
               drawn: drawn,
@@ -848,9 +871,17 @@ class _PartyStrip extends StatelessWidget {
 
 /// 一党の面。上に連れていく枠、下に名簿。
 class _PartyTab extends StatelessWidget {
-  const _PartyTab({required this.progress, required this.onToggle});
+  const _PartyTab({
+    required this.progress,
+    required this.blocked,
+    required this.onToggle,
+  });
 
   final Progress progress;
+
+  /// 外そうとして外せなかった理由。押した直後だけ渡ってくる。
+  final String? blocked;
+
   final void Function(MageKind) onToggle;
 
   @override
@@ -873,7 +904,21 @@ class _PartyTab extends StatelessWidget {
           ),
           for (var i = 0; i < Progress.partySlots; i++) ...[
             if (i > 0) const SizedBox(height: 8),
-            _PartySlot(mage: i < party.length ? party[i] : null),
+            if (i < party.length)
+              _PartySlot(
+                key: partySlotKey(party[i].kind),
+                mage: party[i],
+                stuck: !progress.canDrop(party[i].kind),
+                onTap: () => onToggle(party[i].kind),
+              )
+            else
+              const _PartySlot(mage: null),
+          ],
+          // **外せなかった訳はここに出す。** 押した札のすぐ下なので、
+          // どの札の話なのかを探さなくて済む。
+          if (blocked case final text?) ...[
+            const SizedBox(height: 10),
+            _Notice(text: text, tint: Palette.danger),
           ],
           const SizedBox(height: 12),
           _PhaseNote(phases: progress.partyPhases),
@@ -958,10 +1003,27 @@ class _PhaseNote extends StatelessWidget {
 ///
 /// 横に3つ並べると1枠あたりが狭く、名前もスキルも入らない。縦に3本の帯にして、
 /// 幅をスキルの説明に使う。
+///
+/// **押すと外れる。** 入れるのは名簿の札、外すのも名簿の札、では
+/// 「いま連れている誰か」を外すのに名簿から探し直すことになる。外す相手は
+/// ここに3人しか並んでいない。外せない相手のときも押させて、理由を出す
+/// （[_PartyTab] の [_PartyTab.blocked]）――黙って動かないと、押す場所を
+/// 間違えたのか外せない誰かなのかが分からない。
 class _PartySlot extends StatelessWidget {
-  const _PartySlot({required this.mage});
+  const _PartySlot({
+    super.key,
+    required this.mage,
+    this.stuck = false,
+    this.onTap,
+  });
 
   final Mage? mage;
+
+  /// 押しても外れない枠。沈めて見せるが、**押せなくはしない**。
+  final bool stuck;
+
+  /// 押されたとき。空き枠には渡さない。
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1011,49 +1073,71 @@ class _PartySlot extends StatelessWidget {
         border: tint.withValues(alpha: 0.55),
         radius: 14,
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(11, 10, 12, 11),
-        child: Row(
-          children: [
-            _Sigil(mage: mage, size: 38),
-            const SizedBox(width: 11),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    mage.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Palette.textPrimary,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(11, 10, 12, 11),
+            child: Row(
+              children: [
+                _Sigil(mage: mage, size: 38),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        mage.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Palette.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      // パッシブとアクティブを**同じ形**で並べる。名前を前に
+                      // 出しておけば、どちらがどちらかは色と並びで読める。
+                      _SkillLine(
+                        name: mage.passiveName,
+                        text: mage.passiveEffect,
+                        tint: Palette.textDim,
+                      ),
+                      if (mage.activeEffect case final text?) ...[
+                        const SizedBox(height: 3),
+                        _SkillLine(
+                          name: mage.activeName,
+                          text: text,
+                          tint: Palette.gold,
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 3),
-                  // パッシブとアクティブを**同じ形**で並べる。名前を前に
-                  // 出しておけば、どちらがどちらかは色と並びで読める。
-                  _SkillLine(
-                    name: mage.passiveName,
-                    text: mage.passiveEffect,
-                    tint: Palette.textDim,
-                  ),
-                  if (mage.activeEffect case final text?) ...[
-                    const SizedBox(height: 3),
-                    _SkillLine(
-                      name: mage.activeName,
-                      text: text,
-                      tint: Palette.gold,
+                ),
+                const SizedBox(width: 8),
+                // 外せることは札の上に出す。押してみるまで分からない場所に
+                // 置くと、外し方が分からないまま名簿を探すことになる。
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PhaseSwatch(phase: mage.phase, size: 20),
+                    const SizedBox(height: 4),
+                    Text(
+                      '外す',
+                      style: AppFont.label(
+                        8,
+                        color: stuck ? Palette.textMuted : Palette.textDim,
+                      ),
                     ),
                   ],
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            PhaseSwatch(phase: mage.phase, size: 20),
-          ],
+          ),
         ),
       ),
     );
@@ -1106,6 +1190,9 @@ class _SkillLine extends StatelessWidget {
 /// 連れていく枠にも魔導士の名前が出るので、名前だけで探すと2枚に当たる。
 /// テストが「名簿の方」を指すためにここを使う。
 ValueKey<String> rosterCardKey(MageKind kind) => ValueKey('roster-${kind.name}');
+
+/// 連れていく枠を指す鍵。名簿の札と同じ理由で、名前では2枚に当たる。
+ValueKey<String> partySlotKey(MageKind kind) => ValueKey('slot-${kind.name}');
 
 /// 名簿の1枚。押すと編成に入れ替わる。
 class _MageCard extends StatelessWidget {
