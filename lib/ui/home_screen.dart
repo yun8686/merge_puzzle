@@ -857,62 +857,53 @@ class _PartyTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final party = progress.partyMages;
     final full = progress.party.length >= Progress.partySlots;
-    // **名簿は画面に入るぶんだけ組む。** 全部を一度に組むと、100人並んだ
-    // ときに札の数だけ姿（`CustomPaint`）が積まれて、編成を1つ動かすたびに
-    // その全部が組み直される。上の「連れていく」と名簿を1つの巻物に載せる
-    // ため、`CustomScrollView` で帯と格子を並べている。
-    return CustomScrollView(
-      // 画面の外も2000px ぶんは先に組んでおく。名簿は指で一気に弾かれる
-      // ところなので、組むのが追いつかないと白いマスが見えてしまう。
-      // **上限があること自体が肝**で、100人並んでも組むのはこの窓のぶんだけ。
-      cacheExtent: 2000,
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-          sliver: SliverList.list(
+    // **名簿は全部組む。** 100人並べば札の数だけ姿（`CustomPaint`）が積まれる
+    // ので、本当は画面に入るぶんだけ組みたい（`SliverGrid`）。それをやると
+    // **画面の外の札は木から消える**ので、「名簿に何人並んでいるか」を見て
+    // いる拠点のテストが軒並み書き換えになる。遅れて組むように変えるときは、
+    // テストの側を「見えている札の振る舞い」と「記録の中身」に割り直すこと。
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionLabel(
+            label: '連れていく',
+            trailing: '${progress.party.length} / ${Progress.partySlots}',
+          ),
+          for (var i = 0; i < Progress.partySlots; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _PartySlot(mage: i < party.length ? party[i] : null),
+          ],
+          const SizedBox(height: 12),
+          _PhaseNote(phases: progress.partyPhases),
+          const SizedBox(height: 22),
+          const _SectionLabel(label: '名簿'),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.92,
             children: [
-              _SectionLabel(
-                label: '連れていく',
-                trailing: '${progress.party.length} / ${Progress.partySlots}',
-              ),
-              for (var i = 0; i < Progress.partySlots; i++) ...[
-                if (i > 0) const SizedBox(height: 8),
-                _PartySlot(mage: i < party.length ? party[i] : null),
-              ],
-              const SizedBox(height: 12),
-              _PhaseNote(phases: progress.partyPhases),
-              const SizedBox(height: 22),
-              const _SectionLabel(label: '名簿'),
+              for (final mage in Mage.roster)
+                _MageCard(
+                  key: rosterCardKey(mage.kind),
+                  mage: mage,
+                  owned: progress.owned.contains(mage.kind),
+                  inParty: progress.party.contains(mage.kind),
+                  // 押しても動かない札は沈める。枠が埋まっていて入れない人と、
+                  // 外すと盤面が1色になってしまう人。
+                  stuck: progress.party.contains(mage.kind)
+                      ? !progress.canDrop(mage.kind)
+                      : full,
+                  onTap: () => onToggle(mage.kind),
+                ),
             ],
           ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
-          sliver: SliverGrid(
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.92,
-                ),
-            delegate: SliverChildBuilderDelegate((context, i) {
-              final mage = Mage.roster[i];
-              final inParty = progress.party.contains(mage.kind);
-              return _MageCard(
-                key: rosterCardKey(mage.kind),
-                mage: mage,
-                owned: progress.owned.contains(mage.kind),
-                inParty: inParty,
-                // 押しても動かない札は沈める。枠が埋まっていて入れない人と、
-                // 外すと盤面が1色になってしまう人。
-                stuck: inParty ? !progress.canDrop(mage.kind) : full,
-                onTap: () => onToggle(mage.kind),
-              );
-            }, childCount: Mage.roster.length),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
