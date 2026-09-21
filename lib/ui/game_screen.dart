@@ -1669,7 +1669,7 @@ class _MageSheet extends StatelessWidget {
         Text('パッシブスキル', style: AppFont.label(10, color: Palette.textDim)),
         const SizedBox(height: 8),
         if (mage.passiveName case final name?) ...[
-          Text(name, style: AppFont.number(17, color: Palette.gold)),
+          Text(name, style: AppFont.number(17, color: Palette.passive)),
           const SizedBox(height: 6),
         ],
         Text(
@@ -1695,7 +1695,7 @@ class _MageSheet extends StatelessWidget {
             style: AppFont.label(10, color: Palette.textDim),
           ),
           const SizedBox(height: 8),
-          Text(active.name, style: AppFont.number(17, color: Palette.life)),
+          Text(active.name, style: AppFont.number(17, color: Palette.active)),
           const SizedBox(height: 6),
           Text(
             mage.activeEffect!,

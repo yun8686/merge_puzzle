@@ -1102,17 +1102,18 @@ class _PartySlot extends StatelessWidget {
                       const SizedBox(height: 3),
                       // パッシブとアクティブを**同じ形**で並べる。名前を前に
                       // 出しておけば、どちらがどちらかは色と並びで読める。
+                      // 銀と金。灰で出すと効き目の文より暗くて沈む。
                       _SkillLine(
                         name: mage.passiveName,
                         text: mage.passiveEffect,
-                        tint: Palette.textDim,
+                        tint: Palette.passive,
                       ),
                       if (mage.activeEffect case final text?) ...[
                         const SizedBox(height: 3),
                         _SkillLine(
                           name: mage.activeName,
                           text: text,
-                          tint: Palette.gold,
+                          tint: Palette.active,
                         ),
                       ],
                     ],
@@ -1287,7 +1288,7 @@ class _MageCard extends StatelessWidget {
                                   name,
                                   style: AppFont.label(
                                     8,
-                                    color: Palette.textMuted,
+                                    color: Palette.passive,
                                   ),
                                 ),
                               ],
@@ -1295,7 +1296,10 @@ class _MageCard extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 Text(
                                   name,
-                                  style: AppFont.label(8, color: Palette.gold),
+                                  style: AppFont.label(
+                                    8,
+                                    color: Palette.active,
+                                  ),
                                 ),
                               ],
                             ],
