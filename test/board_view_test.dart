@@ -355,6 +355,50 @@ void main() {
     expect(find.text(Mage.rime.effect), findsNothing);
   });
 
+  testWidgets('風の札から先読みを使うと、盤面にお手本が出る', (tester) async {
+    // 札が縦に伸びるので、はみ出して押せなくならないよう画面を広く取る。
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = GameController(
+      rng: Random(3),
+      roster: const [Mage.gale, Mage.squireBlue],
+    );
+    paintCheckerboard(controller.board);
+    // 隅の敵を薄くして、3枚でも届くようにする。
+    final corner = controller.board.grid[7][5]!;
+    controller.board.grid[7][5] = Tile(
+      id: corner.id,
+      phase: corner.phase,
+      ward: 3,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('hint-path')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('party-gale')));
+    await tester.pump();
+    expect(find.text('先読み'), findsOneWidget);
+
+    await tester.tap(find.text('使う'));
+    await tester.pump();
+
+    // 札は閉じ、盤面に道が出る。指は repeat で回るので pumpAndSettle は使えない。
+    expect(find.text('先読み'), findsNothing);
+    expect(controller.hintPath, isNotEmpty);
+    expect(find.byKey(const ValueKey('hint-path')), findsOneWidget);
+
+    // 2回目は押せない。潜り1本に1回だけ。
+    await tester.tap(find.byKey(const ValueKey('party-gale')));
+    await tester.pump();
+    expect(find.text('使う'), findsNothing);
+    expect(find.text('この潜りではもう使った'), findsOneWidget);
+  });
+
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
     // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、

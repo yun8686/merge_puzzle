@@ -115,6 +115,11 @@ class _GameScreenState extends State<GameScreen> {
 
   void _closeInspect() => setState(() => _inspecting = null);
 
+  /// 押して使う力を使う。通ったら札を閉じて、見せた道を盤面に出す。
+  void _cast(MageKind kind) {
+    if (_controller.castSpell(kind)) setState(() => _inspecting = null);
+  }
+
   /// 中断の確かめを出しているか。
   ///
   /// **押してすぐには帰さない。** 潜っている途中の体力も戦果もここで打ち切られ、
@@ -262,11 +267,12 @@ class _GameScreenState extends State<GameScreen> {
                     // いちばん上。決着の覆いが出ている間も閉じられる。
                     if (_inspecting != null)
                       _MageSheet(
-                        party: _controller.party,
+                        controller: _controller,
                         kind: _inspecting!,
                         onSelect: (kind) => setState(
                           () => _inspecting = kind,
                         ),
+                        onCast: _cast,
                         onClose: _closeInspect,
                       ),
                   ],
@@ -1393,6 +1399,7 @@ class _PartyBar extends StatelessWidget {
                   child: _MageChip(
                     key: ValueKey('party-${mage.kind.name}'),
                     mage: mage,
+                    ready: party.canCast(mage.kind),
                     onTap: () => onInspect(mage),
                   ),
                 ),
@@ -1458,6 +1465,7 @@ class _MageChip extends StatelessWidget {
     required this.mage,
     required this.onTap,
     this.selected = false,
+    this.ready = false,
   });
 
   final Mage mage;
@@ -1465,6 +1473,11 @@ class _MageChip extends StatelessWidget {
 
   /// いま開いている魔導士。切り替えの列で、どれを見ているかを示す。
   final bool selected;
+
+  /// 押して使う力がまだ残っている。**印が無いと気付けない。**
+  /// 潜り1本に1回しか使えないものを、押してみるまで分からない場所に
+  /// 置くと、そのまま使われずに終わる。
+  final bool ready;
 
   @override
   Widget build(BuildContext context) {
@@ -1489,7 +1502,27 @@ class _MageChip extends StatelessWidget {
               width: selected ? 2 : 1,
             ),
           ),
-          child: MagePortrait(kind: mage.kind, size: 21),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              MagePortrait(kind: mage.kind, size: 21),
+              if (ready)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: Palette.gold,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Palette.panel, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1509,24 +1542,31 @@ class _MageChip extends StatelessWidget {
 /// 半端に透かすより、読み終えて閉じたときに元の盤面がそのまま出るほうがよい。
 class _MageSheet extends StatelessWidget {
   const _MageSheet({
-    required this.party,
+    required this.controller,
     required this.kind,
     required this.onSelect,
+    required this.onCast,
     required this.onClose,
   });
 
-  final Party party;
+  final GameController controller;
 
   /// いま開いている魔導士。
   final MageKind kind;
 
   final ValueChanged<MageKind> onSelect;
+
+  /// 押して使う力を使う。
+  final ValueChanged<MageKind> onCast;
+
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
+    final party = controller.party;
     final mage = Mage.of(kind);
     final tint = Palette.mageColor(kind);
+    final spell = mage.spell;
     return _Curtain(
       onDismiss: onClose,
       children: [
@@ -1569,6 +1609,36 @@ class _MageSheet extends StatelessWidget {
         _ResultRow(label: 'この人の体力', value: '${mage.hp}'),
         const SizedBox(height: 8),
         _ResultRow(label: '一党の体力', value: '${party.hp} / ${party.maxHp}'),
+        if (spell != null) ...[
+          const SizedBox(height: 22),
+          Text('押して使う力', style: AppFont.label(10, color: Palette.life)),
+          const SizedBox(height: 8),
+          Text(spell.label, style: AppFont.number(17, color: Palette.life)),
+          const SizedBox(height: 6),
+          Text(
+            spell.describe(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Palette.textMuted,
+              fontSize: 12.5,
+              height: 1.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '潜り1本に ${Party.spellUses} 回',
+            style: AppFont.label(9, color: Palette.textDim),
+          ),
+          const SizedBox(height: 12),
+          if (party.canCast(kind) && controller.acceptsInput)
+            _PrimaryButton(label: '使う', onTap: () => onCast(kind))
+          else
+            Text(
+              party.canCast(kind) ? '盤面が動いている' : 'この潜りではもう使った',
+              style: AppFont.label(10, color: Palette.textDim),
+            ),
+        ],
         const SizedBox(height: 22),
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -1580,6 +1650,7 @@ class _MageSheet extends StatelessWidget {
                   key: ValueKey('sheet-${other.kind.name}'),
                   mage: other,
                   selected: other.kind == kind,
+                  ready: party.canCast(other.kind),
                   onTap: () => onSelect(other.kind),
                 ),
               ),

@@ -198,6 +198,41 @@ final class Guard extends Boon {
   String describe() => '受ける痛手が半分になる';
 }
 
+/// 押して使う力。**鎖を見ない。**
+///
+/// [Ability] が鎖の戦果に勝手に応えるのに対して、こちらは一党の帯から手で
+/// 使う。**1本の潜りで [Party.spellUses] 回だけ**（[Party.canCast]）。回数を
+/// 持つのは [Party] で、潜るたびに組み直されるので、数えるところは1つで済む。
+///
+/// **効き目は盤面の側で起きる。** ここが持っているのは種類と説明文だけで、
+/// 何をするかは [Spell] の型で分かれる（`GameController.castSpell`）。
+/// [Party] は盤面を読まないので、ここに処理は書けない――書こうとしたら、
+/// それは [Boon] 側の話か、盤面の側の話かのどちらか。
+sealed class Spell {
+  const Spell();
+
+  /// 札に出す名前。
+  String get label;
+
+  /// 何が起きるか。説明文も型から作るので、手で書いた文とずれない。
+  String describe();
+}
+
+/// いまの盤面で、敵にいちばん深く届く道を1本だけ見せる。
+///
+/// **盤面を変えない。** 手数の制限が無くなってからは、値段を払うのは体力
+/// だけなので、道を1本知ったところで1手ぶんの反撃は必ず払う。教えるのは
+/// 「どこを通れば一番効くか」であって、無料の1手ではない。
+final class Foresee extends Spell {
+  const Foresee();
+
+  @override
+  String get label => '先読み';
+
+  @override
+  String describe() => 'いまの盤面で、敵にいちばん深く届く道を1本見せる';
+}
+
 /// 能力ひとつ。**条件と効き目の組でしか書けない。**
 ///
 /// 説明文は組から作る。手で書いた文と数値がずれることが無い。
@@ -239,7 +274,14 @@ enum MageKind {
 /// 青から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
 /// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
 class Mage {
-  const Mage._(this.kind, this.phase, this.name, this.hp, [this.ability]);
+  const Mage._(
+    this.kind,
+    this.phase,
+    this.name,
+    this.hp, [
+    this.ability,
+    this.spell,
+  ]);
 
   final MageKind kind;
 
@@ -263,6 +305,13 @@ class Mage {
   /// 集計は [Boon] の種類だけで回る。魔導士を増やすときに触るのは、この
   /// 名簿と [MageKind] だけ。
   final Ability? ability;
+
+  /// 押して使う力。持たない者は null。**潜り1本に1回だけ**。
+  ///
+  /// [ability] と違って鎖を見ないので、条件と効き目の組には収まらない。
+  /// 増やすときは [Spell] を1つ足して、`GameController.castSpell` の
+  /// switch に1本加える（sealed なので足し忘れると analyze が落ちる）。
+  final Spell? spell;
 
   /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
   String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
@@ -312,6 +361,7 @@ class Mage {
     '風の魔導士',
     35,
     Ability(ChainLength(galeChain), Evade()),
+    Foresee(),
   );
   static const rime = Mage._(
     MageKind.rime,
@@ -435,6 +485,44 @@ class Party {
   final List<Mage> members;
   int hp;
   int maxHp;
+
+  /// 1本の潜りで、[Spell] を1人につき何回使えるか。
+  ///
+  /// **潜る前に決まって道中では増えない**のは体力と同じ。使い切った先は
+  /// 編成をやり直すか、潜り直すかしかない。
+  static const int spellUses = 1;
+
+  /// この潜りで押した力を、誰が何回使ったか。
+  ///
+  /// [Party] は潜るたびに組み直される（`GameController._freshParty`）ので、
+  /// **ここに置くだけで「1ダンジョンに1回」になる**。階層をまたいでも
+  /// 戻らないのは体力と同じ扱い。
+  final Map<MageKind, int> spellsSpent = <MageKind, int>{};
+
+  /// [kind] の押して使う力が、まだ残っているか。
+  /// 連れていない者、力を持たない者は false。
+  bool canCast(MageKind kind) =>
+      spellOf(kind) != null && castsLeft(kind) > 0;
+
+  /// [kind] に残っている回数。持たない者は 0。
+  int castsLeft(MageKind kind) => spellOf(kind) == null
+      ? 0
+      : spellUses - (spellsSpent[kind] ?? 0);
+
+  /// 連れている [kind] の押して使う力。連れていなければ null。
+  Spell? spellOf(MageKind kind) {
+    for (final m in members) {
+      if (m.kind == kind) return m.spell;
+    }
+    return null;
+  }
+
+  /// 1回ぶん使う。残っていなければ false（何も減らさない）。
+  bool spendCast(MageKind kind) {
+    if (!canCast(kind)) return false;
+    spellsSpent[kind] = (spellsSpent[kind] ?? 0) + 1;
+    return true;
+  }
 
   bool has(MageKind kind) => members.any((m) => m.kind == kind);
 

@@ -450,6 +450,52 @@ void main() {
     });
   });
 
+  group('先読み（いちばん深く届く道）', () {
+    test('通る敵が多いほうを採る', () {
+      // 敵は2体とも守り3・体力1。1体だけ通る道より、両方通る道のほうが深い。
+      final board = boardOf([
+        ['o', 'e3', 'o', 'e3'],
+        ['e', 'o', 'e', 'o'],
+        ['o', 'e', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+
+      final path = board.bestStrike(powerOf: (p) => p.length);
+      expect(path, contains(const Cell(0, 1)));
+      expect(path, contains(const Cell(0, 3)));
+      expect(board.isValidPath(path, power: path.length), isTrue);
+    });
+
+    test('威力が届かない敵しか居なければ、道は無い', () {
+      // 3枚しか繋がらない盤面で守り8。弾かれるだけなので 0 点。
+      final board = boardOf([
+        ['o8', 'e', 'o'],
+      ]);
+      expect(board.bestStrike(powerOf: (p) => p.length), isEmpty);
+    });
+
+    test('敵が居なければ道は無い', () {
+      final board = boardOf([
+        ['o', 'e', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+      expect(board.bestStrike(powerOf: (p) => p.length), isEmpty);
+    });
+
+    test('威力の補正も数に入る', () {
+      // 守り5・体力1。枚数だけでは 4 枚しか繋がらず届かないが、
+      // 補正が 2 乗れば威力 6 で通る。
+      final board = boardOf([
+        ['o', 'e5', 'o', 'e'],
+      ]);
+      expect(board.bestStrike(powerOf: (p) => p.length), isEmpty);
+      expect(
+        board.bestStrike(powerOf: (p) => p.length + 2),
+        contains(const Cell(0, 1)),
+      );
+    });
+  });
+
   group('階層の数値', () {
     test('威力が高いほど点が伸びる', () {
       expect(Board.scoreFor(4, 0), greaterThan(Board.scoreFor(3, 0)));

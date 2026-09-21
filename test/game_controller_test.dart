@@ -1030,6 +1030,73 @@ void main() {
     });
   });
 
+  group('押して使う力', () {
+    GameController galeController() {
+      final controller = GameController(
+        rng: Random(3),
+        roster: const [Mage.gale, Mage.squireBlue],
+      );
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      return controller;
+    }
+
+    test('先読みは敵に届く道を見せる。潜り1本に1回だけ', () {
+      final controller = galeController();
+      expect(controller.hintPath, isEmpty, reason: '使うまでは出ない');
+
+      expect(controller.castSpell(MageKind.gale), isTrue);
+      expect(controller.hintPath, isNotEmpty);
+      expect(controller.hintPath, contains(const Cell(0, 1)), reason: '敵を通る');
+
+      expect(controller.castSpell(MageKind.gale), isFalse, reason: '2回目');
+    });
+
+    test('見せた道は、なぞって離しただけでは失われない', () {
+      final controller = galeController();
+      controller.castSpell(MageKind.gale);
+      final shown = List<Cell>.of(controller.hintPath);
+
+      // 自分の指と重なると読めないので、なぞっている間は引っ込む。
+      controller.beginPath(const Cell(3, 3));
+      expect(controller.hintPath, isEmpty);
+
+      // 1回きりの札を、触れただけで失わせない。
+      controller.cancelPath();
+      expect(controller.hintPath, shown);
+    });
+
+    test('鎖を1本編むと、見せた道は捨てる', () {
+      final controller = galeController();
+      controller.castSpell(MageKind.gale);
+
+      trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+      controller.commitPath();
+
+      // 盤面が変わったので、さっきの道はもう指していない。
+      expect(controller.hintPath, isEmpty);
+      expect(controller.revealedPath, isEmpty);
+    });
+
+    test('連れていない魔導士の力は使えない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      expect(controller.castSpell(MageKind.gale), isFalse);
+      expect(controller.hintPath, isEmpty);
+    });
+
+    test('階層をまたいでも戻らず、潜り直すと戻る', () {
+      final controller = galeController();
+      expect(controller.castSpell(MageKind.gale), isTrue);
+      expect(controller.party.canCast(MageKind.gale), isFalse);
+
+      controller.nextFloor();
+      expect(controller.party.canCast(MageKind.gale), isFalse, reason: '階層は跨ぐ');
+
+      controller.enterDungeon(controller.dungeon);
+      expect(controller.party.canCast(MageKind.gale), isTrue, reason: '潜り直し');
+    });
+  });
+
   group('なぞれる道を縛る', () {
     test('決めた道の外はなぞれず、途中で離しても何も起きない', () {
       final c = newController();

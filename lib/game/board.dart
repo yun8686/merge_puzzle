@@ -755,6 +755,93 @@ class Board {
     return const [];
   }
 
+  /// いまの盤面で、**敵にいちばん深く届く道**を1本。無ければ空。
+  ///
+  /// 風の「先読み」（`Foresee`）が呼ぶ。数えるのは**通した痛手の合計**で、
+  /// 敵1体ぶんは残り体力で頭打ちにする（討ち取ったあとの余りは捨てる）。
+  /// 同じ痛手なら威力の高い（＝長い）ほうを採る。点も伸びるし、枚数で
+  /// 応える能力（風・雷）も乗りやすい。
+  ///
+  /// **敵のマスを起点にして、前後へ伸ばす。** 敵を1体も通らない道は必ず 0
+  /// 点なので、盤面ぜんぶから始める必要がない。階層に居る敵は数体なので、
+  /// 探索はその数倍で済む。1本の並びとして持つのは [findPathThrough] と
+  /// 同じ理由で、**窓が接合部を跨ぐ**ため。
+  ///
+  /// [powerOf] は道から威力を出す関数。**盤面は一党を読まない**ので、
+  /// 魔導士の補正は呼び出し側から渡してもらう（`GameController`）。
+  ///
+  /// [maxNodes] は保険で、**敵1体あたり**の枝の数。市松の盤面はどの隣とも
+  /// 継げるので枝が太く、深さだけで抑えると膨らむことがある。1体ずつに
+  /// 配るのは、1体目で使い切ると2体目以降が探されないため。**打ち切っても
+  /// 嘘にはならない**――そこまでで見つけた中の最善を返すだけで、実際より
+  /// 控えめに答えることしかない。
+  List<Cell> bestStrike({
+    required int Function(List<Cell> path) powerOf,
+    int maxLength = 12,
+    int maxNodes = 30000,
+  }) {
+    var best = const <Cell>[];
+    var bestDamage = 0;
+    var bestPower = 0;
+    var nodes = 0;
+
+    void score(List<Cell> path) {
+      if (path.length < minPathLength) return;
+      final power = powerOf(path);
+      var damage = 0;
+      for (final c in path) {
+        final t = tileAt(c)!;
+        if (!t.isFoe) continue;
+        final d = t.damageFrom(power);
+        damage += d < t.hp ? d : t.hp;
+      }
+      if (damage <= 0) return;
+      if (damage > bestDamage || (damage == bestDamage && power > bestPower)) {
+        bestDamage = damage;
+        bestPower = power;
+        best = List<Cell>.of(path);
+      }
+    }
+
+    for (final anchor in foeCells) {
+      nodes = 0;
+      final seen = <Cell>{anchor};
+      final path = <Cell>[anchor];
+
+      // 先頭側だけを伸ばす。末尾の形ひとつにつき、前の伸ばし方を全部見る。
+      void growFront() {
+        score(path);
+        if (path.length >= maxLength || nodes >= maxNodes) return;
+        for (final n in neighborsOf(path.first)) {
+          if (seen.contains(n) || !_fits(path, n, atFront: true)) continue;
+          nodes++;
+          seen.add(n);
+          path.insert(0, n);
+          growFront();
+          path.removeAt(0);
+          seen.remove(n);
+        }
+      }
+
+      void growBack() {
+        growFront();
+        if (path.length >= maxLength || nodes >= maxNodes) return;
+        for (final n in neighborsOf(path.last)) {
+          if (seen.contains(n) || !_fits(path, n, atFront: false)) continue;
+          nodes++;
+          seen.add(n);
+          path.add(n);
+          growBack();
+          path.removeLast();
+          seen.remove(n);
+        }
+      }
+
+      growBack();
+    }
+    return best;
+  }
+
   /// 盤面に残っている [phase] のマスの数。相どうしの比率を見せるのに使う。
   /// 少ない相が尽きると、長い鎖が編めなくなる。
   int countOf(Phase phase) => _count((t) => t.phase == phase);

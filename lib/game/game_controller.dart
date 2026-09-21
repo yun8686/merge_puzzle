@@ -99,6 +99,14 @@ class GameController extends ChangeNotifier {
 
   List<Cell> hintPath = <Cell>[];
 
+  /// 押して使う力（[Foresee]）が見せた道。**鎖を1本編むまで消えない。**
+  ///
+  /// [hintPath] はなぞり始めると引っ込む（自分の指と重なって読めない）が、
+  /// 潜り1本に1回しか使えないものを、指が触れただけで失わせるのは酷い。
+  /// 離せば戻す（[cancelPath]）。盤面が変わったら意味を失うので、鎖が
+  /// 編まれたところで捨てる。
+  List<Cell> revealedPath = const [];
+
   /// なぞれる道を1本に縛る。空なら自由（本番はいつも空）。
   ///
   /// **稽古場のためにある。** 決めた道の通りにしかなぞれなくなるので、
@@ -141,6 +149,7 @@ class GameController extends ChangeNotifier {
     lastHealed = 0;
     lastHit = 0;
     lastEvaded = false;
+    revealedPath = const [];
     felledWards.clear();
     phase = GamePhase.playing;
   }
@@ -190,18 +199,53 @@ class GameController extends ChangeNotifier {
   int get pathLength => path.length;
 
   /// なぞり中の鎖の戦果。魔導士に渡す。
-  ChainTally get _tally {
+  ChainTally get _tally => tallyOf(path);
+
+  /// [cells] を1本の鎖として見たときの戦果。
+  ///
+  /// なぞり中の道だけでなく、**まだなぞっていない道**にも使う
+  /// （[castSpell] が候補の威力を測るのに要る）。
+  ChainTally tallyOf(List<Cell> cells) {
     final counts = <Phase, int>{};
-    for (final c in path) {
+    for (final c in cells) {
       final t = board.tileAt(c);
       if (t == null) continue;
       counts[t.phase] = (counts[t.phase] ?? 0) + 1;
     }
     return ChainTally(
-      length: path.length,
+      length: cells.length,
       counts: counts,
-      startPhase: path.isEmpty ? null : board.tileAt(path.first)?.phase,
+      startPhase: cells.isEmpty ? null : board.tileAt(cells.first)?.phase,
     );
+  }
+
+  /// [cells] を編んだときの威力。枚数に魔導士の補正を足したもの。
+  int powerOf(List<Cell> cells) =>
+      cells.length + party.powerBonusFor(tallyOf(cells));
+
+  /// 押して使う力を使う。使えなければ false（何も起きない）。
+  ///
+  /// **回数を数えるのは [Party]。** 潜るたびに組み直されるので、
+  /// 「1ダンジョンに1回」はそこに置くだけで成り立つ。
+  ///
+  /// 何が起きるかは [Spell] の型で分かれる。sealed なので、[Spell] を
+  /// 足して switch に書き忘れると analyze が落ちる。**魔導士の名前では
+  /// 分岐しない**のは [Party] の効き目の集計と同じ約束。
+  bool castSpell(MageKind kind) {
+    if (!acceptsInput) return false;
+    final spell = party.spellOf(kind);
+    if (spell == null || !party.canCast(kind)) return false;
+    switch (spell) {
+      case Foresee():
+        // 敵に届く道が1本も無ければ、せめて成立する手を見せる。
+        final found = board.bestStrike(powerOf: powerOf);
+        revealedPath = found.isEmpty ? board.findHint() : found;
+    }
+    if (revealedPath.isEmpty) return false;
+    party.spendCast(kind);
+    hintPath = revealedPath;
+    notifyListeners();
+    return true;
   }
 
   /// いまの鎖に乗っている魔導士の威力補正。
@@ -313,6 +357,8 @@ class GameController extends ChangeNotifier {
   void cancelPath() {
     if (path.isEmpty) return;
     path.clear();
+    // 編まずに離したなら、先読みで見せた道はまだ活きている。
+    if (revealedPath.isNotEmpty) hintPath = revealedPath;
     notifyListeners();
   }
 
@@ -356,6 +402,10 @@ class GameController extends ChangeNotifier {
     for (final fall in result.bolt) {
       felledWards.add(fall.ward);
     }
+
+    // 盤面が変わるので、先読みで見せた道はここで捨てる。
+    revealedPath = const [];
+    hintPath = const [];
 
     score += result.gained;
     // 風が居れば、長い鎖を編んだ手は殴られずに済む。効かせるのは毎ターンの

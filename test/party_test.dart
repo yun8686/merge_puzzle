@@ -39,6 +39,16 @@ void main() {
       expect(Mage.storm.effect, contains('$stormChain枚'));
     });
 
+    test('押して使う力は、条件と効き目の組とは別に持つ', () {
+      // 鎖を見ないので [Ability] には収まらない。持つのは風だけ。
+      expect(Mage.gale.spell, isA<Foresee>());
+      expect(Mage.gale.spell!.label, '先読み');
+      for (final mage in Mage.roster) {
+        if (mage.kind == MageKind.gale) continue;
+        expect(mage.spell, isNull, reason: mage.name);
+      }
+    });
+
     test('従者は能力を持たない', () {
       for (final squire in Mage.squires) {
         expect(squire.ability, isNull, reason: squire.name);
@@ -127,6 +137,35 @@ void main() {
         isFalse,
         reason: '色が足りない',
       );
+    });
+  });
+
+  group('押して使う力', () {
+    test('潜り1本に1回だけ。使い切ったら戻らない', () {
+      final party = partyOf([Mage.gale, Mage.rime]);
+      expect(party.castsLeft(MageKind.gale), Party.spellUses);
+      expect(party.canCast(MageKind.gale), isTrue);
+
+      expect(party.spendCast(MageKind.gale), isTrue);
+      expect(party.castsLeft(MageKind.gale), 0);
+      expect(party.canCast(MageKind.gale), isFalse);
+      expect(party.spendCast(MageKind.gale), isFalse, reason: '2回目は通らない');
+    });
+
+    test('力を持たない者と、連れていない者は使えない', () {
+      final party = partyOf([Mage.gale, Mage.rime]);
+      expect(party.canCast(MageKind.rime), isFalse, reason: '持っていない');
+      expect(party.canCast(MageKind.storm), isFalse, reason: '連れていない');
+      expect(party.spellOf(MageKind.storm), isNull);
+    });
+
+    test('組み直せば戻る。潜るたびに一党は組み直される', () {
+      final spent = Party.of(const [Mage.gale, Mage.rime]);
+      spent.spendCast(MageKind.gale);
+      expect(spent.canCast(MageKind.gale), isFalse);
+
+      final fresh = Party.of(const [Mage.gale, Mage.rime]);
+      expect(fresh.canCast(MageKind.gale), isTrue);
     });
   });
 

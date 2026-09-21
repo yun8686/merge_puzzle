@@ -36,7 +36,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | パス | 中身 |
 |---|---|
 | `lib/game/phase.dart` | 相（赤・青・紫）の呼び名と並び。盤面も一党も UI もここを読む |
-| `lib/game/board.dart` | 盤面とチェイン判定。UI に依存しない |
+| `lib/game/board.dart` | 盤面とチェイン判定と道の探索（`bestStrike`）。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵を手で書く。増やすのはここ |
@@ -67,6 +67,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 1. `MageKind` に1つ足す
 2. `Mage` に `static const` を1つ足し、**体力**と `Ability(条件, 効き目)` を渡す
+   （押して使う力を持たせるなら `Spell` も）
 3. `Mage.summonable` に並べる
 4. `tools/mage/shapes.py` に姿を足して `emit_dart.py` を走らせる
 
@@ -94,6 +95,40 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 **組で書けない能力を足したくなったら、`Party` に `if` を書かずに条件か効き目を
 1つ増やすこと。** そこを崩すと、また魔導士ごとの分岐に戻る。
+
+## 押して使う力（アクティブスキル）
+
+鎖に自動で応える `Ability` とは別に、**一党の帯から手で使う力**がある（`Spell`）。
+いまは風の「先読み」だけ（`Foresee`：いまの盤面で敵にいちばん深く届く道を1本
+見せる）。
+
+**回数を数えるのは `Party`。** `Party` は潜るたびに組み直されるので
+（`GameController._freshParty`）、`spellsSpent` をそこに置くだけで**1ダンジョンに
+`Party.spellUses` 回**になる。階層をまたいでも戻らないのは体力と同じ扱い。回数を
+`GameController` に持たせると、階層をまたぐたびに「これは残すのか」を決め直す
+ことになる。
+
+**何が起きるかは `Spell` の型で分かれる**（`GameController.castSpell` の switch）。
+`Spell` は sealed なので、足して書き忘れると analyze が落ちる。**魔導士の名前では
+分岐しない**のは効き目の集計と同じ約束。
+
+**`Party` は盤面を読まないので、効き目は盤面の側で起きる。** 先読みの探索は
+`Board.bestStrike`。威力は一党で変わるので、**威力を出す関数を外から渡す**
+（`GameController.powerOf`）。ここを繋ぐと `party.dart` が `board.dart` を
+import することになる。
+
+`Board.bestStrike` は**敵のマスを起点に前後へ伸ばす**。敵を1体も通らない道は
+必ず0点なので、盤面ぜんぶから始める必要がない。市松の盤面はどの隣とも継げて
+枝が太いので、**敵1体あたりの枝の数**で打ち切る（`maxNodes`）。打ち切っても
+実際より控えめに答えるだけで嘘にはならない。
+
+**見せた道は、なぞって離しただけでは失わない**（`GameController.revealedPath`）。
+`hintPath` はなぞり始めると引っ込む（指と重なって読めない）が、潜り1本に1回の
+ものを指が触れただけで失わせるのは酷い。離せば戻し、**鎖を1本編んだら捨てる**
+（盤面が変わって、その道はもう指していない）。
+
+**帯の姿に印を出す**（`_MageChip` の `ready`）。押してみるまで分からない場所に
+置くと、そのまま使われずに終わる。
 
 **盤面に出る相は編成で決まる。** 継ぎ方の決まりは2本立てで、**鎖ごとにどちらかを
 選ぶ**（`Board._chainFits`）。
@@ -291,9 +326,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 出て、なぞっている間だけ引っ込む（自分の指と重なると読めない）。離せば戻る。
 指は `repeat` なので、稽古場を含むテストで `pumpAndSettle` は使えない。
 
-**本番にヒントの札は無い。** 盤面から手を探す仕掛け（`GameController.showHint` /
-`Board.findHint`）は残してあるが、**いまどの画面からも呼ばない**（テストが
-`hintPath` を埋めるのに使うだけ）。出し直すならここに繋ぐ。
+**本番に常設のヒントの札は無い。** 道を見せるのは**風の「先読み」だけ**で、
+潜り1本に1回（下の「押して使う力」）。`GameController.showHint` は残してあるが
+どの画面からも呼ばない（テストが `hintPath` を埋めるのに使うだけ）。
 
 **お手本は線ではなく指で出す**（`board_view.dart` の `_HintTrace`）。線を置く
 だけでは「どこを通るか」しか分からない。**どこから始めて、どちら向きに、どの順で
