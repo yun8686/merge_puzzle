@@ -248,9 +248,9 @@ class GameController extends ChangeNotifier {
   /// **回数を数えるのは [Party]。** 潜るたびに組み直されるので、
   /// 「1ダンジョンに1回」はそこに置くだけで成り立つ。
   ///
-  /// 何が起きるかは [Spell] の型で分かれる。sealed なので、[Spell] を
-  /// 足して書き忘れると analyze が落ちる。**魔導士の名前では分岐しない**
-  /// のは [Party] の効き目の集計と同じ約束。
+  /// **どの力かで分岐しない。** 何をするかは [Spell] 自身が知っていて、
+  /// ここは [SpellStage] を渡して結果を受け取るだけ。力が100種類に増えても
+  /// このメソッドは変わらない（`spells.dart`）。
   ///
   /// **空振りでは何も減らさない**（[CastResult.missed]）。敵に1でも届く道が
   /// 無いときに、成立するだけの道を見せてお茶を濁さない――知りたいのは
@@ -259,13 +259,8 @@ class GameController extends ChangeNotifier {
     if (!acceptsInput) return CastResult.unavailable;
     final spell = party.spellOf(kind);
     if (spell == null || !party.canCast(kind)) return CastResult.unavailable;
-    final found = switch (spell) {
-      Foresee() => board.bestStrike(powerOf: powerOf),
-    };
-    if (found.isEmpty) return CastResult.missed;
+    if (!spell.cast(_Stage(this))) return CastResult.missed;
     party.spendCast(kind);
-    revealedPath = found;
-    hintPath = found;
     notifyListeners();
     return CastResult.done;
   }
@@ -503,5 +498,28 @@ class GameController extends ChangeNotifier {
     if (hintPath.isEmpty) return;
     hintPath = const [];
     notifyListeners();
+  }
+}
+
+/// 押して使う力に渡す舞台。**盤面を知っているのはこちら側。**
+///
+/// [SpellStage] の動詞をここで実装する。[GameController] に直に持たせないのは、
+/// 力が増えて動詞が増えるたびに、進行の表向きの API まで太っていくため。
+///
+/// 画面の描き直しは呼び出し側（[GameController.castSpell]）が1回だけ行う。
+/// ここで [ChangeNotifier.notifyListeners] を呼ぶと、動詞を2つ使う力を
+/// 足したときに途中の盤面が一度描かれてしまう。
+class _Stage implements SpellStage {
+  const _Stage(this._game);
+
+  final GameController _game;
+
+  @override
+  bool revealBestRoute() {
+    final route = _game.board.bestStrike(powerOf: _game.powerOf);
+    if (route.isEmpty) return false;
+    _game.revealedPath = route;
+    _game.hintPath = route;
+    return true;
   }
 }

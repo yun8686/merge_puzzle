@@ -38,7 +38,9 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/phase.dart` | 相（赤・青・紫）の呼び名と並び。盤面も一党も UI もここを読む |
 | `lib/game/board.dart` | 盤面とチェイン判定と道の探索（`bestStrike`）。UI に依存しない |
 | `lib/game/game_controller.dart` | 進行、スコア、なぞり中の経路の状態 |
-| `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
+| `lib/game/party.dart` | 一党の**仕組み**。条件・効き目・押して使う力の形。名簿の中身は知らない |
+| `lib/game/roster.dart` | **名簿**（`party.dart` の part）。`MageKind` と `Mage` の実体、調整の定数。増やすのはここ |
+| `lib/game/spells.dart` | **押して使う力の中身**（`party.dart` の part）。`Spell` の実体。増やすのはここ |
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
 | `lib/dev_switch.dart` | 試用の口（`?all`）。URL を読むのはここだけ。`main.dart` からしか呼ばない |
@@ -58,7 +60,12 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
-検証済みの数値が意味を失う。
+検証済みの数値が意味を失う。押して使う力も、渡すのは `SpellStage`（動詞の名前
+だけ）で盤面そのものではない。
+
+`roster.dart` と `spells.dart` は `party.dart` の `part`。**名簿と力の実体が
+いくら伸びても、仕組みのファイルは伸びない。** 呼ぶ側から見れば今までどおり
+`party.dart` を1つ読むだけで、`Mage.ember` のような名前も変わらない。
 
 ## 魔導士を増やすとき
 
@@ -66,11 +73,21 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 効き目の種類ごとに足し合わせるだけで、誰が居るかでは分岐しない。だから**名簿を
 増やしても `Party` は変わらない**。
 
-1. `MageKind` に1つ足す
-2. `Mage` に `static const` を1つ足し、**体力**と `Ability(条件, 効き目)` を渡す
-   （押して使う力を持たせるなら `Spell` も）
-3. `Mage.summonable` に並べる
+**触るのは `roster.dart` だけ。** `Party` も進行も画面も変わらない。
+
+1. `MageKind` に1つ足す（**保存にそのまま書かれるので、出した名前は変えない**）
+2. `Mage` に `static const` を1つ足す。引数は**名前付き**
+   （`kind:` `phase:` `name:` `hp:` `ability:` `spell:` `starting:`）
+3. `Mage.roster` に並べる。**従者かどうかは `starting:` で言う**――
+   `squires` / `summonable` はそこから割るので、並べる表は1つだけ
 4. `tools/mage/shapes.py` に姿を足して `emit_dart.py` を走らせる
+
+並べ忘れ・重複・名前の被り・体力の外れは `party_test.dart` の
+**「名簿の見張り」**が捕まえる。姿の欠けは `mage_art_test.dart`。
+**100人に増えても目で追わない。**
+
+`Mage.of` は種類から引く表（`_byKind`）を使う。**名簿を舐めない**――相の色
+（`Palette.mageColor`）や編成の読み直しから1フレームに何度も呼ばれる。
 
 体力は**力の強さと引き換え**にする（30〜45 が今の幅）。強い能力に厚い体力を
 重ねると、その1人を入れるだけの編成になる。
@@ -109,14 +126,23 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 `GameController` に持たせると、階層をまたぐたびに「これは残すのか」を決め直す
 ことになる。
 
-**何が起きるかは `Spell` の型で分かれる**（`GameController.castSpell` の switch）。
-`Spell` は sealed なので、足して書き忘れると analyze が落ちる。**魔導士の名前では
-分岐しない**のは効き目の集計と同じ約束。
+**呼ぶ側は力の種類で分岐しない。** 何をするかは `Spell.cast` が自分で言い、
+`GameController.castSpell` は `SpellStage` を渡して結果を受け取るだけ。
+**力を1つ増やしても、進行も画面も名簿の仕組みも変わらない**――増えるのは
+`spells.dart` の実体だけ。`Spell` を sealed にしていないのはこのため
+（型で分岐する場所が無いので、網羅を検査する意味が無い）。
 
-**`Party` は盤面を読まないので、効き目は盤面の側で起きる。** 先読みの探索は
-`Board.bestStrike`。威力は一党で変わるので、**威力を出す関数を外から渡す**
-（`GameController.powerOf`）。ここを繋ぐと `party.dart` が `board.dart` を
-import することになる。
+**`SpellStage` は「やってほしいことの名前」だけ。** 盤面そのものは渡さない
+ので、`party.dart` は `board.dart` を import しないままでいる。**新しい力に
+新しいことをさせたくなったら、ここに動詞を1つ足す。** 進行の側に分岐を書くと、
+力が増えるたびに `GameController` が太る。
+
+動詞を実装するのは `game_controller.dart` の `_Stage`。`GameController` に直に
+実装しないのは、動詞が増えるたびに進行の表向きの API まで太っていくため。
+画面の描き直しは `castSpell` が1回だけ行う（`_Stage` の中では呼ばない）。
+
+先読みの探索は `Board.bestStrike`。威力は一党で変わるので、**威力を出す関数を
+外から渡す**（`GameController.powerOf`）。
 
 `Board.bestStrike` は**敵のマスを起点に前後へ伸ばす**。敵を1体も通らない道は
 必ず0点なので、盤面ぜんぶから始める必要がない。市松の盤面はどの隣とも継げて
@@ -141,6 +167,12 @@ import することになる。
 
 **帯の姿に印を出す**（`_MageChip` の `ready`）。押してみるまで分からない場所に
 置くと、そのまま使われずに終わる。
+
+**名簿の格子は画面に入るぶんだけ組む**（`home_screen.dart` の `_PartyTab` は
+`CustomScrollView` + `SliverGrid`）。全部を一度に組むと、100人並んだときに札の
+数だけ姿（`CustomPaint`）が積まれて、編成を1つ動かすたびに全部が組み直される。
+`cacheExtent` で画面の外も少し先まで組んでおくのは、指で弾いたときに白いマスを
+見せないため。**上限があること自体が肝**。
 
 ## 試すときは URL に `?all`
 

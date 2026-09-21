@@ -17,6 +17,19 @@ void main() {
     expect(progress.canRoll, isFalse);
   });
 
+  test('始まりの編成は従者から取る', () {
+    // 名簿が100人に増えても、始まりの2人は必ず所持している従者であること。
+    // ここが名簿と食い違うと、拠点を開いた瞬間に編成が直され続ける。
+    for (final kind in Progress.startingParty) {
+      expect(Mage.of(kind).starting, isTrue, reason: kind.name);
+    }
+    expect(
+      Progress.startingParty.length,
+      lessThanOrEqualTo(Progress.partySlots),
+    );
+    expect(Progress().partyIsValid, isTrue, reason: '1色では鎖が編めない');
+  });
+
   test('書いて読み直すと同じ記録になる', () {
     final progress = Progress(
       owned: {MageKind.ember, MageKind.storm, MageKind.gale},

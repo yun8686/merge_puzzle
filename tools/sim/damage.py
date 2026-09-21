@@ -4,8 +4,8 @@
 殴ってくるので、階層あたりの痛手は「どれだけ手間取ったか」で決まる。討ち取れば
 その敵のぶんは止まるので、**早く討つほど安い**。
 
-階層の中身は `lib/game/dungeon.dart` をそのまま読む（手で書き写すと、階層を
-いじったときに黙って古くなる）。攻撃力も守りから同じ式で出す
+階層の中身は `lib/game/dungeon.dart` を、名簿は `lib/game/roster.dart` をそのまま
+読む（手で書き写すと、いじったときに黙って古くなる）。攻撃力も守りから同じ式で出す
 （`Board.attackFor`：守り3〜5が1、6〜8が2）。
 
 **手数に制限は無い。** 上限が無いぶん、浴びる痛手は「どう打つか」でしか
@@ -69,7 +69,7 @@ def parse_dungeons(source: str):
 
 
 def parse_mages(source: str) -> list[tuple[str, int]]:
-    """`party.dart` から（魔導士の名前, 体力）を読む。
+    """`roster.dart` から（魔導士の名前, 体力）を読む。
 
     一党の体力は**連れていく顔ぶれの合計**なので、初期体力という1つの数字は
     もう無い。名簿を読んで、組み方ごとの厚さを出す。
@@ -77,7 +77,10 @@ def parse_mages(source: str) -> list[tuple[str, int]]:
     squire = int(re.search(r"squireHp = (\d+)", source).group(1))
     out = []
     for m in re.finditer(
-        r"Mage\._\(\s*MageKind\.\w+,\s*Phase\.\w+,\s*'([^']*)',\s*(\w+)",
+        r"Mage\._\(\s*kind:\s*MageKind\.\w+,"
+        r"\s*phase:\s*Phase\.\w+,"
+        r"\s*name:\s*'([^']*)',"
+        r"\s*hp:\s*(\w+)",
         source,
     ):
         hp = squire if m.group(2) == "squireHp" else int(m.group(2))
@@ -87,7 +90,7 @@ def parse_mages(source: str) -> list[tuple[str, int]]:
 
 def main() -> int:
     dungeons = parse_dungeons((ROOT / "lib/game/dungeon.dart").read_text())
-    mages = parse_mages((ROOT / "lib/game/party.dart").read_text())
+    mages = parse_mages((ROOT / "lib/game/roster.dart").read_text())
 
     print("名簿の体力")
     for name, hp in mages:

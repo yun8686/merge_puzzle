@@ -7,7 +7,18 @@ import 'package:parity_chain/ui/board_view.dart';
 import 'package:parity_chain/ui/home_screen.dart';
 
 /// 拠点は面によっては縦に長い。押す前に送り込む。
+///
+/// **名簿は画面に入るぶんしか組まれない**（`_PartyTab` の `SliverGrid`）ので、
+/// まだ木に居ないことがある。そのときは見つかるまで巻物を送ってから押す。
 Future<void> tapAt(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.dragUntilVisible(
+      finder,
+      find.byType(CustomScrollView),
+      const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
+  }
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);

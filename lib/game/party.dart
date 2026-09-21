@@ -7,6 +7,11 @@ library;
 
 import 'phase.dart';
 
+// 名簿（誰が居るか）と、押して使う力の中身は別のファイルに置いてある。
+// **ここは仕組みだけ**――名簿が100人に増えても、この上下は1行も変わらない。
+part 'roster.dart';
+part 'spells.dart';
+
 /// 鎖1本の戦果。魔導士が見るのはこれだけ。
 class ChainTally {
   const ChainTally({
@@ -198,17 +203,33 @@ final class Guard extends Boon {
   String describe() => '受ける痛手が半分になる';
 }
 
-/// 押して使う力。**鎖を見ない。**
+/// 押して使う力が触れられること。**盤面そのものは渡さない。**
+///
+/// 一党が盤面を読まない線は、ここでも引いてある。渡すのは**やってほしいこと
+/// の名前**だけで、どう実現するかは盤面を持っている側（`GameController`）の
+/// 仕事になる。だから `party.dart` は `board.dart` を import しないままでいる。
+///
+/// **力を増やすときは、ここに動詞を1つ足すか、既にある動詞を使う。**
+/// 進行の側に「この力ならこうする」という分岐を書かない――それをやると、
+/// 力が増えるたびに `GameController` が太っていく。
+abstract interface class SpellStage {
+  /// 敵にいちばん深く届く道を探して、お手本として盤面に出す。
+  ///
+  /// 1でも届く道が無ければ false。**そのときは何も起きていない**ので、
+  /// 呼んだ側は回数を減らさない。
+  bool revealBestRoute();
+}
+
+/// 押して使う力。**鎖を見ない。押して使う。**
 ///
 /// [Ability] が鎖の戦果に勝手に応えるのに対して、こちらは一党の帯から手で
 /// 使う。**1本の潜りで [Party.spellUses] 回だけ**（[Party.canCast]）。回数を
 /// 持つのは [Party] で、潜るたびに組み直されるので、数えるところは1つで済む。
 ///
-/// **効き目は盤面の側で起きる。** ここが持っているのは種類と説明文だけで、
-/// 何をするかは [Spell] の型で分かれる（`GameController.castSpell`）。
-/// [Party] は盤面を読まないので、ここに処理は書けない――書こうとしたら、
-/// それは [Boon] 側の話か、盤面の側の話かのどちらか。
-sealed class Spell {
+/// **sealed にしていない。** 何をするかは [cast] が自分で言うので、呼ぶ側に
+/// 型で分岐する場所が無い。力が100種類に増えても、増えるのはこの下の実体
+/// （`spells.dart`）だけで、進行も画面も名簿も変わらない。
+abstract class Spell {
   const Spell();
 
   /// 札に出す名前。
@@ -216,21 +237,9 @@ sealed class Spell {
 
   /// 何が起きるか。説明文も型から作るので、手で書いた文とずれない。
   String describe();
-}
 
-/// いまの盤面で、敵にいちばん深く届く道を1本だけ見せる。
-///
-/// **盤面を変えない。** 手数の制限が無くなってからは、値段を払うのは体力
-/// だけなので、道を1本知ったところで1手ぶんの反撃は必ず払う。教えるのは
-/// 「どこを通れば一番効くか」であって、無料の1手ではない。
-final class Foresee extends Spell {
-  const Foresee();
-
-  @override
-  String get label => '先読み';
-
-  @override
-  String describe() => 'いまの盤面で、敵にいちばん深く届く道を1本見せる';
+  /// 使う。**何も起きなければ false**（呼んだ側は回数を減らさない）。
+  bool cast(SpellStage stage);
 }
 
 /// 能力ひとつ。**条件と効き目の組でしか書けない。**
@@ -252,205 +261,6 @@ class Ability {
     return clause.isEmpty ? boon : '$clause鎖$boon';
   }
 }
-
-enum MageKind {
-  /// 相を1つ持つだけの従者。特殊な力は無い。始まりの3人。
-  squireRed,
-  squireBlue,
-  squireViolet,
-  ember,
-  rime,
-  storm,
-  frost,
-  gale,
-  aegis,
-  blaze,
-}
-
-/// 一党に加わる魔導士。能力は「鎖の戦果への反応」として書く。
-///
-/// 赤や青の枚数を条件にすると、交互ルールのせいで実質「長さ＋どちらの相から
-/// 始めたか」になる。長さ N の鎖に含まれる赤は、赤から始めれば ⌈N/2⌉、
-/// 青から始めれば ⌊N/2⌋。つまり**開始する相の選択**に初めて意味が生まれる。
-/// これまで開始相は繋がりやすさ以外どうでもよかったので、ここが新しい判断になる。
-class Mage {
-  const Mage._(
-    this.kind,
-    this.phase,
-    this.name,
-    this.hp, [
-    this.ability,
-    this.spell,
-  ]);
-
-  final MageKind kind;
-
-  /// この魔導士の相。**編成に入れた相だけが盤面に敷かれる。**
-  /// 能力が「自分の相を N 枚以上」という形なのは、連れていく顔ぶれと
-  /// 盤面の色がひと続きになるようにするため。
-  final Phase phase;
-
-  final String name;
-
-  /// この魔導士の体力。**一党の体力は連れていく面々の合計**（[Party.poolFor]）。
-  ///
-  /// **強い力を持つ者ほど薄い。** 能力を持たない従者がいちばん厚く、盤面を
-  /// ひっくり返す力（威力+2、階層の敵すべてに一撃）を持つ者は薄い。連れて
-  /// いく顔ぶれが、そのまま「何手ぶん耐えられるか」になる。
-  final int hp;
-
-  /// この魔導士の能力。持たない者は null。
-  ///
-  /// **[Party] は能力の中身で分岐しない。** ここに [Ability] を1つ置けば、
-  /// 集計は [Boon] の種類だけで回る。魔導士を増やすときに触るのは、この
-  /// 名簿と [MageKind] だけ。
-  final Ability? ability;
-
-  /// 押して使う力。持たない者は null。**潜り1本に1回だけ**。
-  ///
-  /// [ability] と違って鎖を見ないので、条件と効き目の組には収まらない。
-  /// 増やすときは [Spell] を1つ足して、`GameController.castSpell` の
-  /// switch に1本加える（sealed なので足し忘れると analyze が落ちる）。
-  final Spell? spell;
-
-  /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
-  String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
-
-  /// 従者の体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
-  /// 始まりの2人で 90 あり、1本目のダンジョンはこれで通る。
-  static const int squireHp = 45;
-
-  /// 始まりの3人。相を1つ持つだけで、特殊な力は無い。
-  /// 3人とも別の相なので、開幕から盤面は3色になる。
-  static const squireRed = Mage._(
-    MageKind.squireRed,
-    Phase.red,
-    '赤の従者',
-    squireHp,
-  );
-  static const squireBlue = Mage._(
-    MageKind.squireBlue,
-    Phase.blue,
-    '青の従者',
-    squireHp,
-  );
-  static const squireViolet = Mage._(
-    MageKind.squireViolet,
-    Phase.violet,
-    '紫の従者',
-    squireHp,
-  );
-
-  static const ember = Mage._(
-    MageKind.ember,
-    Phase.red,
-    '焔の魔導士',
-    40,
-    Ability(SamePhase(emberSame), PowerUp(1)),
-  );
-  static const blaze = Mage._(
-    MageKind.blaze,
-    Phase.red,
-    '烈火の魔導士',
-    30,
-    Ability(SamePhase(blazeSame), PowerUp(2)),
-  );
-  static const gale = Mage._(
-    MageKind.gale,
-    Phase.red,
-    '風の魔導士',
-    35,
-    Ability(ChainLength(galeChain), Evade()),
-    Foresee(),
-  );
-  static const rime = Mage._(
-    MageKind.rime,
-    Phase.blue,
-    '氷雨の魔導士',
-    45,
-    Ability(SamePhase(rimeSame), Mend(rimeMend)),
-  );
-  static const frost = Mage._(
-    MageKind.frost,
-    Phase.blue,
-    '霜の魔導士',
-    40,
-    Ability(StartsWith(), PowerUp(1)),
-  );
-  static const storm = Mage._(
-    MageKind.storm,
-    Phase.violet,
-    '雷の魔導士',
-    30,
-    Ability(
-      Every([DistinctPhases(stormPhases), ChainLength(stormChain)]),
-      Strike(1),
-    ),
-  );
-  static const aegis = Mage._(
-    MageKind.aegis,
-    Phase.violet,
-    '盾の魔導士',
-    40,
-    Ability(Always(), Guard()),
-  );
-
-  /// 始まりの3人。ガチャの対象にはならない。
-  static const List<Mage> squires = [squireRed, squireBlue, squireViolet];
-
-  /// ガチャで増える7人。
-  static const List<Mage> summonable = [
-    ember,
-    blaze,
-    gale,
-    rime,
-    frost,
-    storm,
-    aegis,
-  ];
-
-  /// 名簿。従者が先、招ける魔導士が後。
-  static const List<Mage> roster = [...squires, ...summonable];
-
-  /// [kind] の魔導士。名簿に無い種類は無いので、必ず見つかる。
-  static Mage of(MageKind kind) => roster.firstWhere((m) => m.kind == kind);
-}
-
-/// 焔が応える、**自分の相**の枚数。
-const int emberSame = 3;
-
-/// 氷雨が応える、自分の相の枚数。
-const int rimeSame = 3;
-
-/// 氷雨が1本の鎖で戻す体力。
-///
-/// 毎ターンの反撃が 2〜6 なので、条件を満たした手では半分ほど打ち消す。
-/// 全部打ち消すと敵を放置して延々と編めてしまい、討ち急ぐ理由が消える。
-const int rimeMend = 3;
-
-/// 烈火が応える、自分の相の枚数。焔の上に重ねて乗る。
-const int blazeSame = 5;
-
-/// 風が反撃を凌ぐ枚数。ここを下げると、長い鎖を編めるうちは一度も殴られ
-/// なくなって、**早く討つ理由が消える**。少ない側の相を食い潰す長さに
-/// 置いてあるのは、枯渇そのものが歯止めになるため。7枚を毎手続けることは
-/// できない。
-const int galeChain = 7;
-
-/// 雷が落ちる枚数。ここだけ威力ではなく**継いだ枚数**で見る。
-///
-/// 焔の補正が乗ると 7 枚でも威力 8 になるが、それでは落とさない。
-/// 「8枚つなぐ」は盤面を見ながら数えられるのに対し、「威力 8」は補正が
-/// 乗るかどうかを頭の中で足さないと分からず、狙って出せない。
-const int stormChain = 8;
-
-/// 雷が要る相の数。**3色で編成したときにしか落ちない。**
-///
-/// 3色の盤面は継ぎ先が薄くなるぶん鎖が短くなる（最長の中央値 9・8枚以上
-/// 77%。2色なら 11・89%。README 第7段階）。それまで3色にする理由がどこにも
-/// 無かったので、いちばん派手な能力をここに結んだ。雷は「3色にしてでも
-/// 8枚編む」ための報酬で、2色の編成に入れても一度も落ちない。
-const int stormPhases = 3;
 
 /// 一党。階層をまたいで持ち越す。
 class Party {

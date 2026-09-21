@@ -12,6 +12,22 @@ ChainTally tally({
 Party partyOf(List<Mage> members) =>
     Party(members: List.of(members), hp: 30, maxHp: 30);
 
+/// 盤面の代わり。**押して使う力が何を頼んだかだけ数える。**
+///
+/// `party.dart` は盤面を読まないので、力の試験に盤面は要らない。
+class _FakeStage implements SpellStage {
+  int revealed = 0;
+
+  /// 舞台が「できた」と答えるか。
+  bool answer = true;
+
+  @override
+  bool revealBestRoute() {
+    revealed++;
+    return answer;
+  }
+}
+
 void main() {
   group('能力の書き方', () {
     test('説明文は条件と効き目から作られる', () {
@@ -140,7 +156,70 @@ void main() {
     });
   });
 
+  group('名簿の見張り', () {
+    // 名簿が100人に増えると、並べ忘れや重複は目で追えない。ここで捕まえる。
+
+    test('MageKind はちょうど1度ずつ名簿に並ぶ', () {
+      final kinds = [for (final mage in Mage.roster) mage.kind];
+      expect(kinds.toSet().length, kinds.length, reason: '重複しない');
+      expect(kinds.toSet(), MageKind.values.toSet(), reason: '並べ忘れが無い');
+      for (final kind in MageKind.values) {
+        expect(Mage.of(kind).kind, kind, reason: kind.name);
+      }
+    });
+
+    test('従者と招ける面々で名簿を割り切る', () {
+      // squires / summonable は roster から割っているので、別々に並べた
+      // ことによる食い違い（所持しているのにガチャにも出る）は起きない。
+      expect(
+        Mage.squires.length + Mage.summonable.length,
+        Mage.roster.length,
+      );
+      expect({...Mage.squires, ...Mage.summonable}, Mage.roster.toSet());
+      for (final mage in Mage.squires) {
+        expect(mage.starting, isTrue, reason: mage.name);
+      }
+      for (final mage in Mage.summonable) {
+        expect(mage.starting, isFalse, reason: mage.name);
+      }
+    });
+
+    test('名前は重ならない。札の上では名前でしか見分けられない', () {
+      final names = [for (final mage in Mage.roster) mage.name];
+      expect(names.toSet().length, names.length);
+    });
+
+    test('体力は 30〜45 に収める', () {
+      // 強い能力に厚い体力を重ねると、その1人を入れるだけの編成になる。
+      for (final mage in Mage.roster) {
+        expect(mage.hp, inInclusiveRange(30, 45), reason: mage.name);
+      }
+    });
+
+    test('従者は相を1つずつ持つ。始まりの盤面が1色にならない', () {
+      expect(
+        Mage.squires.map((m) => m.phase).toSet().length,
+        Mage.squires.length,
+      );
+    });
+  });
+
   group('押して使う力', () {
+    test('舞台の動詞を呼ぶだけ。盤面は要らない', () {
+      // **呼ぶ側に「この力ならこうする」は無い。** 力を増やしても
+      // `GameController.castSpell` は変わらない。
+      final stage = _FakeStage();
+      expect(const Foresee().cast(stage), isTrue);
+      expect(stage.revealed, 1);
+
+      stage.answer = false;
+      expect(
+        const Foresee().cast(stage),
+        isFalse,
+        reason: '何も起きなければ false。呼んだ側は回数を減らさない',
+      );
+    });
+
     test('潜り1本に1回だけ。使い切ったら戻らない', () {
       final party = partyOf([Mage.gale, Mage.rime]);
       expect(party.castsLeft(MageKind.gale), Party.spellUses);
