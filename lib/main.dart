@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'dev_switch.dart';
 import 'game/prefs_store.dart';
+import 'game/progress.dart';
 import 'ui/home_screen.dart';
 import 'ui/theme.dart';
 import 'ui/title_screen.dart';
@@ -51,6 +53,17 @@ class _Entry extends StatefulWidget {
 class _EntryState extends State<_Entry> {
   bool _started = false;
 
+  /// 記録の置き場所。**一度だけ作る。**
+  ///
+  /// build のたびに作り直すと、拠点が書き戻す先が毎回別の箱になって、
+  /// 試用のあいだ編成が保たれない。
+  ///
+  /// `?all` が付いていたら、全部開いた記録を積んだ手元の箱に差し替える
+  /// （`dev_switch.dart`）。端末の保存には触らない。
+  late final ProgressStore _store = unlockAllRequested
+      ? MemoryProgressStore(unlockedProgress().encode())
+      : const PrefsProgressStore();
+
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
@@ -62,9 +75,11 @@ class _EntryState extends State<_Entry> {
         children: [...previous, if (current != null) current],
       ),
       child: _started
-          ? const HomeScreen(
-              key: ValueKey('home'),
-              store: PrefsProgressStore(),
+          ? HomeScreen(
+              key: const ValueKey('home'),
+              store: _store,
+              // 試用のときだけ出す。**出さないと、記録が消えたように見える。**
+              banner: unlockAllRequested ? '試用中／全部開放・保存しない' : null,
             )
           : TitleScreen(
               key: const ValueKey('title'),

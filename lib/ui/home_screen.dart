@@ -20,9 +20,15 @@ import 'theme.dart';
 /// ダンジョンに入るときは「どのダンジョンを、誰を連れて」だけを渡し、
 /// 帰ってきたら [DungeonOutcome] を受け取って魔晶を足し、保存する。
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.store});
+  const HomeScreen({super.key, required this.store, this.banner});
 
   final ProgressStore store;
+
+  /// 上の帯の下に出す一言。**いまは試用（`?all`）のときだけ**。
+  ///
+  /// 試用は端末の保存を読まないので、出さないと「記録が消えた」ように
+  /// 見える。渡さなければ何も出ない。
+  final String? banner;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -200,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _Base(
                     progress: progress,
+                    banner: widget.banner,
                     tab: _tab,
                     drawn: _drawn,
                     spoils: _spoils,
@@ -231,6 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
 class _Base extends StatelessWidget {
   const _Base({
     required this.progress,
+    required this.banner,
     required this.tab,
     required this.drawn,
     required this.spoils,
@@ -242,6 +250,10 @@ class _Base extends StatelessWidget {
   });
 
   final Progress progress;
+
+  /// 上の帯の下に出す一言。無ければ出さない。
+  final String? banner;
+
   final _Tab tab;
   final Mage? drawn;
   final String? spoils;
@@ -258,6 +270,7 @@ class _Base extends StatelessWidget {
     return Column(
       children: [
         _StatusStrip(progress: progress, onTeach: onTeach),
+        if (banner != null) _Banner(text: banner!),
         Expanded(
           child: switch (tab) {
             _Tab.dungeons => _DungeonTab(
@@ -276,6 +289,33 @@ class _Base extends StatelessWidget {
         ),
         _TabBar(current: tab, onTab: onTab),
       ],
+    );
+  }
+}
+
+/// 試用の札。**普段は出ない。** 端末の保存を読まない状態だと分からないと、
+/// 記録が飛んだと思われる。
+class _Banner extends StatelessWidget {
+  const _Banner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Palette.gold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Palette.gold.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: AppFont.label(9, color: Palette.gold),
+      ),
     );
   }
 }

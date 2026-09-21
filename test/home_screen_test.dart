@@ -36,6 +36,7 @@ Future<MemoryProgressStore> openBase(
   WidgetTester tester, {
   Progress? progress,
   bool taught = true,
+  String? banner,
 }) async {
   final seed = progress ?? Progress();
   seed.taughtTutorial = taught;
@@ -43,7 +44,9 @@ Future<MemoryProgressStore> openBase(
   // 鍵を変えないと、同じテストで開き直したときに State が使い回されて
   // initState が走らず、前の記録が残ったままになる。
   await tester.pumpWidget(
-    MaterialApp(home: HomeScreen(key: UniqueKey(), store: store)),
+    MaterialApp(
+      home: HomeScreen(key: UniqueKey(), store: store, banner: banner),
+    ),
   );
   if (taught) {
     await tester.pumpAndSettle();
@@ -56,6 +59,16 @@ Future<MemoryProgressStore> openBase(
 }
 
 void main() {
+  testWidgets('札を渡したときだけ上の帯の下に出る', (tester) async {
+    // 試用（`?all`）は端末の保存を読まないので、出さないと記録が消えたように
+    // 見える。渡さない普段の拠点には出ない。
+    await openBase(tester);
+    expect(find.text('試用中／全部開放・保存しない'), findsNothing);
+
+    await openBase(tester, banner: '試用中／全部開放・保存しない');
+    expect(find.text('試用中／全部開放・保存しない'), findsOneWidget);
+  });
+
   testWidgets('拠点は三つの面に分かれ、開くとダンジョンが出る', (tester) async {
     await openBase(tester);
 

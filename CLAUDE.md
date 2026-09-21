@@ -41,6 +41,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/party.dart` | 一党。階層をまたぐ体力と魔導士。盤面を読まない |
 | `lib/game/dungeon.dart` | ダンジョンの定義。7階層ぶんの敵を手で書く。増やすのはここ |
 | `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
+| `lib/dev_switch.dart` | 試用の口（`?all`）。URL を読むのはここだけ。`main.dart` からしか呼ばない |
 | `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
 | `lib/ui/tutorial.dart` | 遊び方。**本物の盤面をなぞらせる**稽古場。初回だけ拠点の上に出す |
 | `lib/ui/chain_mark.dart` | 鎖が編まれる絵。タイトルと遊び方で使う |
@@ -53,7 +54,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
 | `tools/sim/` | 継ぎ方の決まりの難易度（`chain_length.py`）と、1本の潜りで浴びる痛手（`damage.py`）を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
-| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `dev_switch_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
@@ -129,6 +130,27 @@ import することになる。
 
 **帯の姿に印を出す**（`_MageChip` の `ready`）。押してみるまで分からない場所に
 置くと、そのまま使われずに終わる。
+
+## 試すときは URL に `?all`
+
+<https://yun8686.github.io/merge_puzzle/?all> で開くと、**名簿もダンジョンも
+全部開いた記録**で始まる（`lib/dev_switch.dart`）。遊ぶ側の URL は変わらない
+ので、公開ページはそのまま。
+
+**端末の保存は読まないし書かない。** 置き場所を `MemoryProgressStore` に
+差し替えるだけなので、普段の記録には触れず、閉じれば残らない。**`Progress` に
+「全部開く」旗を足さないこと**――記録が試すための都合を持ち込むうえ、一度
+保存に乗ると外せなくなる。
+
+踏破の印を全部立てるのは「前の1本を踏破すると開く」決まりを外すため。それを
+組むのは `dev_switch.dart` の仕事で、`Progress` は最後までダンジョンを読まない。
+稽古の印も立てる――保存しない記録なので、立てないと開くたびに拠点へ覆いかぶさる。
+
+**出ていることを画面に出す**（`HomeScreen.banner`）。試用は保存を読まないので、
+黙って差し替えると「記録が消えた」ように見える。
+
+読むのは `Uri.base` だけ。web では開いているページの URL、端末のアプリでは
+file の URL なので問い合わせは空になる。**この口が開くのは web だけ。**
 
 **盤面に出る相は編成で決まる。** 継ぎ方の決まりは2本立てで、**鎖ごとにどちらかを
 選ぶ**（`Board._chainFits`）。
