@@ -1044,16 +1044,36 @@ void main() {
       final controller = galeController();
       expect(controller.hintPath, isEmpty, reason: '使うまでは出ない');
 
-      expect(controller.castSpell(MageKind.gale), isTrue);
+      expect(controller.castSpell(MageKind.gale), CastResult.done);
       expect(controller.hintPath, isNotEmpty);
       expect(controller.hintPath, contains(const Cell(0, 1)), reason: '敵を通る');
 
-      expect(controller.castSpell(MageKind.gale), isFalse, reason: '2回目');
+      expect(
+        controller.castSpell(MageKind.gale),
+        CastResult.unavailable,
+        reason: '2回目',
+      );
+    });
+
+    test('どの道も敵に届かなければ空振りで、回数は減らない', () {
+      final controller = galeController();
+      // 1色で塗り潰すと3枚も繋がらない。届く道がどこにも無い盤面。
+      paintDead(controller.board, foe: const Cell(0, 1), ward: 3);
+
+      expect(controller.castSpell(MageKind.gale), CastResult.missed);
+      expect(controller.hintPath, isEmpty, reason: '成立するだけの道でお茶を濁さない');
+      expect(controller.revealedPath, isEmpty);
+      expect(controller.party.canCast(MageKind.gale), isTrue, reason: '減らない');
+
+      // 盤面が戻れば、同じ札がそのまま使える。
+      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+      expect(controller.castSpell(MageKind.gale), CastResult.done);
+      expect(controller.party.canCast(MageKind.gale), isFalse);
     });
 
     test('見せた道は、なぞって離しただけでは失われない', () {
       final controller = galeController();
-      controller.castSpell(MageKind.gale);
+      expect(controller.castSpell(MageKind.gale), CastResult.done);
       final shown = List<Cell>.of(controller.hintPath);
 
       // 自分の指と重なると読めないので、なぞっている間は引っ込む。
@@ -1080,13 +1100,13 @@ void main() {
     test('連れていない魔導士の力は使えない', () {
       final controller = newController();
       paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
-      expect(controller.castSpell(MageKind.gale), isFalse);
+      expect(controller.castSpell(MageKind.gale), CastResult.unavailable);
       expect(controller.hintPath, isEmpty);
     });
 
     test('階層をまたいでも戻らず、潜り直すと戻る', () {
       final controller = galeController();
-      expect(controller.castSpell(MageKind.gale), isTrue);
+      expect(controller.castSpell(MageKind.gale), CastResult.done);
       expect(controller.party.canCast(MageKind.gale), isFalse);
 
       controller.nextFloor();

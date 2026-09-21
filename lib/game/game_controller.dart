@@ -15,6 +15,26 @@ import 'party.dart';
 ///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
 enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
 
+/// 押して使う力を使った結果。
+///
+/// **[missed] と [unavailable] を分けるのは、言うことが違うから。**
+/// 使えないのは編成や場面の話で、届かなかったのは盤面の話。同じ「使えません」
+/// にまとめると、どちらを直せばいいのか分からない。
+enum CastResult {
+  /// 通った。回数を1つ使った。
+  done,
+
+  /// そもそも使えない。連れていない・力を持たない・もう使った・盤面が動いて
+  /// いる。画面は札を出さないので、普通はここに来ない。
+  unavailable,
+
+  /// 使えたが、効く先が無かった。**回数は減らさない。**
+  ///
+  /// 潜り1本に1回しかない札を、「どこにも届かない」と知るためだけに
+  /// 使わせない。何も起きなかったのだから、何も減らない。
+  missed,
+}
+
 /// 盤面の上に乗る「遊び」の状態管理。
 ///
 /// ダンジョン制。[dungeon] の階層を1階層目から順に降り、最下層を制圧すれば踏破。
@@ -223,29 +243,31 @@ class GameController extends ChangeNotifier {
   int powerOf(List<Cell> cells) =>
       cells.length + party.powerBonusFor(tallyOf(cells));
 
-  /// 押して使う力を使う。使えなければ false（何も起きない）。
+  /// 押して使う力を使う。
   ///
   /// **回数を数えるのは [Party]。** 潜るたびに組み直されるので、
   /// 「1ダンジョンに1回」はそこに置くだけで成り立つ。
   ///
   /// 何が起きるかは [Spell] の型で分かれる。sealed なので、[Spell] を
-  /// 足して switch に書き忘れると analyze が落ちる。**魔導士の名前では
-  /// 分岐しない**のは [Party] の効き目の集計と同じ約束。
-  bool castSpell(MageKind kind) {
-    if (!acceptsInput) return false;
+  /// 足して書き忘れると analyze が落ちる。**魔導士の名前では分岐しない**
+  /// のは [Party] の効き目の集計と同じ約束。
+  ///
+  /// **空振りでは何も減らさない**（[CastResult.missed]）。敵に1でも届く道が
+  /// 無いときに、成立するだけの道を見せてお茶を濁さない――知りたいのは
+  /// 「どこを通れば効くか」であって、「どこかは繋がる」ではない。
+  CastResult castSpell(MageKind kind) {
+    if (!acceptsInput) return CastResult.unavailable;
     final spell = party.spellOf(kind);
-    if (spell == null || !party.canCast(kind)) return false;
-    switch (spell) {
-      case Foresee():
-        // 敵に届く道が1本も無ければ、せめて成立する手を見せる。
-        final found = board.bestStrike(powerOf: powerOf);
-        revealedPath = found.isEmpty ? board.findHint() : found;
-    }
-    if (revealedPath.isEmpty) return false;
+    if (spell == null || !party.canCast(kind)) return CastResult.unavailable;
+    final found = switch (spell) {
+      Foresee() => board.bestStrike(powerOf: powerOf),
+    };
+    if (found.isEmpty) return CastResult.missed;
     party.spendCast(kind);
-    hintPath = revealedPath;
+    revealedPath = found;
+    hintPath = found;
     notifyListeners();
-    return true;
+    return CastResult.done;
   }
 
   /// いまの鎖に乗っている魔導士の威力補正。

@@ -399,6 +399,43 @@ void main() {
     expect(find.text('この潜りではもう使った'), findsOneWidget);
   });
 
+  testWidgets('先読みが空振りすると、札は開いたままで回数も減らない', (tester) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = GameController(
+      rng: Random(3),
+      roster: const [Mage.gale, Mage.squireBlue],
+    );
+    // 1色で塗り潰すと3枚も繋がらない。届く道がどこにも無い盤面。
+    var id = 0;
+    for (var r = 0; r < controller.board.rows; r++) {
+      for (var c = 0; c < controller.board.cols; c++) {
+        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.red);
+      }
+    }
+    controller.board.grid[0][1] = Tile(id: id++, phase: Phase.red, ward: 3);
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('party-gale')));
+    await tester.pump();
+    await tester.tap(find.text('使う'));
+    await tester.pump();
+
+    // 札は開いたまま、なぜ何も起きなかったかを言う。
+    expect(find.text('先読み'), findsOneWidget, reason: '閉じない');
+    expect(find.textContaining('どの道も敵に届かなかった'), findsOneWidget);
+    expect(find.byKey(const ValueKey('hint-path')), findsNothing);
+    // 減っていないので、もう一度押せる。
+    expect(find.text('使う'), findsOneWidget);
+    expect(controller.party.canCast(MageKind.gale), isTrue);
+  });
+
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
     // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、

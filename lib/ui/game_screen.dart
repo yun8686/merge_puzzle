@@ -111,13 +111,36 @@ class _GameScreenState extends State<GameScreen> {
   /// 「何をする人か」が確かめられない。
   MageKind? _inspecting;
 
-  void _inspect(Mage mage) => setState(() => _inspecting = mage.kind);
+  /// 押して使う力が空振りしたときの一言。**札の中に出す。**
+  ///
+  /// 盤面に何も起きないので、閉じてしまうと「押したのに無反応」に見える。
+  /// 札を開いたまま、なぜ何も起きなかったかを言う。
+  String? _castNote;
 
-  void _closeInspect() => setState(() => _inspecting = null);
+  void _inspect(Mage mage) => setState(() {
+    _inspecting = mage.kind;
+    _castNote = null;
+  });
+
+  void _closeInspect() => setState(() {
+    _inspecting = null;
+    _castNote = null;
+  });
 
   /// 押して使う力を使う。通ったら札を閉じて、見せた道を盤面に出す。
+  ///
+  /// **空振りでは閉じない。** 回数も減っていないので、盤面を崩してから
+  /// もう一度押せばよい――そのことごと札の中で言う。
   void _cast(MageKind kind) {
-    if (_controller.castSpell(kind)) setState(() => _inspecting = null);
+    final result = _controller.castSpell(kind);
+    setState(() {
+      _castNote = switch (result) {
+        CastResult.done => null,
+        CastResult.missed => 'どの道も敵に届かなかった。回数は減っていない',
+        CastResult.unavailable => 'いまは使えない',
+      };
+      if (result == CastResult.done) _inspecting = null;
+    });
   }
 
   /// 中断の確かめを出しているか。
@@ -269,10 +292,13 @@ class _GameScreenState extends State<GameScreen> {
                       _MageSheet(
                         controller: _controller,
                         kind: _inspecting!,
-                        onSelect: (kind) => setState(
-                          () => _inspecting = kind,
-                        ),
+                        onSelect: (kind) => setState(() {
+                          _inspecting = kind;
+                          // 別の人に移ったら、前の人の空振りの話は消す。
+                          _castNote = null;
+                        }),
                         onCast: _cast,
+                        note: _castNote,
                         onClose: _closeInspect,
                       ),
                   ],
@@ -1546,6 +1572,7 @@ class _MageSheet extends StatelessWidget {
     required this.kind,
     required this.onSelect,
     required this.onCast,
+    required this.note,
     required this.onClose,
   });
 
@@ -1558,6 +1585,9 @@ class _MageSheet extends StatelessWidget {
 
   /// 押して使う力を使う。
   final ValueChanged<MageKind> onCast;
+
+  /// 空振りしたときの一言。無ければ出さない。
+  final String? note;
 
   final VoidCallback onClose;
 
@@ -1638,6 +1668,19 @@ class _MageSheet extends StatelessWidget {
               party.canCast(kind) ? '盤面が動いている' : 'この潜りではもう使った',
               style: AppFont.label(10, color: Palette.textDim),
             ),
+          if (note != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              note!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Palette.danger,
+                fontSize: 12,
+                height: 1.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ],
         const SizedBox(height: 22),
         Row(
