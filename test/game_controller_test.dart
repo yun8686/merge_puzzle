@@ -1097,6 +1097,46 @@ void main() {
       expect(controller.revealedPath, isEmpty);
     });
 
+    test('延焼は、その相だけの鎖を次の1本だけ通す', () {
+      final controller = GameController(
+        rng: Random(3),
+        roster: const [Mage.blaze, Mage.squireBlue],
+      );
+      // 上の行を赤で揃えておく。普段は赤を続けて継げない。
+      final board = controller.board;
+      paintCheckerboard(board, foe: const Cell(7, 5), ward: 3);
+      for (var c = 0; c < 3; c++) {
+        final base = board.grid[0][c]!;
+        board.grid[0][c] = Tile(id: base.id, phase: Phase.red);
+      }
+      const run = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
+      expect(board.isConnected(run), isFalse);
+
+      expect(controller.castSpell(MageKind.blaze), CastResult.done);
+      expect(board.spreadPhase, Phase.red);
+      expect(board.isConnected(run), isTrue);
+
+      // 1本編んだら元に戻る。
+      trace(controller, run);
+      expect(controller.commitPath(), isNotNull);
+      expect(board.spreadPhase, isNull, reason: '延焼は1本きり');
+      expect(controller.party.canCast(MageKind.blaze), isFalse);
+    });
+
+    test('その相だけで3枚つながらなければ空振りで、回数も減らない', () {
+      final controller = GameController(
+        rng: Random(3),
+        roster: const [Mage.blaze, Mage.squireBlue],
+      );
+      // 市松のままなら赤は飛び飛び。緩めても編める鎖は1本も増えない。
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 3);
+      expect(controller.board.hasSamePhaseRun(Phase.red), isFalse);
+
+      expect(controller.castSpell(MageKind.blaze), CastResult.missed);
+      expect(controller.board.spreadPhase, isNull);
+      expect(controller.party.canCast(MageKind.blaze), isTrue, reason: '減らない');
+    });
+
     test('連れていない魔導士の力は使えない', () {
       final controller = newController();
       paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);

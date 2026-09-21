@@ -85,6 +85,10 @@ class Mage {
   /// 能力の説明。画面にそのまま出す。能力から作るので、数値とずれない。
   String get effect => ability?.describe(phase) ?? '特殊な力は持たない';
 
+  /// 押して使う力の説明。持たない者は null。
+  /// **相はここで埋める**ので、力の側は誰のものかを知らないままでいられる。
+  String? get spellEffect => spell?.describe(phase);
+
   /// 従者の体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
   /// 始まりの2人で 90 あり、1本目のダンジョンはこれで通る。
   static const int squireHp = 45;
@@ -129,6 +133,7 @@ class Mage {
     name: '烈火の魔導士',
     hp: 30,
     ability: Ability(SamePhase(blazeSame), PowerUp(2)),
+    spell: Spread(),
   );
   static const gale = Mage._(
     kind: MageKind.gale,

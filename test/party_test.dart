@@ -18,12 +18,21 @@ Party partyOf(List<Mage> members) =>
 class _FakeStage implements SpellStage {
   int revealed = 0;
 
+  /// 延焼を頼まれた相。頼まれていなければ null。
+  Phase? spreadTo;
+
   /// 舞台が「できた」と答えるか。
   bool answer = true;
 
   @override
   bool revealBestRoute() {
     revealed++;
+    return answer;
+  }
+
+  @override
+  bool spread(Phase phase) {
+    spreadTo = phase;
     return answer;
   }
 }
@@ -56,13 +65,27 @@ void main() {
     });
 
     test('押して使う力は、条件と効き目の組とは別に持つ', () {
-      // 鎖を見ないので [Ability] には収まらない。持つのは風だけ。
+      // 鎖を見ないので [Ability] には収まらない。
       expect(Mage.gale.spell, isA<Foresee>());
       expect(Mage.gale.spell!.label, '先読み');
+      expect(Mage.blaze.spell, isA<Spread>());
+      expect(Mage.blaze.spell!.label, '延焼');
+      const withSpell = {MageKind.gale, MageKind.blaze};
       for (final mage in Mage.roster) {
-        if (mage.kind == MageKind.gale) continue;
+        if (withSpell.contains(mage.kind)) continue;
         expect(mage.spell, isNull, reason: mage.name);
       }
+    });
+
+    test('押して使う力の説明にも、持ち主の相が入る', () {
+      // 力の側は誰のものかを知らない。相を受け取るから、同じ力を別の相の
+      // 魔導士に持たせても文が付いてくる。
+      expect(Mage.blaze.spellEffect, '次の1本だけ、赤どうしを継げるようになる');
+      expect(
+        const Spread().describe(Phase.blue),
+        '次の1本だけ、青どうしを継げるようになる',
+      );
+      expect(Mage.ember.spellEffect, isNull, reason: '持たない者は null');
     });
 
     test('従者は能力を持たない', () {
@@ -209,15 +232,21 @@ void main() {
       // **呼ぶ側に「この力ならこうする」は無い。** 力を増やしても
       // `GameController.castSpell` は変わらない。
       final stage = _FakeStage();
-      expect(const Foresee().cast(stage), isTrue);
+      expect(const Foresee().cast(stage, Phase.red), isTrue);
       expect(stage.revealed, 1);
+      expect(stage.spreadTo, isNull, reason: '先読みは決まりを緩めない');
+
+      // 延焼は自分の相を渡すだけ。どう緩めるかは盤面の側の仕事。
+      expect(const Spread().cast(stage, Phase.red), isTrue);
+      expect(stage.spreadTo, Phase.red);
 
       stage.answer = false;
       expect(
-        const Foresee().cast(stage),
+        const Foresee().cast(stage, Phase.red),
         isFalse,
         reason: '何も起きなければ false。呼んだ側は回数を減らさない',
       );
+      expect(const Spread().cast(stage, Phase.red), isFalse);
     });
 
     test('潜り1本に1回だけ。使い切ったら戻らない', () {

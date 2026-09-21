@@ -257,9 +257,11 @@ class GameController extends ChangeNotifier {
   /// 「どこを通れば効くか」であって、「どこかは繋がる」ではない。
   CastResult castSpell(MageKind kind) {
     if (!acceptsInput) return CastResult.unavailable;
-    final spell = party.spellOf(kind);
+    final mage = party.memberOf(kind);
+    final spell = mage?.spell;
     if (spell == null || !party.canCast(kind)) return CastResult.unavailable;
-    if (!spell.cast(_Stage(this))) return CastResult.missed;
+    // 相は持ち主から渡す。力の側は誰のものかを知らない。
+    if (!spell.cast(_Stage(this), mage!.phase)) return CastResult.missed;
     party.spendCast(kind);
     notifyListeners();
     return CastResult.done;
@@ -423,6 +425,8 @@ class GameController extends ChangeNotifier {
     // 盤面が変わるので、先読みで見せた道はここで捨てる。
     revealedPath = const [];
     hintPath = const [];
+    // 延焼は1本きり。編んだところで決まりは元に戻る。
+    board.spreadPhase = null;
 
     score += result.gained;
     // 風が居れば、長い鎖を編んだ手は殴られずに済む。効かせるのは毎ターンの
@@ -520,6 +524,17 @@ class _Stage implements SpellStage {
     if (route.isEmpty) return false;
     _game.revealedPath = route;
     _game.hintPath = route;
+    return true;
+  }
+
+  @override
+  bool spread(Phase phase) {
+    // その相だけでは3枚もつながらない盤面なら、緩めても編める鎖は増えない。
+    if (!_game.board.hasSamePhaseRun(phase)) return false;
+    _game.board.spreadPhase = phase;
+    // 見せてあった道は、緩めた決まりの下では最善とは限らない。
+    _game.revealedPath = const [];
+    _game.hintPath = const [];
     return true;
   }
 }

@@ -52,10 +52,11 @@ class Chain:
     `verify()` が、並び全体で判定する実装と一致することを確かめている。
 
     kind:
-      'old'   巡回のみ … 直前 N-1 枚と違う（第7段階）
-      'user'  2色の交互 or 巡回 … いまの決まり（第8段階）
-      'new'   どの N+1 枚にも N 色 … 一度入れて戻した案
-      'loose' 隣と違えばよい … 素直な一般化
+      'old'    巡回のみ … 直前 N-1 枚と違う（第7段階）
+      'user'   2色の交互 or 巡回 … いまの決まり（第8段階）
+      'new'    どの N+1 枚にも N 色 … 一度入れて戻した案
+      'loose'  隣と違えばよい … 素直な一般化
+      'spread' いまの決まり or 1色だけ … 烈火の延焼（第17段階）
     """
 
     def __init__(self, first, N, kind):
@@ -65,11 +66,18 @@ class Chain:
         self.count[first] = 1
         self.distinct = 1
         self.cycle_ok = True  # 巡回の決まりを全位置で満たしているか
+        self.doubled = False  # 同じ相が隣り合ったことがあるか（延焼だけ）
 
     def _side(self, k, at_front):
         return list(self.seq)[:k] if at_front else list(self.seq)[-k:]
 
     def can_push(self, p, at_front):
+        # 延焼：1色だけで編んでいるあいだは、同じ相をいくらでも続けられる。
+        if self.kind == 'spread' and self.distinct == 1 and p == self.seq[0]:
+            return True
+        # 一度でも同じ相を隣り合わせたら、混ぜた並びは元の決まりを満たせない。
+        if self.doubled:
+            return False
         if p == (self.seq[0] if at_front else self.seq[-1]):
             return False
         if self.kind == 'loose':
@@ -80,12 +88,15 @@ class Chain:
         new_cycle = self.cycle_ok and p not in self._side(self.w, at_front)
         if self.kind == 'old':
             return new_cycle
-        # 'user'：2色だけなら交互で通る。3色目に触れたら巡回が要る。
+        # 'user' と 'spread'：2色だけなら交互で通る。3色目に触れたら巡回が要る。
         new_distinct = self.distinct + (1 if self.count[p] == 0 else 0)
         return new_distinct <= 2 or new_cycle
 
     def push(self, p, at_front):
-        saved = (self.cycle_ok, self.distinct)
+        saved = (self.cycle_ok, self.distinct, self.doubled)
+        self.doubled = self.doubled or p == (
+            self.seq[0] if at_front else self.seq[-1]
+        )
         self.cycle_ok = self.cycle_ok and p not in self._side(self.w, at_front)
         if self.count[p] == 0:
             self.distinct += 1
@@ -96,7 +107,7 @@ class Chain:
     def pop(self, at_front, saved):
         p = self.seq.popleft() if at_front else self.seq.pop()
         self.count[p] -= 1
-        self.cycle_ok, self.distinct = saved
+        self.cycle_ok, self.distinct, self.doubled = saved
 
 
 def longest_through(g, cell, N, kind, cap):
@@ -152,6 +163,8 @@ def verify():
 
     def full_ok(seq, N, kind):
         w = max(1, N - 1)
+        if kind == 'spread' and len(set(seq)) == 1:
+            return True
         for i in range(1, len(seq)):
             if seq[i] == seq[i - 1]:
                 return False
@@ -166,9 +179,10 @@ def verify():
         )
         return cyc if kind == 'old' else (len(set(seq)) <= 2 or cyc)
 
+
     rng = random.Random(7)
     bad = 0
-    for kind in ('old', 'user', 'new', 'loose'):
+    for kind in ('old', 'user', 'new', 'loose', 'spread'):
         for N in (2, 3):
             for _ in range(4000):
                 first = rng.randrange(N)
@@ -193,6 +207,8 @@ CASES = [
     ('3相・2色の交互 or 巡回（いま）', 3, 'user'),
     ('3相・どの4枚にも3色', 3, 'new'),
     ('3相・隣と違えばよい', 3, 'loose'),
+    ('3相・いまの決まり or 1色だけ（延焼の1本）', 3, 'spread'),
+    ('2相・いまの決まり or 1色だけ（延焼の1本）', 2, 'spread'),
 ]
 
 if __name__ == '__main__':

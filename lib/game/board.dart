@@ -294,6 +294,15 @@ class Board {
   /// 失う（README 第8段階）。
   int get window => phases.length < 2 ? 1 : phases.length - 1;
 
+  /// **いま延焼している相。** この相だけで編んだ鎖が、決まりを満たして
+  /// いなくても通る（[_chainFits]）。null なら普段どおり。
+  ///
+  /// 烈火の「延焼」（`Spread`）が立て、鎖が1本編まれたところで
+  /// `GameController` が下ろす。**1本きり**なのは、決まりそのものを緩めて
+  /// いるため――常時通ると敵マスを通る最長パスが跳ね上がって、希少な相の
+  /// ジレンマも雷の8枚条件も意味を失う（README 第8段階）。
+  Phase? spreadPhase;
+
   final Random _rng;
   late final List<List<Tile?>> grid;
   int _nextId = 0;
@@ -452,7 +461,13 @@ class Board {
   /// （＝巡回）」のどちらかを満たす。**
   ///
   /// 相が2つなら前者が常に成り立つので、決まりは「交互」1本になる。
+  ///
+  /// [spreadPhase] が立っているあいだは3本目が生える――**その相だけで
+  /// 編んだ鎖**も通る。混ぜたら元の決まりに戻るので、緩むのは一択ぶん。
   bool _chainFits(List<Phase> seq) {
+    // 延焼。同じ相だけで編んだ鎖は、隣り合う2枚が同じでも通る。
+    final spread = spreadPhase;
+    if (spread != null && seq.every((p) => p == spread)) return true;
     for (var i = 1; i < seq.length; i++) {
       if (seq[i] == seq[i - 1]) return false;
     }
@@ -722,6 +737,38 @@ class Board {
     final t = tileAt(cell);
     if (t == null || !t.isFoe) return false;
     return findPathThrough(cell, t.powerToFell).isNotEmpty;
+  }
+
+  /// [phase] のマスだけで [minPathLength] 枚つながるところがあるか。
+  ///
+  /// **延焼が何も変えない盤面を見分けるのに使う。** その相が飛び飛びにしか
+  /// 無ければ、決まりを緩めても編める鎖は1本も増えない――そこで回数を
+  /// 減らさないように、立てる前に訊く。
+  ///
+  /// 繋がっている塊の大きさで見る。同じ相が3マス以上ひと繋がりなら、その中に
+  /// 3枚の道が必ずある（木にして端から辿ればよい）。
+  bool hasSamePhaseRun(Phase phase) {
+    final seen = <Cell>{};
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final start = Cell(r, c);
+        if (seen.contains(start) || tileAt(start)?.phase != phase) continue;
+        var size = 0;
+        final stack = <Cell>[start];
+        seen.add(start);
+        while (stack.isNotEmpty) {
+          final cell = stack.removeLast();
+          size++;
+          if (size >= minPathLength) return true;
+          for (final n in neighborsOf(cell)) {
+            if (seen.contains(n) || tileAt(n)?.phase != phase) continue;
+            seen.add(n);
+            stack.add(n);
+          }
+        }
+      }
+    }
+    return false;
   }
 
   /// 成立する手が1つでも残っているか。無ければ手詰まり。

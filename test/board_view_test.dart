@@ -436,6 +436,39 @@ void main() {
     expect(controller.party.canCast(MageKind.gale), isTrue);
   });
 
+  testWidgets('延焼を使うと、盤面の下の決まりが入れ替わる', (tester) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final controller = GameController(
+      rng: Random(3),
+      roster: const [Mage.blaze, Mage.squireBlue],
+    );
+    paintCheckerboard(controller.board);
+    // 上の行を赤で揃える。緩めれば継げるが、普段は継げない並び。
+    for (var c = 0; c < 3; c++) {
+      final base = controller.board.grid[0][c]!;
+      controller.board.grid[0][c] = Tile(id: base.id, phase: Phase.red);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+    expect(find.text('同じ色を続けずに、なぞって鎖を編む'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('party-blaze')));
+    await tester.pump();
+    await tester.tap(find.text('使う'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 盤面の外で言わないと、押したのに何も起きていないように見える。
+    expect(controller.board.spreadPhase, Phase.red);
+    expect(find.textContaining('延焼中'), findsOneWidget);
+    expect(find.text('同じ色を続けずに、なぞって鎖を編む'), findsNothing);
+  });
+
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
     // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、

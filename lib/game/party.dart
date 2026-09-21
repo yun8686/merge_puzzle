@@ -218,6 +218,16 @@ abstract interface class SpellStage {
   /// 1でも届く道が無ければ false。**そのときは何も起きていない**ので、
   /// 呼んだ側は回数を減らさない。
   bool revealBestRoute();
+
+  /// **次の1本だけ、[phase] だけで編んだ鎖を通す。**
+  ///
+  /// 継ぎ方の決まりに、鎖ごとの3本目の選択肢を足すかたち――「2色の交互」
+  /// 「N 色の巡回」に並んで「[phase] だけ」が通る。混ぜたら元の決まりに
+  /// 戻るので、緩むのは1本のあいだの一択ぶんだけ。
+  ///
+  /// その相だけで3枚つながるところが盤面に無ければ false。**立てても何も
+  /// 変わらない**ので、呼んだ側は回数を減らさない。
+  bool spread(Phase phase);
 }
 
 /// 押して使う力。**鎖を見ない。押して使う。**
@@ -236,10 +246,14 @@ abstract class Spell {
   String get label;
 
   /// 何が起きるか。説明文も型から作るので、手で書いた文とずれない。
-  String describe();
+  ///
+  /// [phase] は持ち主の相。[Trigger.describe] と同じで、**力の側は誰の
+  /// ものかを知らない**――相を受け取るから、同じ力を別の相の魔導士にも
+  /// 持たせられる。
+  String describe(Phase phase);
 
   /// 使う。**何も起きなければ false**（呼んだ側は回数を減らさない）。
-  bool cast(SpellStage stage);
+  bool cast(SpellStage stage, Phase phase);
 }
 
 /// 能力ひとつ。**条件と効き目の組でしか書けない。**
@@ -320,12 +334,7 @@ class Party {
       : spellUses - (spellsSpent[kind] ?? 0);
 
   /// 連れている [kind] の押して使う力。連れていなければ null。
-  Spell? spellOf(MageKind kind) {
-    for (final m in members) {
-      if (m.kind == kind) return m.spell;
-    }
-    return null;
-  }
+  Spell? spellOf(MageKind kind) => memberOf(kind)?.spell;
 
   /// 1回ぶん使う。残っていなければ false（何も減らさない）。
   bool spendCast(MageKind kind) {
@@ -335,6 +344,14 @@ class Party {
   }
 
   bool has(MageKind kind) => members.any((m) => m.kind == kind);
+
+  /// 連れている [kind]。連れていなければ null。
+  Mage? memberOf(MageKind kind) {
+    for (final mage in members) {
+      if (mage.kind == kind) return mage;
+    }
+    return null;
+  }
 
   /// まだ仲間になっていない次の魔導士。全員揃っていれば null。
   /// 道中では増えないので、いまはガチャ側が未所持を数えるのに使う。

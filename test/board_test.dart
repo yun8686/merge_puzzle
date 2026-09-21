@@ -450,6 +450,62 @@ void main() {
     });
   });
 
+  group('延焼（その相だけで継ぐ）', () {
+    test('立てると同じ相だけの鎖が通り、混ぜると元の決まりに戻る', () {
+      final board = boardOf([
+        ['o', 'o', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+      const run = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
+      expect(board.isConnected(run), isFalse, reason: '普段は赤を続けられない');
+
+      board.spreadPhase = Phase.red;
+      expect(board.isConnected(run), isTrue);
+
+      // 混ぜたら元の決まり。赤赤の重なりが残るので通らない。
+      expect(
+        board.isConnected([...run, const Cell(0, 3)]),
+        isFalse,
+        reason: '赤だけか、いつもの決まりかのどちらか',
+      );
+      // いつもの決まりを満たす鎖は、延焼中でもそのまま通る。
+      expect(
+        board.isConnected(const [Cell(0, 3), Cell(1, 3), Cell(1, 2)]),
+        isTrue,
+        reason: '青→赤→青',
+      );
+    });
+
+    test('その相だけで3枚つながる場所があるかを見分ける', () {
+      // 赤が飛び飛び。緩めても編める鎖は増えない。
+      final apart = boardOf([
+        ['o', 'e', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+      expect(apart.hasSamePhaseRun(Phase.red), isFalse);
+      expect(apart.hasSamePhaseRun(Phase.blue), isFalse);
+
+      // ひと繋がりに3マス。L 字でも角を曲がれるので通る。
+      final run = boardOf([
+        ['o', 'o', 'e', 'e'],
+        ['o', 'e', 'e', 'o'],
+      ]);
+      expect(run.hasSamePhaseRun(Phase.red), isTrue);
+    });
+
+    test('延焼中は手詰まりの見方も変わる', () {
+      // 1色で塗り潰した盤面。普段はどこへも繋げない。
+      final board = boardOf([
+        ['o', 'o', 'o', 'o'],
+        ['o', 'o', 'o', 'o'],
+      ]);
+      expect(board.hasAnyChain(), isFalse);
+
+      board.spreadPhase = Phase.red;
+      expect(board.hasAnyChain(), isTrue);
+    });
+  });
+
   group('先読み（いちばん深く届く道）', () {
     test('通る敵が多いほうを採る', () {
       // 敵は2体とも守り3・体力1。1体だけ通る道より、両方通る道のほうが深い。

@@ -674,15 +674,7 @@ class _Footer extends StatelessWidget {
                           ),
                         ],
                       )
-                    : const Text(
-                        '同じ色を続けずに、なぞって鎖を編む',
-                        key: ValueKey('hint'),
-                        style: TextStyle(
-                          color: Palette.textMuted,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                    : _RuleNote(spread: controller.board.spreadPhase),
               ),
             ),
           ),
@@ -913,6 +905,51 @@ class _DefeatOverlay extends StatelessWidget {
 ///
 /// 潜っている途中の体力も戦果もここで打ち切られる。取り返しが付かない側なので、
 /// 何が失われるかを出したうえで訊く。既定（目立つほう）は「続ける」。
+/// 盤面の下に出す、いまの継ぎ方の決まり。
+///
+/// **延焼のあいだはここが入れ替わる。** 決まりが緩んでいることを盤面の外で
+/// 言わないと、押したのに何も起きていないように見える（盤面の側は、継げる
+/// マスの光り方が変わるだけ）。緩めた相の色で出すので、どの色が繋がるように
+/// なったのかも読める。
+class _RuleNote extends StatelessWidget {
+  const _RuleNote({required this.spread});
+
+  /// 延焼している相。null なら普段の決まり。
+  final Phase? spread;
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = spread;
+    if (phase == null) {
+      return const Text(
+        '同じ色を続けずに、なぞって鎖を編む',
+        key: ValueKey('hint'),
+        style: TextStyle(
+          color: Palette.textMuted,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+    return Row(
+      key: const ValueKey('hint-spread'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PhaseSwatch(phase: phase, size: 14),
+        const SizedBox(width: 7),
+        Text(
+          '延焼中　いまの1本は${phase.label}どうしも継げる',
+          style: TextStyle(
+            color: Palette.baseFor(phase),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _AbortOverlay extends StatelessWidget {
   const _AbortOverlay({
     required this.controller,
@@ -1646,7 +1683,7 @@ class _MageSheet extends StatelessWidget {
           Text(spell.label, style: AppFont.number(17, color: Palette.life)),
           const SizedBox(height: 6),
           Text(
-            spell.describe(),
+            mage.spellEffect!,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Palette.textMuted,
