@@ -1043,6 +1043,33 @@ class _PartySlot extends StatelessWidget {
                       height: 1.3,
                     ),
                   ),
+                  // 押して使う力も編成の判断に乗る。**鎖に勝手に応える能力
+                  // とは別物**なので、名前を前に出して別の行にする。
+                  if (mage.spellEffect case final text?) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mage.spell!.label,
+                          style: AppFont.label(8, color: Palette.gold),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            text,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Palette.textMuted,
+                              fontSize: 9.5,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1134,9 +1161,29 @@ class _MageCard extends StatelessWidget {
                         const SizedBox(height: 3),
                         // 体力は名簿ごとに違う。力のある者ほど薄いので、
                         // ここに出しておかないと編成の判断ができない。
-                        Text(
-                          '体力 ${mage.hp}',
-                          style: AppFont.label(8, color: Palette.life),
+                        //
+                        // 押して使う力は**名前だけ**。札は3枚並びで狭く、
+                        // 説明まで入れると行が増えて札から溢れる。中身は
+                        // 連れていく枠（[_PartySlot]）で読める。
+                        // 狭い端末でも溢れないよう、入らなければ縮める。
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '体力 ${mage.hp}',
+                                style: AppFont.label(8, color: Palette.life),
+                              ),
+                              if (mage.spell case final spell?) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  spell.label,
+                                  style: AppFont.label(8, color: Palette.gold),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -1236,7 +1283,12 @@ class _GachaTab extends StatelessWidget {
             const SizedBox(height: 20),
             const _SectionLabel(label: '直前の招き'),
             _Notice(
-              text: '${drawn!.name} が加わった\n${drawn!.effect}',
+              text: [
+                '${drawn!.name} が加わった',
+                drawn!.effect,
+                if (drawn!.spellEffect case final text?)
+                  '${drawn!.spell!.label}（押して使う）　$text',
+              ].join('\n'),
               tint: Palette.mageColor(drawn!.kind),
             ),
           ],

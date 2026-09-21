@@ -116,6 +116,27 @@ void main() {
     expect(find.text('空き'), findsOneWidget);
   });
 
+  testWidgets('押して使う力も編成の面に出る', (tester) async {
+    await openBase(
+      tester,
+      progress: Progress(
+        owned: {MageKind.blaze},
+        party: [MageKind.blaze, MageKind.squireBlue],
+      ),
+    );
+    await goTab(tester, '一党');
+
+    // 名簿の札は3枚並びで狭いので、名前だけ。
+    expect(rosterText(Mage.blaze, Mage.blaze.spell!.label), findsOneWidget);
+    expect(rosterText(Mage.blaze, Mage.blaze.spellEffect!), findsNothing);
+
+    // 連れていく枠では中身まで読める。**潜る前に判断できないと意味がない。**
+    expect(find.text(Mage.blaze.spellEffect!), findsOneWidget);
+
+    // 持たない者には出ない。
+    expect(rosterText(Mage.ember, Mage.blaze.spell!.label), findsNothing);
+  });
+
   testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {
     await openBase(tester);
     expect(
