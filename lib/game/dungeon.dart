@@ -61,11 +61,11 @@ class FloorSpec {
 class Dungeons {
   const Dungeons._();
 
-  /// 忘れられた坑道。焔ひとりでも踏破できる想定の1本目。
+  /// 忘却の坑道。焔ひとりでも踏破できる想定の1本目。
   /// 守りは薄いところから始め、B3F で初めて体力2の敵に当たる。
   static const cavern = Dungeon(
     id: 'cavern',
-    name: '忘れられた坑道',
+    name: '忘却の坑道',
     floors: [
       FloorSpec([FoeSpec(3)]),
       FloorSpec([FoeSpec(3), FoeSpec(4)]),
@@ -78,11 +78,11 @@ class Dungeons {
     ],
   );
 
-  /// 凍てついた回廊。体力の厚い敵を並べて、殴る回数＝ターンを要求する。
+  /// 氷結の回廊。体力の厚い敵を並べて、殴る回数＝ターンを要求する。
   /// 青の相が枯れると立て直せないので、氷雨や風のような後続が効く。
   static const corridor = Dungeon(
     id: 'corridor',
-    name: '凍てついた回廊',
+    name: '氷結の回廊',
     floors: [
       FloorSpec([FoeSpec(4), FoeSpec(4)]),
       FloorSpec([FoeSpec(5, hp: 2)]),
