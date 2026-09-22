@@ -434,9 +434,9 @@ class _Header extends StatelessWidget {
 
 /// 残りの敵と、相ごとの枚数。
 ///
-/// 相のバーは「強い鎖をまだ編めるか」の目安。鎖は同じ相を続けて継げないので、
-/// **いちばん少ない相の枚数が、編める長さの上限を決める**。だから危ないのは
-/// 常に一番細い相で、そこだけ赤くする。
+/// 色のバーは盤面に何色が残っているかの目安。色の決まりが無くなってからは
+/// チェインの長さを縛らないが、**雷の「3色を含む」のような条件はここで読む**。
+/// いちばん細い色が枯れると、そういう条件が満たせなくなるので赤くする。
 class _StatusBar extends StatelessWidget {
   const _StatusBar({
     required this.phases,
@@ -922,7 +922,7 @@ class _RuleNote extends StatelessWidget {
     final phase = spread;
     if (phase == null) {
       return const Text(
-        '同じ色を続けずに、なぞってつなぐ',
+        '隣り合うマスをなぞってつなぐ　色は問わない',
         key: ValueKey('hint'),
         style: TextStyle(
           color: Palette.textMuted,

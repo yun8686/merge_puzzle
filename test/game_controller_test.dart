@@ -33,19 +33,33 @@ void paintCheckerboard(
 /// [foe] のマスだけ敵にして、制圧扱いにならないようにしておく。
 ///
 /// 手数の制限が無くなってから、階層を落とせるのはこの形だけになった。
+/// 手詰まりにした盤面。**全部のマスを「3枚では傷もつかない敵」で埋める。**
+///
+/// 色を見なくなってから（README 第22段階）、マナのマスが3枚あれば必ず
+/// チェインが立つ。手詰まりにできるのは、盤面にマナが1枚も無くて、どの3枚を
+/// 通しても誰にも傷がつかないときだけになった。**遊んでいて出会う形では
+/// ない**――階層を落とす道が残っていることを確かめるための細工。
+///
+/// 埋めるほうの敵は攻撃力0。毎ターンの反撃を数えるテストが、見たい1体ぶん
+/// だけを読めるようにするため。反撃（守りの合計）は [deadBacklash] で数える。
 void paintDead(Board board, {required Cell foe, int ward = 8}) {
   var id = 0;
   for (var r = 0; r < board.rows; r++) {
     for (var c = 0; c < board.cols; c++) {
       final isHere = foe.row == r && foe.col == c;
-      board.grid[r][c] = Tile(
-        id: id++,
-        phase: Phase.red,
-        ward: isHere ? ward : null,
-      );
+      board.grid[r][c] = isHere
+          ? Tile(id: id++, phase: Phase.red, ward: ward)
+          : Tile(id: id++, phase: Phase.red, ward: deadFillerWard, atk: 0);
     }
   }
 }
+
+/// 埋めるほうの敵の守り。3枚のチェイン（威力3）では傷がつかない厚さ。
+const int deadFillerWard = 4;
+
+/// [paintDead] で埋めた盤面の反撃（＝残っている敵の守りの合計）。
+int deadBacklash(Board board, int ward) =>
+    (board.rows * board.cols - 1) * deadFillerWard + ward;
 
 /// 盤面が詰んだところから、反撃までを通す。
 void strikeThrough(GameController controller) {
@@ -369,6 +383,8 @@ void main() {
   test('落とした階層は同じ深さで編み直す', () {
     final controller = newController();
     paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
+    // 埋めたぶんの守りも反撃になるので、倒れないところまで上げておく。
+    controller.party.hp = 500;
     strikeThrough(controller);
     expect(controller.phase, GamePhase.floorLost);
 
@@ -383,7 +399,7 @@ void main() {
   test('反撃で体力が尽きると全滅する', () {
     final controller = newController();
     paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
-    // 毎ターンの攻撃 2 を受けてもまだ立っていて、反撃の 6 で倒れる高さ。
+    // 毎ターンの攻撃 2 を受けてもまだ立っていて、反撃で倒れる高さ。
     controller.party.hp = 4;
 
     strikeThrough(controller);
@@ -931,15 +947,20 @@ void main() {
     paintDead(controller.board, foe: const Cell(7, 5));
     final hpBefore = controller.party.hp;
     expect(controller.board.hasAnyChain(), isFalse);
+    controller.party.hp = 500;
+    final hpNow = controller.party.hp;
 
     strikeThrough(controller);
 
     expect(controller.phase, GamePhase.floorLost);
     // 反撃は討ち漏らした敵の守りの合計。
-    expect(controller.lastBacklash, 8);
-    // その手ぶんの毎ターンの攻撃（守り8なら攻撃力2）も乗る。
+    final backlash = deadBacklash(controller.board, 8);
+    expect(controller.lastBacklash, backlash);
+    // その手ぶんの毎ターンの攻撃（守り8なら攻撃力2）も乗る。埋めたぶんは
+    // 攻撃力0にしてあるので、ここに出るのは数えたい1体だけ。
     expect(controller.lastHit, Board.attackFor(8));
-    expect(controller.party.hp, hpBefore - 8 - Board.attackFor(8));
+    expect(controller.party.hp, hpNow - backlash - Board.attackFor(8));
+    expect(hpBefore, isPositive);
   });
 
   group('増えた魔導士', () {
@@ -1051,16 +1072,19 @@ void main() {
     test('盾は受ける痛手を半分にする', () {
       final controller = withRoster(const [Mage.aegis]);
       paintDead(controller.board, foe: const Cell(7, 5), ward: 7);
+      controller.party.hp = 500;
       final hpBefore = controller.party.hp;
 
       strikeThrough(controller);
 
       expect(controller.phase, GamePhase.floorLost);
-      // 守り7の敵を討ち漏らした。半分にして切り上げで4。
-      expect(controller.lastBacklash, 4);
+      // 討ち漏らした敵の守りの合計を、半分にして切り上げ。
+      final backlash = deadBacklash(controller.board, 7);
+      final halved = (backlash + 1) ~/ 2;
+      expect(controller.lastBacklash, halved);
       // 毎ターンの攻撃も半分になる。守り7の攻撃力2が1に。
       expect(controller.lastHit, 1);
-      expect(controller.party.hp, hpBefore - 4 - 1);
+      expect(controller.party.hp, hpBefore - halved - 1);
     });
 
     test('名簿は見習い3人と招ける7人で、印は全員ちがう', () {
@@ -1112,20 +1136,17 @@ void main() {
       );
     });
 
-    test('どの道も敵に届かなければ空振りで、回数は減らない', () {
+    test('1色で塗り潰した盤面でも道は見つかる', () {
+      // **空振り（`ActiveResult.missed`）は、いまの決まりでは起きない。**
+      // 色を見なくなったので、どのマスからでも長くつなげる――守り8の敵にも
+      // 届く道が必ずある（README 第22段階）。決まりを入れ直したときに
+      // 空振りの側が戻るので、`missed` を返す口は残してある。
       final controller = galeController();
-      // 1色で塗り潰すと3枚も繋がらない。届く道がどこにも無い盤面。
-      paintDead(controller.board, foe: const Cell(0, 1), ward: 3);
+      paintDead(controller.board, foe: const Cell(0, 1), ward: 8);
 
-      expect(controller.useActive(MageKind.gale), ActiveResult.missed);
-      expect(controller.hintPath, isEmpty, reason: '成立するだけの道でお茶を濁さない');
-      expect(controller.revealedPath, isEmpty);
-      expect(controller.party.canUse(MageKind.gale), isTrue, reason: '減らない');
-
-      // 盤面が戻れば、同じ札がそのまま使える。
-      paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
       expect(controller.useActive(MageKind.gale), ActiveResult.done);
-      expect(controller.party.canUse(MageKind.gale), isFalse);
+      expect(controller.hintPath, isNotEmpty);
+      expect(controller.party.canUse(MageKind.gale), isFalse, reason: '減る');
     });
 
     test('見せた道は、なぞって離しただけでは失われない', () {
@@ -1154,12 +1175,13 @@ void main() {
       expect(controller.revealedPath, isEmpty);
     });
 
-    test('延焼は、その相だけの鎖を次の1本だけ通す', () {
+    test('延焼は立って、1本編んだら下りる', () {
+      // **盤面の振る舞いは変えない**（色の決まりが無くなったため。
+      // README 第22段階）。立って下りる配線だけを見ている。
       final controller = GameController(
         rng: Random(3),
         roster: const [Mage.blaze, Mage.squireBlue],
       );
-      // 上の行を赤で揃えておく。普段は赤を続けて継げない。
       final board = controller.board;
       paintCheckerboard(board, foe: const Cell(7, 5), ward: 3);
       for (var c = 0; c < 3; c++) {
@@ -1167,11 +1189,10 @@ void main() {
         board.grid[0][c] = Tile(id: base.id, phase: Phase.red);
       }
       const run = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
-      expect(board.isConnected(run), isFalse);
+      expect(board.isConnected(run), isTrue, reason: '赤だけでも通る');
 
       expect(controller.useActive(MageKind.blaze), ActiveResult.done);
       expect(board.spreadPhase, Phase.red);
-      expect(board.isConnected(run), isTrue);
 
       // 1本編んだら元に戻る。
       trace(controller, run);
