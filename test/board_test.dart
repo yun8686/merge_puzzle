@@ -604,4 +604,49 @@ void main() {
       }
     });
   });
+
+  group('降ってくるマナの比率', () {
+    /// 空の盤面を [Board.refill] で埋めて、相ごとの枚数を数える。
+    ///
+    /// 初期盤面（`_fillInitial`）は比率を無視して均等に敷くので、比率が
+    /// 効くのは**補充のときだけ**。数えるのはそちら。
+    List<int> tally(List<Phase> phases, {List<int>? weights}) {
+      final board = Board(phases: phases, weights: weights, rng: Random(7));
+      final counts = List<int>.filled(phases.length, 0);
+      for (var round = 0; round < 200; round++) {
+        board.refill();
+        for (var r = 0; r < board.rows; r++) {
+          for (var c = 0; c < board.cols; c++) {
+            counts[phases.indexOf(board.grid[r][c]!.phase)]++;
+            board.grid[r][c] = null;
+          }
+        }
+      }
+      return counts;
+    }
+
+    test('赤と青をひとりずつなら 1:1 で降る', () {
+      // 比率は「その相の魔導士が何人居るか」（`Party.phaseWeights`）。
+      // 赤1人・青1人なら [1, 1]。盤面がどちらかに寄ってはいけない。
+      final counts = tally(const [Phase.red, Phase.blue]);
+      final total = counts[0] + counts[1];
+      expect(total, 200 * 8 * 6);
+      expect(counts[0] / total, closeTo(0.5, 0.02));
+      expect(counts[1] / total, closeTo(0.5, 0.02));
+    });
+
+    test('同じ相を2人連れると、その相が倍で降る', () {
+      final counts = tally(const [Phase.red, Phase.blue], weights: const [2, 1]);
+      final total = counts[0] + counts[1];
+      expect(counts[0] / total, closeTo(2 / 3, 0.02));
+    });
+
+    test('相が3つでも、ひとりずつなら 1:1:1', () {
+      final counts = tally(const [Phase.red, Phase.blue, Phase.violet]);
+      final total = counts[0] + counts[1] + counts[2];
+      for (final n in counts) {
+        expect(n / total, closeTo(1 / 3, 0.02));
+      }
+    });
+  });
 }

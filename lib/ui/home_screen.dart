@@ -649,11 +649,16 @@ class _DungeonTab extends StatelessWidget {
                     child: _DungeonCard(
                       dungeon: Dungeons.all[i],
                       cleared: progress.hasCleared(Dungeons.all[i].id),
-                      // 前の1本を踏破すると開く。いきなり竜の巣に入って
+                      // 前の1本をクリアすると開く。いきなり竜の巣に入って
                       // 何も分からないまま全滅する入り方を塞ぐため。
+                      //
+                      // **一度クリアした1本は、前が未クリアでも開いたまま。**
+                      // 梯子の途中に新しいダンジョンを足したとき、すでに
+                      // クリアしてある先の1本が黙って閉じてしまう。
                       locked:
                           i > 0 &&
-                          !progress.hasCleared(Dungeons.all[i - 1].id),
+                          !progress.hasCleared(Dungeons.all[i - 1].id) &&
+                          !progress.hasCleared(Dungeons.all[i].id),
                       needs: i > 0 ? Dungeons.all[i - 1].name : null,
                       onTap: () => onDive(Dungeons.all[i]),
                     ),

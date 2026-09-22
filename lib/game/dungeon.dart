@@ -61,41 +61,88 @@ class FloorSpec {
 class Dungeons {
   const Dungeons._();
 
-  /// 忘却の坑道。焔ひとりでも踏破できる想定の1本目。
-  /// 守りは薄いところから始め、B3F で初めて体力2の敵に当たる。
+  /// はじまりの洞窟。**遊び方を通した直後の2人（体力 90）で通るように組む。**
+  /// 守りは3から、体力持ちは最後の階層に1体だけ。ここで詰まると、編成も
+  /// ガチャも試す前に終わってしまう。
+  static const hollow = Dungeon(
+    id: 'hollow',
+    name: 'はじまりの洞窟',
+    floors: [
+      FloorSpec([FoeSpec(3)]),
+      FloorSpec([FoeSpec(3), FoeSpec(3)]),
+      FloorSpec([FoeSpec(4)]),
+      FloorSpec([FoeSpec(4), FoeSpec(3)]),
+      // 主。守り4・体力2は、6枚つなげば1本で倒せる。
+      FloorSpec([FoeSpec(4, hp: 2), FoeSpec(3)]),
+    ],
+  );
+
+  /// 忘却の坑道。守り5と、道中の体力2が出てくる2本目。
+  /// 始まりの2人でも通るが、ここから魔晶を貯めて3人目を考えはじめる。
   static const cavern = Dungeon(
     id: 'cavern',
     name: '忘却の坑道',
     floors: [
-      FloorSpec([FoeSpec(3)]),
-      FloorSpec([FoeSpec(3), FoeSpec(4)]),
+      FloorSpec([FoeSpec(3), FoeSpec(3)]),
+      FloorSpec([FoeSpec(4), FoeSpec(3)]),
       FloorSpec([FoeSpec(4, hp: 2)]),
       FloorSpec([FoeSpec(5), FoeSpec(3), FoeSpec(3)]),
       FloorSpec([FoeSpec(5, hp: 2), FoeSpec(4)]),
-      FloorSpec([FoeSpec(6), FoeSpec(5), FoeSpec(3)]),
-      // 主。守り6・体力3は1本で討つのに威力8が要る。取り巻きが手数を食う。
-      FloorSpec([FoeSpec(6, hp: 3), FoeSpec(3), FoeSpec(3)]),
+      FloorSpec([FoeSpec(5, hp: 2), FoeSpec(4), FoeSpec(3)]),
     ],
   );
 
   /// 氷結の回廊。体力の厚い敵を並べて、殴る回数＝ターンを要求する。
-  /// 青の相が枯れると立て直せないので、氷雨や風のような後続が効く。
+  /// 守り6がここで初めて出る（攻撃力2の敵＝1手の値段が倍）。
   static const corridor = Dungeon(
     id: 'corridor',
     name: '氷結の回廊',
     floors: [
       FloorSpec([FoeSpec(4), FoeSpec(4)]),
-      FloorSpec([FoeSpec(5, hp: 2)]),
+      FloorSpec([FoeSpec(5), FoeSpec(4)]),
+      FloorSpec([FoeSpec(5, hp: 2), FoeSpec(4)]),
+      FloorSpec([FoeSpec(6), FoeSpec(4), FoeSpec(3)]),
       FloorSpec([FoeSpec(5, hp: 2), FoeSpec(5, hp: 2)]),
-      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(4, hp: 2)]),
-      FloorSpec([FoeSpec(5, hp: 3), FoeSpec(3), FoeSpec(3)]),
-      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(6, hp: 2), FoeSpec(4)]),
-      FloorSpec([FoeSpec(7, hp: 3), FoeSpec(5, hp: 2), FoeSpec(5, hp: 2)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(4)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(5), FoeSpec(4)]),
     ],
   );
 
-  /// 竜の巣。守りが厚く、1本の鎖に要る枚数が大きい。
-  /// 威力を底上げする魔導士が揃っていないと、そもそも傷がつかない。
+  /// 静寂の遺跡。体力2が当たり前になり、守り7が顔を出す。
+  /// 始まりの2人（90）では届かない。3人目を入れるかどうかの分かれ目。
+  static const ruins = Dungeon(
+    id: 'ruins',
+    name: '静寂の遺跡',
+    floors: [
+      FloorSpec([FoeSpec(5), FoeSpec(5)]),
+      FloorSpec([FoeSpec(6), FoeSpec(4), FoeSpec(4)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(5)]),
+      FloorSpec([FoeSpec(5, hp: 2), FoeSpec(5, hp: 2), FoeSpec(4)]),
+      FloorSpec([FoeSpec(7), FoeSpec(5, hp: 2)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(6, hp: 2), FoeSpec(4)]),
+      FloorSpec([FoeSpec(7, hp: 2), FoeSpec(5, hp: 2), FoeSpec(5)]),
+    ],
+  );
+
+  /// 雷鳴の塔。体力3がここから出る。威力を底上げするスキルか、
+  /// 受けを減らすスキル（盾・氷雨）が無いと手数のぶんだけ削られる。
+  static const tower = Dungeon(
+    id: 'tower',
+    name: '雷鳴の塔',
+    floors: [
+      FloorSpec([FoeSpec(6), FoeSpec(5)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(5), FoeSpec(5)]),
+      FloorSpec([FoeSpec(7, hp: 2), FoeSpec(6)]),
+      FloorSpec([FoeSpec(6, hp: 2), FoeSpec(6, hp: 2)]),
+      FloorSpec([FoeSpec(7, hp: 2), FoeSpec(6, hp: 2), FoeSpec(5)]),
+      FloorSpec([FoeSpec(7, hp: 2), FoeSpec(6), FoeSpec(5)]),
+      // 主。体力3はここで初めて出る。
+      FloorSpec([FoeSpec(7, hp: 3), FoeSpec(6, hp: 2), FoeSpec(6)]),
+    ],
+  );
+
+  /// 竜の巣。守りが厚く、1本のチェインに要る枚数が大きい。
+  /// 威力を底上げする魔導士が揃っていないと、そもそもダメージが通らない。
   static const lair = Dungeon(
     id: 'lair',
     name: '竜の巣',
@@ -106,12 +153,21 @@ class Dungeons {
       FloorSpec([FoeSpec(6, hp: 2), FoeSpec(6, hp: 2), FoeSpec(6, hp: 2)]),
       FloorSpec([FoeSpec(7, hp: 2), FoeSpec(7, hp: 2), FoeSpec(5)]),
       FloorSpec([FoeSpec(8), FoeSpec(7, hp: 2), FoeSpec(6)]),
-      // 竜。守り8・体力3は1本で討つのに威力10が要る。
+      // 竜。守り8・体力3は1本で倒すのに威力10が要る。
       FloorSpec([FoeSpec(8, hp: 3), FoeSpec(7, hp: 2), FoeSpec(7, hp: 2)]),
     ],
   );
 
-  static const List<Dungeon> all = [cavern, corridor, lair];
+  /// 挑む順。**前の1本をクリアすると次が解放される**ので、この並びが
+  /// そのまま難易度の梯子になる。急な段差を作らないこと。
+  static const List<Dungeon> all = [
+    hollow,
+    cavern,
+    corridor,
+    ruins,
+    tower,
+    lair,
+  ];
 
   /// [id] のダンジョン。見つからなければ1本目。
   static Dungeon byId(String id) {

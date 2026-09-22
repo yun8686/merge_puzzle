@@ -250,6 +250,18 @@ void main() {
       }
     });
 
+    test('補充の比率は、その相の魔導士の人数', () {
+      // **盤面に降ってくる比率はここで決まる**（`Board` の weights）。
+      // 赤ひとり・青ひとりなら 1:1。同じ相を2人連れたときだけ偏る。
+      final even = Party.of([Mage.squireRed, Mage.squireBlue]);
+      expect(even.phases, [Phase.red, Phase.blue]);
+      expect(even.phaseWeights, [1, 1]);
+
+      final leaning = Party.of([Mage.ember, Mage.blaze, Mage.squireBlue]);
+      expect(leaning.phases, [Phase.red, Phase.blue]);
+      expect(leaning.phaseWeights, [2, 1]);
+    });
+
     test('見習いは相を1つずつ持つ。始まりの盤面が1色にならない', () {
       expect(
         Mage.squires.map((m) => m.phase).toSet().length,

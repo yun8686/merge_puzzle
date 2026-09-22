@@ -137,7 +137,7 @@ void main() {
     expect(rosterText(Mage.ember, Mage.blaze.active!.name), findsNothing);
   });
 
-  testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {
+  testWidgets('2本目から先は、前の1本をクリアするまで開かない', (tester) async {
     await openBase(tester);
     expect(
       find.text('${Dungeons.all.first.name} をクリアすると解放'),
@@ -153,6 +153,24 @@ void main() {
     expect(
       find.text('${Dungeons.all.first.name} をクリアすると解放'),
       findsNothing,
+    );
+  });
+
+  testWidgets('一度クリアした1本は、前が未クリアでも開いたまま', (tester) async {
+    // **梯子の途中に新しいダンジョンを足したとき**、すでにクリアしてある
+    // 先の1本が黙って閉じると、記録が巻き戻ったように見える。
+    final ahead = Dungeons.all[2];
+    await openBase(tester, progress: Progress(cleared: {ahead.id}));
+
+    expect(
+      find.text('${Dungeons.all[1].name} をクリアすると解放'),
+      findsNothing,
+      reason: 'クリア済みの1本に鍵は掛からない',
+    );
+    // 手前の1本は、その前が未クリアなので閉じたまま。
+    expect(
+      find.text('${Dungeons.all.first.name} をクリアすると解放'),
+      findsOneWidget,
     );
   });
 

@@ -856,14 +856,71 @@ void main() {
       expect(controller.party.hp, Mage.ember.hp + Mage.storm.hp);
     });
 
-    test('ダンジョンは3本あって、どれも7階層', () {
-      expect(Dungeons.all.length, 3);
+    test('ダンジョンは6本。id も名前も重ならない', () {
+      expect(Dungeons.all.length, 6);
+      final ids = <String>{};
+      final names = <String>{};
       for (final d in Dungeons.all) {
-        expect(d.depth, 7, reason: d.id);
+        expect(d.depth, inInclusiveRange(5, 7), reason: d.id);
         expect(Dungeons.byId(d.id).id, d.id);
+        expect(ids.add(d.id), isTrue, reason: d.id);
+        expect(names.add(d.name), isTrue, reason: d.name);
       }
       expect(Dungeons.after(Dungeons.all.last), isNull);
       expect(Dungeons.after(Dungeons.all.first)?.id, Dungeons.all[1].id);
+    });
+
+    test('後ろのダンジョンほど重い。梯子に段差を作らない見張り', () {
+      // **並びがそのまま難易度の梯子**（前の1本をクリアすると次が開く）。
+      // 増やすときに順番を崩すと、初めて遊ぶ人が2本目で詰む。
+      //
+      // 重さは「階層ごとの 体力合計 × 攻撃力合計」の総和で見る。1手ごとに
+      // 殴られるので、体力（＝手数）と攻撃力の積がそのまま浴びる痛手になる
+      // （`tools/sim/damage.py` と同じ見方）。
+      int weightOf(Dungeon d) {
+        var total = 0;
+        for (final floor in d.floors) {
+          var attack = 0;
+          for (final foe in floor.foes) {
+            attack += Board.attackFor(foe.ward);
+          }
+          total += floor.totalFoeHp * attack;
+        }
+        return total;
+      }
+
+      for (var i = 1; i < Dungeons.all.length; i++) {
+        final prev = Dungeons.all[i - 1];
+        final here = Dungeons.all[i];
+        expect(
+          weightOf(here),
+          greaterThan(weightOf(prev)),
+          reason: '${here.id} は ${prev.id} より重いこと',
+        );
+        expect(
+          here.bossWard,
+          greaterThanOrEqualTo(prev.bossWard),
+          reason: '${here.id} の主は ${prev.id} の主より薄くないこと',
+        );
+      }
+    });
+
+    test('1本目は、始まりの2人でも通る重さに収める', () {
+      // **ここで詰むと、編成もガチャも試す前に終わる。** 見習い2人の体力は
+      // 90。1本目は手探りで打っても半分は残る重さにしておく。
+      final first = Dungeons.all.first;
+      expect(first.bossWard, lessThanOrEqualTo(5));
+      var totalHp = 0;
+      for (final floor in first.floors) {
+        totalHp += floor.totalFoeHp;
+        for (final foe in floor.foes) {
+          expect(foe.ward, lessThanOrEqualTo(5), reason: '守りが厚すぎる');
+          expect(foe.hp, lessThanOrEqualTo(2), reason: '体力が厚すぎる');
+        }
+        expect(floor.foes.length, lessThanOrEqualTo(2), reason: '敵が多すぎる');
+      }
+      // 体力の合計＝そのまま手数の目安。90 の体力に対して十分に軽いこと。
+      expect(totalHp, lessThanOrEqualTo(10));
     });
   });
 
