@@ -327,7 +327,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 初めて遊ぶ人の筋書き。
   static final List<_Lesson> _basics = [
     _Lesson(
-      title: 'チェインをつなぐ',
+      label: 'チェインをつなぐ',
       text: '隣り合うマスを指でなぞってつなぐ。\n'
           '**同じ色は続けてつなげない。**\n'
           '光っている道を3枚なぞろう。',
@@ -343,7 +343,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
       route: (b) => _row(5, 0, 5),
     ),
     _Lesson(
-      title: '防御を破る',
+      label: '防御を破る',
       text: 'マスに書かれた数字は、その敵の**防御**。\n'
           '威力がその数字に届けば、ダメージを与えられる。\n'
           '防御3の敵を、3枚つないで倒そう。',
@@ -395,7 +395,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
       route: _downTough,
     ),
     _Lesson(
-      title: '一撃で倒す',
+      label: '一撃で倒す',
       text: '威力が防御を**上回るほど大きく削れる**。\n'
           '防御5に威力6なら、2つぶん。\n'
           '6枚つないで、体力2を一撃で倒そう。',
@@ -418,7 +418,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
       route: _shortAt,
     ),
     _Lesson(
-      title: '並びを変えて倒す',
+      label: '並びを変えて倒す',
       text: '落ちてきたマスで、並びが変わった。\n'
           '**今度は8枚つなげる。**\n'
           '威力8なら防御8に届く。倒そう。',
@@ -461,7 +461,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
       ],
     ),
     _Lesson(
-      title: '3つ目の色を使う',
+      label: '3つ目の色を使う',
       text: '3つ目の色を使うと、ルールが切り替わる。\n'
           '**直前2枚と同じ色はつなげない。**\n'
           '3色を順につなぐ道をなぞろう。',
@@ -476,7 +476,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
       ],
     ),
     _Lesson(
-      title: '3色でもっと長く',
+      label: '3色でもっと長く',
       text: '同じ色に戻らないぶん、**3色のほうが長く伸びる**。\n'
           '長いチェインほど、厚い防御を破れる。\n'
           '7枚つないで、防御6の敵を倒そう。',

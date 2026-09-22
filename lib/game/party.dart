@@ -283,7 +283,7 @@ class Passive {
   String describe(Phase phase) {
     final clause = when.describe(phase);
     final boon = then.describe();
-    return clause.isEmpty ? boon : '${clause}チェイン$boon';
+    return clause.isEmpty ? boon : '$clauseチェイン$boon';
   }
 }
 
