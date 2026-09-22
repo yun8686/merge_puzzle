@@ -163,14 +163,14 @@ class Progress {
       for (final k in party)
         if (k != kind) k,
     ];
-    if (rest.isEmpty) return '最後のひとりは外せない。誰も連れずには潜れない。';
+    if (rest.isEmpty) return '最後のひとりは外せない　誰も連れずにはダンジョンに入れない';
     final seen = <Phase>{};
     for (final k in rest) {
       seen.add(Mage.of(k).phase);
     }
     if (seen.length < minPhases) {
-      return '${Mage.of(kind).name}を外すと相が1色になる。'
-          '同じ相は続けて継げないので、鎖が1枚も編めなくなる。';
+      return '${Mage.of(kind).name}を外すと盤面が1色になる　'
+          '同じ色は続けてつなげないので、チェインが作れなくなる';
     }
     return null;
   }

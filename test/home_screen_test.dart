@@ -63,10 +63,10 @@ void main() {
     // 試用（`?all`）は端末の保存を読まないので、出さないと記録が消えたように
     // 見える。渡さない普段の拠点には出ない。
     await openBase(tester);
-    expect(find.text('試用中／全部開放・保存しない'), findsNothing);
+    expect(find.text('お試しモード　全解放・記録は保存されない'), findsNothing);
 
-    await openBase(tester, banner: '試用中／全部開放・保存しない');
-    expect(find.text('試用中／全部開放・保存しない'), findsOneWidget);
+    await openBase(tester, banner: 'お試しモード　全解放・記録は保存されない');
+    expect(find.text('お試しモード　全解放・記録は保存されない'), findsOneWidget);
   });
 
   testWidgets('拠点は三つの面に分かれ、開くとダンジョンが出る', (tester) async {
@@ -74,7 +74,7 @@ void main() {
 
     // 上の帯と下のタブは、どの面でも見えている。
     expect(find.text('魔晶'), findsOneWidget);
-    for (final tab in ['ダンジョン', '一党', 'ガチャ']) {
+    for (final tab in ['ダンジョン', 'パーティ', 'ガチャ']) {
       expect(find.text(tab), findsOneWidget, reason: tab);
     }
 
@@ -83,12 +83,12 @@ void main() {
       expect(find.text(dungeon.name), findsOneWidget);
     }
     // 連れていく顔ぶれは、挑む前にここから見える。
-    expect(find.text('連れていく'), findsOneWidget);
+    expect(find.text('編成'), findsOneWidget);
   });
 
   testWidgets('一党の面に名簿が並び、持っていない魔導士は伏せてある', (tester) async {
     await openBase(tester);
-    await goTab(tester, '一党');
+    await goTab(tester, 'パーティ');
 
     // 始まりは従者3人だけ。招ける7人は伏せてある。
     for (final squire in Mage.squires) {
@@ -96,7 +96,7 @@ void main() {
     }
     expect(find.text(Mage.storm.name), findsNothing);
     expect(find.text('未所持'), findsNWidgets(Mage.summonable.length));
-    expect(find.text('名簿'), findsOneWidget);
+    expect(find.text('魔導士一覧'), findsOneWidget);
   });
 
   testWidgets('連れていく枠には、印だけでなく名前と能力が出る', (tester) async {
@@ -107,7 +107,7 @@ void main() {
         party: [MageKind.ember, MageKind.squireBlue],
       ),
     );
-    await goTab(tester, '一党');
+    await goTab(tester, 'パーティ');
 
     // 枠と名簿で1枚ずつ。枠の中だけでも誰なのかが読める。
     expect(find.text(Mage.ember.name), findsNWidgets(2));
@@ -124,7 +124,7 @@ void main() {
         party: [MageKind.blaze, MageKind.squireBlue],
       ),
     );
-    await goTab(tester, '一党');
+    await goTab(tester, 'パーティ');
 
     // 名簿の札は3枚並びで狭いので、名前だけ。
     expect(rosterText(Mage.blaze, Mage.blaze.active!.name), findsOneWidget);
@@ -140,7 +140,7 @@ void main() {
   testWidgets('2本目から先は、前の1本を踏破するまで開かない', (tester) async {
     await openBase(tester);
     expect(
-      find.text('${Dungeons.all.first.name} を踏破すると開く'),
+      find.text('${Dungeons.all.first.name} をクリアすると解放'),
       findsOneWidget,
     );
 
@@ -149,9 +149,9 @@ void main() {
       tester,
       progress: Progress(cleared: {Dungeons.all.first.id}),
     );
-    expect(find.text('踏破'), findsOneWidget);
+    expect(find.text('クリア'), findsOneWidget);
     expect(
-      find.text('${Dungeons.all.first.name} を踏破すると開く'),
+      find.text('${Dungeons.all.first.name} をクリアすると解放'),
       findsNothing,
     );
   });
@@ -173,7 +173,7 @@ void main() {
       expect(find.text('魔晶が足りない'), findsOneWidget);
 
       await tapAt(tester, find.text('魔晶が足りない'));
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('未所持'), findsNWidgets(Mage.summonable.length));
     });
 
@@ -184,17 +184,17 @@ void main() {
       );
       await goTab(tester, 'ガチャ');
 
-      await tapAt(tester, find.text('招く　魔晶 ${Progress.gachaCost}'));
+      await tapAt(tester, find.text('召喚　魔晶 ${Progress.gachaCost}'));
 
       // 引いた相手がその場に出る。
-      expect(find.text('直前の招き'), findsOneWidget);
+      expect(find.text('直前の召喚'), findsOneWidget);
 
       final saved = await store.load();
       expect(saved.owned.length, Mage.squires.length + 1);
       expect(saved.shards, 0);
 
       // 名簿の伏せ札が1つ減っている。
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('未所持'), findsNWidgets(Mage.summonable.length - 1));
     });
 
@@ -209,7 +209,7 @@ void main() {
       await goTab(tester, 'ガチャ');
       expect(find.text('全員揃った'), findsOneWidget);
 
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('未所持'), findsNothing);
     });
   });
@@ -221,7 +221,7 @@ void main() {
         tester,
         progress: Progress(owned: {MageKind.storm}),
       );
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('2 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, rosterCard(Mage.storm));
@@ -245,7 +245,7 @@ void main() {
           ],
         ),
       );
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, rosterCard(Mage.gale));
@@ -261,7 +261,7 @@ void main() {
           party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
         ),
       );
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, rosterCard(Mage.squireViolet));
@@ -281,7 +281,7 @@ void main() {
           party: [MageKind.squireRed, MageKind.squireBlue, MageKind.storm],
         ),
       );
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
       expect(find.text('3 / ${Progress.partySlots}'), findsOneWidget);
 
       await tapAt(tester, find.byKey(partySlotKey(MageKind.storm)));
@@ -299,7 +299,7 @@ void main() {
           party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
         ),
       );
-      await goTab(tester, '一党');
+      await goTab(tester, 'パーティ');
 
       // 黙って動かないのがいちばん困る。押させたうえで訳を出す。
       await tapAt(tester, find.byKey(partySlotKey(MageKind.squireViolet)));
@@ -336,7 +336,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(BoardView), findsOneWidget);
-      expect(find.textContaining('使う相が2つだけなら'), findsOneWidget);
+      expect(find.textContaining('使う色が2つだけなら'), findsOneWidget);
 
       // とばしても印は残る。次からは出ない。
       await tester.tap(find.text('とばす'));
@@ -358,7 +358,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.textContaining('使う相が2つだけなら'), findsNothing);
+      expect(find.textContaining('使う色が2つだけなら'), findsNothing);
     });
 
     testWidgets('2色の編成なら出ない', (tester) async {
@@ -371,7 +371,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.textContaining('使う相が2つだけなら'), findsNothing);
+      expect(find.textContaining('使う色が2つだけなら'), findsNothing);
     });
   });
 }

@@ -53,7 +53,7 @@ sealed class Trigger {
 
   /// 「〜な」まで。[Passive.describe] が「鎖」を足して1文にする。
   /// 条件を重ねたとき（[Every]）に前から順に繋がるよう、ここでは
-  /// 「鎖」を書かない。
+  /// 「チェイン」を書かない。
   String describe(Phase phase);
 }
 
@@ -67,7 +67,7 @@ final class SamePhase extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.countOf(phase) >= need;
 
   @override
-  String describe(Phase phase) => '${phase.label}を$need枚以上継いだ';
+  String describe(Phase phase) => '${phase.label}を$need枚以上つないだ';
 }
 
 /// [need] 枚以上継いだ鎖。相は問わない。
@@ -80,7 +80,7 @@ final class ChainLength extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.length >= need;
 
   @override
-  String describe(Phase phase) => '$need枚以上継いだ';
+  String describe(Phase phase) => '$need枚以上つないだ';
 }
 
 /// 自分の相から継ぎ始めた鎖。枚数を寄せる編み方とは噛み合わない。
@@ -91,7 +91,7 @@ final class StartsWith extends Trigger {
   bool met(Phase phase, ChainTally tally) => tally.startPhase == phase;
 
   @override
-  String describe(Phase phase) => '${phase.label}から継ぎ始めた';
+  String describe(Phase phase) => '${phase.label}から始めた';
 }
 
 /// [need] 種類以上の相を含む鎖。
@@ -169,7 +169,7 @@ final class Evade extends Boon {
   const Evade();
 
   @override
-  String describe() => 'を編んだ手は反撃を受けない';
+  String describe() => 'のターンは反撃を受けない';
 }
 
 /// 一党の体力を戻す。
@@ -179,7 +179,7 @@ final class Mend extends Boon {
   final int amount;
 
   @override
-  String describe() => 'で体力を $amount 戻す';
+  String describe() => 'で体力が $amount 回復';
 }
 
 /// 階層に残っている敵すべてを打つ。
@@ -200,7 +200,7 @@ final class Guard extends Boon {
   const Guard();
 
   @override
-  String describe() => '受ける痛手が半分になる';
+  String describe() => '受けるダメージが半分になる';
 }
 
 /// アクティブスキルが触れられること。**盤面そのものは渡さない。**
@@ -278,12 +278,12 @@ class Passive {
 
   bool firesOn(Phase phase, ChainTally tally) => when.met(phase, tally);
 
-  /// 「〜な鎖は威力 +1」のように、条件と効き目を繋いだ1文。
-  /// [Always] のように鎖を見ない条件は空文字を返すので、「鎖」も付けない。
+  /// 「〜なチェインは威力 +1」のように、条件と効き目を繋いだ1文。
+  /// [Always] のように鎖を見ない条件は空文字を返すので、「チェイン」も付けない。
   String describe(Phase phase) {
     final clause = when.describe(phase);
     final boon = then.describe();
-    return clause.isEmpty ? boon : '$clause鎖$boon';
+    return clause.isEmpty ? boon : '${clause}チェイン$boon';
   }
 }
 

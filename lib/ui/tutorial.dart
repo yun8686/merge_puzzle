@@ -100,7 +100,7 @@ class TutorialScreen extends StatefulWidget {
   /// 組み直すまでの繋ぎでしかない。
   static const Dungeon dungeon = Dungeon(
     id: 'tutorial',
-    name: '稽古場',
+    name: 'あそびかた',
     floors: [
       FloorSpec([FoeSpec(3, atk: 1)]),
     ],
@@ -109,7 +109,7 @@ class TutorialScreen extends StatefulWidget {
   /// 3色の稽古場。敵も相の並びも稽古の側が決める。
   static const Dungeon prismDungeon = Dungeon(
     id: 'tutorial-prism',
-    name: '稽古場',
+    name: 'あそびかた',
     floors: [
       FloorSpec([FoeSpec(3, atk: 1)]),
     ],
@@ -327,33 +327,33 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 初めて遊ぶ人の筋書き。
   static final List<_Lesson> _basics = [
     _Lesson(
-      label: '鎖を編む',
-      text: '隣り合うマスを指でなぞって継ぐ。\n'
-          '**同じ相（色）は続けて継げない。**\n'
+      title: 'チェインをつなぐ',
+      text: '隣り合うマスを指でなぞってつなぐ。\n'
+          '**同じ色は続けてつなげない。**\n'
           '光っている道を3枚なぞろう。',
       foes: const [_Foe(Cell(1, 4), 3)],
       route: (b) => _row(5, 1, 3),
     ),
     _Lesson(
       label: '長いほど強い',
-      text: '継いだ枚数が、そのまま鎖の**威力**になる。\n'
-          '下の帯に出ているのが、いまの威力。\n'
+      text: 'つないだ枚数が、そのままチェインの**威力**になる。\n'
+          '下に出ているのが、いまの威力。\n'
           '今度は6枚つないでみよう。',
       foes: const [_Foe(Cell(1, 4), 3)],
       route: (b) => _row(5, 0, 5),
     ),
     _Lesson(
-      label: '守りを破る',
-      text: 'マスに書かれた数字は、その敵の**守り**。\n'
-          '威力がその数に届けば、傷がつく。\n'
-          '守り3の敵を、3枚の鎖で討ち取ろう。',
+      title: '防御を破る',
+      text: 'マスに書かれた数字は、その敵の**防御**。\n'
+          '威力がその数字に届けば、ダメージを与えられる。\n'
+          '防御3の敵を、3枚つないで倒そう。',
       foes: const [_Foe(Cell(5, 3), 3), _Foe(Cell(1, 1), 3)],
       route: (b) => _row(5, 1, 3),
     ),
     _Lesson(
       label: 'まとめて当てる',
-      text: '1本の鎖は、**通った敵すべて**に当たる。\n'
-          '離れた敵どうしも、道でつなげば一度に討てる。\n'
+      text: '1本のチェインは、**通った敵すべて**に当たる。\n'
+          '離れた敵も、道でつなげば一度に倒せる。\n'
           '2体を通る道をなぞろう。',
       // **2体とも同じ守り3・体力1にしておく。** 片方だけ残ると、なぜ残ったのか
       // が分からないまま「まとめて当たった」ことまで疑わしくなる。体力の話は
@@ -374,8 +374,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '体力のある敵',
-      text: 'この敵は**体力を2つ持っている**。\n'
-          'マスの下の粒が、その残り。\n'
+      text: 'この敵は**体力が2ある**。\n'
+          'マスの下の点が、残りの体力。\n'
           '威力5を当てて、1つ削ろう。',
       // 1体だけを相手にする。守りは破れているのに討てない、という一度きりの
       // 出来事を、他の敵と混ぜずに見せる。
@@ -387,18 +387,18 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '削り切る',
-      text: '**つけた傷はそのまま残る。**\n'
-          '粒が1つ減っているはず。\n'
-          '同じ敵にもう一度当てて、討ち取ろう。',
+      text: '**与えたダメージはそのまま残る。**\n'
+          '点が1つ減っているはず。\n'
+          '同じ敵にもう一度当てて倒そう。',
       // 敵は置き直さない。さっき傷をつけた敵が、そのまま教材になる。
       // 道は縦に変えてある。同じなのは道ではなく敵のほう。
       route: _downTough,
     ),
     _Lesson(
-      label: '一撃で討つ',
-      text: '威力が守りを**上回るほど深く削れる**。\n'
-          '守り5に威力6なら、2つぶん。\n'
-          '6枚つないで、体力2を一撃で討とう。',
+      title: '一撃で倒す',
+      text: '威力が防御を**上回るほど大きく削れる**。\n'
+          '防御5に威力6なら、2つぶん。\n'
+          '6枚つないで、体力2を一撃で倒そう。',
       foes: const [
         _Foe(Cell(4, 3), TutorialScreen.toughWard, hp: 2),
         _Foe(Cell(0, 0), 3),
@@ -407,9 +407,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '届かないとき',
-      text: '守り8。まわりは同じ相で塞がっていて、\n'
+      text: '防御8。まわりは同じ色で塞がっていて、\n'
           '**この敵には5枚までしかつなげない。**\n'
-          '届かなくても、通したマナのマスは消える。',
+          '届かなくても、なぞったマスは消える。',
       foes: const [
         _Foe(Cell(4, 2), TutorialScreen.thickWard),
         _Foe(Cell(0, 0), 3),
@@ -418,10 +418,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
       route: _shortAt,
     ),
     _Lesson(
-      label: '並びを変えて討つ',
-      text: '降りてきたマスで、並びが変わった。\n'
+      title: '並びを変えて倒す',
+      text: '落ちてきたマスで、並びが変わった。\n'
           '**今度は8枚つなげる。**\n'
-          '威力8なら守り8に届く。討ち取ろう。',
+          '威力8なら防御8に届く。倒そう。',
       // **盤面は敷き直さない。** 崩した並びをそのまま使う。敷き直すと、
       // 崩して変わったことが伝わらない。
       keepBoard: true,
@@ -429,9 +429,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
     ),
     _Lesson(
       label: '毎ターンの反撃',
-      text: '**敵は毎ターン殴ってくる。**\n'
-          '体力が減るのはそのため。早く討つほど楽になる。\n'
-          '残った敵を討ち取ろう。',
+      text: '**敵は毎ターン攻撃してくる。**\n'
+          '体力が減るのはそのため。早く倒すほど楽になる。\n'
+          '残った敵を倒そう。',
       foes: const [_Foe(Cell(3, 2), 3)],
       route: (b) => _row(3, 0, 2),
     ),
@@ -448,9 +448,9 @@ class _TutorialScreenState extends State<TutorialScreen> {
   static final List<_Lesson> _prism = [
     _Lesson(
       label: '2色なら今までどおり',
-      text: '3つ目の相が盤面に出ている。\n'
-          'それでも**使う相が2つだけなら**、\n'
-          'これまでどおり交互に継げる。',
+      text: '3つ目の色が盤面に出ている。\n'
+          'それでも**使う色が2つだけなら**、\n'
+          'これまでどおり交互につなげる。',
       foes: const [_Foe(Cell(0, 0), 3)],
       route: (b) => const [
         Cell(5, 1),
@@ -461,10 +461,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
       ],
     ),
     _Lesson(
-      label: '3つ目を踏む',
-      text: '3つ目の相を踏むと、決まりが入れ替わる。\n'
-          '**直前2枚と同じ相は継げない。**\n'
-          '3色を順に踏む道をなぞろう。',
+      title: '3つ目の色を使う',
+      text: '3つ目の色を使うと、ルールが切り替わる。\n'
+          '**直前2枚と同じ色はつなげない。**\n'
+          '3色を順につなぐ道をなぞろう。',
       foes: const [_Foe(Cell(0, 0), 3)],
       route: (b) => const [
         Cell(2, 1),
@@ -476,10 +476,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
       ],
     ),
     _Lesson(
-      label: '巡って長く編む',
-      text: '同じ相に戻らないぶん、**巡回は長く伸びる**。\n'
-          '長い鎖ほど、厚い守りを破れる。\n'
-          '7枚つないで、守り6の敵を討ち取ろう。',
+      title: '3色でもっと長く',
+      text: '同じ色に戻らないぶん、**3色のほうが長く伸びる**。\n'
+          '長いチェインほど、厚い防御を破れる。\n'
+          '7枚つないで、防御6の敵を倒そう。',
       foes: const [_Foe(Cell(4, 3), 6)],
       route: (b) => const [
         Cell(1, 0),
@@ -824,12 +824,12 @@ class _Reach extends StatelessWidget {
   /// いまの状態に合わせて、何と何を見比べているのかを言葉で置く。
   String get _caption {
     if (controller.path.isEmpty) {
-      return 'マスの数字は敵の守り。鎖の威力がその数に届けば傷がつく';
+      return 'マスの数字は敵の防御　威力が届けばダメージを与えられる';
     }
     if (_focus == null) {
-      return '敵のマスを通すと、その敵の守りと、届いているかが出る';
+      return '敵のマスを通ると、その敵の防御と、届いているかが出る';
     }
-    return '威力が守りの数字に届けば傷がつく。上回るほど深く削れる';
+    return '威力が防御の数字に届けばダメージ　上回るほど大きく削れる';
   }
 
   @override
@@ -869,7 +869,7 @@ class _Reach extends StatelessWidget {
     child: FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(
-        '鎖をなぞると、ここに威力が出る',
+        'なぞると、ここに威力が出る',
         style: AppFont.label(10, color: Palette.textMuted),
       ),
     ),
@@ -892,11 +892,11 @@ class _Reach extends StatelessWidget {
         const Spacer(),
         if (tile == null)
           Text(
-            '敵のマスを通すと、守りに届くか出る',
+            '敵のマスを通ると、防御に届くか出る',
             style: AppFont.label(9, color: Palette.textDim),
           )
         else ...[
-          Text('守り', style: AppFont.label(9, color: Palette.ward)),
+          Text('防御', style: AppFont.label(9, color: Palette.ward)),
           const SizedBox(width: 6),
           // 盤面のマスと同じチップ。一辺 64 のマスに載る大きさで描く。
           WardChip(ward: tile.ward!, size: 64, color: Palette.ward),
@@ -913,10 +913,10 @@ class _Reach extends StatelessWidget {
     final String text;
     final Color color;
     if (controller.willFell(cell)) {
-      text = '討ち取れる';
+      text = '倒せる';
       color = Palette.gold;
     } else if (controller.willHurt(cell)) {
-      text = '傷がつく';
+      text = 'ダメージ';
       color = Palette.blueA;
     } else {
       text = 'あと ${tile.powerToHurt - controller.power} 枚で届く';
@@ -1266,8 +1266,8 @@ class _PrismNote extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             const _Body(
-              '3色の盤面は、**巡って編めば長く伸びる**。\n'
-              '長い鎖ほど、厚い守りに届く。\n'
+              '3色の盤面は、**順番に使えば長く伸びる**。\n'
+              '長いチェインほど、厚い防御に届く。\n'
               '雷の魔導士は、3色の盤面でだけ雷を落とす。',
             ),
           ],
@@ -1320,8 +1320,8 @@ class _DiveNote extends StatelessWidget {
             const SizedBox(height: 14),
             const _Body(
               'ダンジョンは階層が続く。**体力は持ち越し**で、\n'
-              '削られたぶんは戻らない。**手数に制限は無い**が、\n'
-              '1手ごとに殴られる。早く討つほど楽になる。',
+              '減ったぶんは戻らない。**手数に制限は無い**が、\n'
+              '1手ごとに攻撃される。早く倒すほど楽になる。',
             ),
           ],
         ),
@@ -1369,9 +1369,9 @@ class _PartyNote extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             const _Body(
-              'あとひとつ。盤面に出る相は、\n'
+              'あとひとつ。盤面に出る色は、\n'
               '**連れていった魔導士で決まる。**\n'
-              '相は2種類以上でなければ、鎖が1枚も編めない。',
+              '色が2種類以上ないと、チェインが作れない。',
             ),
           ],
         ),

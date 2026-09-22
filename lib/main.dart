@@ -79,7 +79,7 @@ class _EntryState extends State<_Entry> {
               key: const ValueKey('home'),
               store: _store,
               // 試用のときだけ出す。**出さないと、記録が消えたように見える。**
-              banner: unlockAllRequested ? '試用中／全部開放・保存しない' : null,
+              banner: unlockAllRequested ? 'お試しモード　全解放・記録は保存されない' : null,
             )
           : TitleScreen(
               key: const ValueKey('title'),

@@ -9,7 +9,7 @@ void main() {
 
     expect(find.text('氷炎の鎖'), findsOneWidget);
     expect(find.text('FROSTFIRE CHAIN'), findsOneWidget);
-    expect(find.text('相を継いで鎖を編み、守りを破って討ち取る'), findsOneWidget);
+    expect(find.text('同じ色を避けてつなぎ、防御を破って敵を倒す'), findsOneWidget);
     expect(find.text('はじめる'), findsOneWidget);
   });
 

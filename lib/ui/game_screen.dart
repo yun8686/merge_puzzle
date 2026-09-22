@@ -136,7 +136,7 @@ class _GameScreenState extends State<GameScreen> {
     setState(() {
       _useNote = switch (result) {
         ActiveResult.done => null,
-        ActiveResult.missed => 'どの道も敵に届かなかった。回数は減っていない',
+        ActiveResult.missed => 'どのルートも敵に届かなかった　使用回数は減っていない',
         ActiveResult.unavailable => 'いまは使えない',
       };
       if (result == ActiveResult.done) _inspecting = null;
@@ -576,16 +576,16 @@ class _PhaseBar extends StatelessWidget {
 /// 敵を巻き込んでいるときは、討ち取るまでの残りを優先して出す。
 String _pendingLabel(GameController controller) {
   if (controller.missingTiles > 0) {
-    return 'あと ${controller.missingTiles} 継げば鎖になる';
+    return 'あと ${controller.missingTiles} つなげばチェインになる';
   }
   final toFoe = controller.tilesToNextFoe;
   if (toFoe > 0) {
     return controller.pathIsValid
-        ? 'あと $toFoe 継げば討ち取れる'
-        : 'あと $toFoe 継げば届く';
+        ? 'あと $toFoe つなげば倒せる'
+        : 'あと $toFoe つなげば届く';
   }
   if (controller.pathIsValid) return '+${controller.pendingScore}';
-  return '守りに弾かれる';
+  return '防御を破れない';
 }
 
 class _Footer extends StatelessWidget {
@@ -808,12 +808,12 @@ class _FloorLostOverlay extends StatelessWidget {
     return _Curtain(
       children: [
         Text(
-          'B${controller.floor}F を落とした',
+          'B${controller.floor}F で行き詰まった',
           style: AppFont.number(26, color: Palette.danger),
         ),
         const SizedBox(height: 6),
         const Text(
-          '継げる相がなくなった',
+          'つなげる色がなくなった',
           style: TextStyle(
             color: Palette.textMuted,
             fontSize: 13,
@@ -823,7 +823,7 @@ class _FloorLostOverlay extends StatelessWidget {
         const SizedBox(height: 20),
         _FoeLineup(wards: controller.board.foeWards),
         const SizedBox(height: 18),
-        Text('討ち漏らした敵の反撃', style: AppFont.label(10)),
+        Text('残った敵の反撃', style: AppFont.label(10)),
         const SizedBox(height: 8),
         Text(
           '-${controller.lastBacklash}',
@@ -836,11 +836,11 @@ class _FloorLostOverlay extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _ResultRow(
-          label: '討ち漏らし',
+          label: '残りの敵',
           value: '${controller.remainingFoes} 体',
         ),
         const SizedBox(height: 26),
-        _PrimaryButton(label: 'この階層を編み直す', onTap: onRetry),
+        _PrimaryButton(label: 'この階層をやり直す', onTap: onRetry),
       ],
     );
   }
@@ -865,7 +865,7 @@ class _DefeatOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Curtain(
       children: [
-        Text('一党は倒れた', style: AppFont.number(30, color: Palette.danger)),
+        Text('パーティは全滅した', style: AppFont.number(30, color: Palette.danger)),
         const SizedBox(height: 6),
         Text(
           'B${controller.floor}F の反撃で体力が尽きた',
@@ -887,7 +887,7 @@ class _DefeatOverlay extends StatelessWidget {
         _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
         const SizedBox(height: 8),
         _ResultRow(
-          label: '討ち漏らし',
+          label: '残りの敵',
           value: '${controller.remainingFoes} 体',
         ),
         const SizedBox(height: 26),
@@ -922,7 +922,7 @@ class _RuleNote extends StatelessWidget {
     final phase = spread;
     if (phase == null) {
       return const Text(
-        '同じ色を続けずに、なぞって鎖を編む',
+        '同じ色を続けずに、なぞってつなぐ',
         key: ValueKey('hint'),
         style: TextStyle(
           color: Palette.textMuted,
@@ -938,7 +938,7 @@ class _RuleNote extends StatelessWidget {
         PhaseSwatch(phase: phase, size: 14),
         const SizedBox(width: 7),
         Text(
-          '延焼中　いまの1本は${phase.label}どうしも継げる',
+          '延焼中　今のチェインは${phase.label}どうしもつなげる',
           style: TextStyle(
             color: Palette.baseFor(phase),
             fontSize: 13,
@@ -969,9 +969,9 @@ class _AbortOverlay extends StatelessWidget {
         Text('中断する', style: AppFont.number(26, color: Palette.danger)),
         const SizedBox(height: 10),
         const Text(
-          'この潜りをここで切り上げて拠点へ戻る。\n'
-          '体力も戦果も残らず、次は1階層目から。\n'
-          '降りた階層のぶんは持ち帰る。',
+          '探索をやめて拠点へ戻る。\n'
+          '体力もスコアも引き継がれず、次は1階層目から。\n'
+          '降りた階層ぶんの魔晶は持ち帰れる。',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Palette.textMuted,
@@ -1008,12 +1008,12 @@ class _StageClearOverlay extends StatelessWidget {
     return _Curtain(
       children: [
         Text(
-          'B${controller.floor}F 制圧',
+          'B${controller.floor}F クリア',
           style: AppFont.number(26, color: Palette.gold),
         ),
         const SizedBox(height: 6),
         const Text(
-          'この階層の敵を討ち果たした',
+          'この階層の敵を全部倒した',
           style: TextStyle(
             color: Palette.textMuted,
             fontSize: 13,
@@ -1060,7 +1060,7 @@ class _DungeonClearOverlay extends StatelessWidget {
     final party = controller.party;
     return _Curtain(
       children: [
-        Text('踏 破', style: AppFont.number(34, color: Palette.gold)),
+        Text('クリア', style: AppFont.number(34, color: Palette.gold)),
         const SizedBox(height: 8),
         Text(
           controller.dungeon.name,
@@ -1077,7 +1077,7 @@ class _DungeonClearOverlay extends StatelessWidget {
         const SizedBox(height: 8),
         Text('${controller.score}', style: AppFont.number(56)),
         const SizedBox(height: 18),
-        _ResultRow(label: '踏破した階層', value: 'B${controller.dungeon.depth}F'),
+        _ResultRow(label: 'クリアした階層', value: 'B${controller.dungeon.depth}F'),
         const SizedBox(height: 8),
         _ResultRow(label: '最大威力', value: '${controller.bestChain}'),
         const SizedBox(height: 8),
@@ -1125,7 +1125,7 @@ class _FoeLineup extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          felled ? '討ち果たした' : '討ち漏らした',
+          felled ? '倒した敵' : '残った敵',
           style: AppFont.label(10, color: Palette.textDim),
         ),
         const SizedBox(height: 12),
@@ -1656,7 +1656,7 @@ class _MageSheet extends StatelessWidget {
             PhaseSwatch(phase: mage.phase, size: 18),
             const SizedBox(width: 8),
             Text(
-              '${mage.phase.label}の相',
+              '${mage.phase.label}属性',
               style: const TextStyle(
                 color: Palette.textMuted,
                 fontSize: 13,
@@ -1685,9 +1685,9 @@ class _MageSheet extends StatelessWidget {
         const SizedBox(height: 20),
         // この1人がどれだけ厚みを出しているか。合計しか帯に出ていないので、
         // 誰を連れてきたから 135 なのかはここでしか読めない。
-        _ResultRow(label: 'この人の体力', value: '${mage.hp}'),
+        _ResultRow(label: 'この魔導士の体力', value: '${mage.hp}'),
         const SizedBox(height: 8),
-        _ResultRow(label: '一党の体力', value: '${party.hp} / ${party.maxHp}'),
+        _ResultRow(label: 'パーティの体力', value: '${party.hp} / ${party.maxHp}'),
         if (active != null) ...[
           const SizedBox(height: 22),
           Text(
@@ -1709,7 +1709,7 @@ class _MageSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '潜り1本に ${Party.activeUses} 回',
+            '1回の探索で ${Party.activeUses} 回',
             style: AppFont.label(9, color: Palette.textDim),
           ),
           const SizedBox(height: 12),
@@ -1717,7 +1717,7 @@ class _MageSheet extends StatelessWidget {
             _PrimaryButton(label: '使う', onTap: () => onUse(kind))
           else
             Text(
-              party.canUse(kind) ? '盤面が動いている' : 'この潜りではもう使った',
+              party.canUse(kind) ? '盤面が動いている' : 'この探索ではもう使った',
               style: AppFont.label(10, color: Palette.textDim),
             ),
           if (note != null) ...[

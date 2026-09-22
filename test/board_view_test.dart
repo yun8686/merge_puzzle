@@ -396,7 +396,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('party-gale')));
     await tester.pump();
     expect(find.text('使う'), findsNothing);
-    expect(find.text('この潜りではもう使った'), findsOneWidget);
+    expect(find.text('この探索ではもう使った'), findsOneWidget);
   });
 
   testWidgets('先読みが空振りすると、札は開いたままで回数も減らない', (tester) async {
@@ -429,7 +429,7 @@ void main() {
 
     // 札は開いたまま、なぜ何も起きなかったかを言う。
     expect(find.text('先読み'), findsOneWidget, reason: '閉じない');
-    expect(find.textContaining('どの道も敵に届かなかった'), findsOneWidget);
+    expect(find.textContaining('どのルートも敵に届かなかった'), findsOneWidget);
     expect(find.byKey(const ValueKey('hint-path')), findsNothing);
     // 減っていないので、もう一度押せる。
     expect(find.text('使う'), findsOneWidget);
@@ -456,7 +456,7 @@ void main() {
       MaterialApp(home: GameScreen(controller: controller)),
     );
     await tester.pump();
-    expect(find.text('同じ色を続けずに、なぞって鎖を編む'), findsOneWidget);
+    expect(find.text('同じ色を続けずに、なぞってつなぐ'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('party-blaze')));
     await tester.pump();
@@ -466,7 +466,7 @@ void main() {
     // 盤面の外で言わないと、押したのに何も起きていないように見える。
     expect(controller.board.spreadPhase, Phase.red);
     expect(find.textContaining('延焼中'), findsOneWidget);
-    expect(find.text('同じ色を続けずに、なぞって鎖を編む'), findsNothing);
+    expect(find.text('同じ色を続けずに、なぞってつなぐ'), findsNothing);
   });
 
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
@@ -504,7 +504,7 @@ void main() {
 
     // 5体ぶんの姿と呼び名が出ること。溢れれば RenderFlex が例外を投げるので、
     // 実機を見られなくても並びが収まっているかはここで分かる。
-    expect(find.text('討ち漏らした'), findsOneWidget);
+    expect(find.text('残った敵'), findsOneWidget);
     // 盤面の敵マスにも姿が出るので、札の中だけを数える。
     expect(
       find.descendant(
@@ -550,7 +550,7 @@ void main() {
     await tester.pump();
 
     // 討ち果たした敵の姿と呼び名。守り3は小鬼。
-    expect(find.text('討ち果たした'), findsOneWidget);
+    expect(find.text('倒した敵'), findsOneWidget);
     expect(find.text(foeNameFor(Board.minWard)), findsOneWidget);
     expect(
       find.descendant(

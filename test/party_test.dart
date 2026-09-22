@@ -41,18 +41,18 @@ void main() {
   group('スキルの書き方', () {
     test('説明文は条件と効き目から作られる', () {
       // 手で書いた文ではないので、数値を変えれば文も動く。
-      expect(Mage.ember.passiveEffect, '赤を3枚以上継いだ鎖は威力 +1');
-      expect(Mage.blaze.passiveEffect, '赤を5枚以上継いだ鎖は威力 +2');
-      expect(Mage.gale.passiveEffect, '7枚以上継いだ鎖を編んだ手は反撃を受けない');
-      expect(Mage.rime.passiveEffect, '青を3枚以上継いだ鎖で体力を 3 戻す');
-      expect(Mage.frost.passiveEffect, '青から継ぎ始めた鎖は威力 +1');
-      expect(Mage.storm.passiveEffect, '3色を含む8枚以上継いだ鎖は階層の敵すべてに 1 ダメージ');
-      expect(Mage.aegis.passiveEffect, '受ける痛手が半分になる');
+      expect(Mage.ember.passiveEffect, '赤を3枚以上つないだチェインは威力 +1');
+      expect(Mage.blaze.passiveEffect, '赤を5枚以上つないだチェインは威力 +2');
+      expect(Mage.gale.passiveEffect, '7枚以上つないだチェインのターンは反撃を受けない');
+      expect(Mage.rime.passiveEffect, '青を3枚以上つないだチェインで体力が 3 回復');
+      expect(Mage.frost.passiveEffect, '青から始めたチェインは威力 +1');
+      expect(Mage.storm.passiveEffect, '3色を含む8枚以上つないだチェインは階層の敵すべてに 1 ダメージ');
+      expect(Mage.aegis.passiveEffect, '受けるダメージが半分になる');
     });
 
     test('説明文には効き目の数値もそのまま出る', () {
       // 定数を動かしたのに文が古いまま、という食い違いが起きない。
-      expect(Mage.rime.passiveEffect, contains('体力を $rimeMend 戻す'));
+      expect(Mage.rime.passiveEffect, contains('体力が $rimeMend 回復'));
     });
 
     test('説明文には条件の枚数がそのまま出る', () {
@@ -91,10 +91,10 @@ void main() {
     test('アクティブスキルの説明にも、持ち主の相が入る', () {
       // 力の側は誰のものかを知らない。相を受け取るから、同じ力を別の相の
       // 魔導士に持たせても文が付いてくる。
-      expect(Mage.blaze.activeEffect, '次の1本だけ、赤どうしを継げるようになる');
+      expect(Mage.blaze.activeEffect, '次の1チェインだけ、赤どうしをつなげるようになる');
       expect(
         const Spread().describe(Phase.blue),
-        '次の1本だけ、青どうしを継げるようになる',
+        '次の1チェインだけ、青どうしをつなげるようになる',
       );
       expect(Mage.ember.activeEffect, isNull, reason: '持たない者は null');
     });
@@ -102,7 +102,7 @@ void main() {
     test('従者はスキルを持たない', () {
       for (final squire in Mage.squires) {
         expect(squire.passive, isNull, reason: squire.name);
-        expect(squire.passiveEffect, '特殊な力は持たない');
+        expect(squire.passiveEffect, 'スキルを持たない');
       }
     });
 

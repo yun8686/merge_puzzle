@@ -53,7 +53,7 @@ class TitleScreen extends StatelessWidget {
                   const _Title(),
                   const SizedBox(height: 18),
                   Text(
-                    '相を継いで鎖を編み、守りを破って討ち取る',
+                    '同じ色を避けてつなぎ、防御を破って敵を倒す',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Palette.textMuted,

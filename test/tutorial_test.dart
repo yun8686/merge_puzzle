@@ -171,7 +171,7 @@ void main() {
 
     // 2体とも討ち取れる。体力の話は、次の稽古で1体だけを相手にする。
     expect(controller.felledWards.length - felled, 2);
-    expect(find.textContaining('体力を2つ持っている'), findsOneWidget);
+    expect(find.textContaining('体力が2ある'), findsOneWidget);
   });
 
   testWidgets('体力のある敵は、1体だけを相手に分けて教える', (tester) async {
@@ -196,7 +196,7 @@ void main() {
     final hurt = toughFoe(controller.board);
     expect(hurt, isNotNull);
     expect(controller.board.tileAt(hurt!)!.hp, 1, reason: '傷が残る');
-    expect(find.textContaining('つけた傷はそのまま残る'), findsOneWidget);
+    expect(find.textContaining('与えたダメージはそのまま残る'), findsOneWidget);
     // 次の道は形が違う。同じなのは道ではなく、当てる敵のほう。
     expect(controller.lockedPath, contains(hurt));
     expect(controller.lockedPath, isNot(route));
@@ -208,7 +208,7 @@ void main() {
     // 2本目で討ち切れる。次の稽古が始まっているので、盤面ではなく戦果を見る。
     expect(controller.felledWards.length - felled, 1, reason: '削り切った');
     expect(controller.felledWards, contains(TutorialScreen.toughWard));
-    expect(find.textContaining('一撃で討とう'), findsOneWidget);
+    expect(find.textContaining('一撃で倒そう'), findsOneWidget);
   });
 
   testWidgets('威力が守りを上回れば、体力2でも一撃で討てる', (tester) async {
@@ -219,7 +219,7 @@ void main() {
       await tester.pump();
     }
 
-    expect(find.textContaining('一撃で討とう'), findsOneWidget);
+    expect(find.textContaining('一撃で倒そう'), findsOneWidget);
     final tough = toughFoe(controller.board);
     expect(tough, isNotNull);
     expect(controller.board.tileAt(tough!)!.hp, 2, reason: '傷のない体力2');
@@ -310,15 +310,15 @@ void main() {
 
     // 覚えたことが順に並ぶ。あっさり閉じると何も残らない。
     for (final label in [
-      '鎖を編む',
+      'チェインをつなぐ',
       '長いほど強い',
-      '守りを破る',
+      '防御を破る',
       'まとめて当てる',
       '体力のある敵',
       '削り切る',
-      '一撃で討つ',
+      '一撃で倒す',
       '届かないとき',
-      '並びを変えて討つ',
+      '並びを変えて倒す',
       '毎ターンの反撃',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
@@ -358,14 +358,14 @@ void main() {
     controller.extendPath(controller.lockedPath[1]);
     await tester.pump();
     expect(find.text('威力'), findsOneWidget);
-    expect(find.text('守り'), findsNothing);
+    expect(find.text('防御'), findsNothing);
 
     // 敵のマスまで継ぐと、その守りと、届いているかが並ぶ。
     controller.extendPath(controller.lockedPath[2]);
     await tester.pump();
-    expect(find.text('守り'), findsOneWidget);
+    expect(find.text('防御'), findsOneWidget);
     expect(controller.power, 3);
-    expect(find.text('討ち取れる'), findsOneWidget);
+    expect(find.text('倒せる'), findsOneWidget);
   });
 
   testWidgets('威力が守りに届かないうちは、あと何枚かを言う', (tester) async {
@@ -389,7 +389,7 @@ void main() {
       await openPrism(tester, controller);
 
       expect(controller.board.phases.length, 3, reason: '盤面は3色');
-      expect(find.textContaining('使う相が2つだけなら'), findsOneWidget);
+      expect(find.textContaining('使う色が2つだけなら'), findsOneWidget);
       // 道は3色の盤面の上を、2色だけで往復する。
       expect(controller.lockedPath.length, 5);
       expect(phasesOnRoute(controller).length, 2);
@@ -405,7 +405,7 @@ void main() {
       traceRoute(controller);
       await tester.pump();
 
-      expect(find.textContaining('直前2枚と同じ相は継げない'), findsOneWidget);
+      expect(find.textContaining('直前2枚と同じ色はつなげない'), findsOneWidget);
       expect(controller.lockedPath.length, 6);
       expect(phasesOnRoute(controller).length, 3);
 
@@ -422,7 +422,7 @@ void main() {
         await tester.pump();
       }
 
-      expect(find.textContaining('守り6の敵を討ち取ろう'), findsOneWidget);
+      expect(find.textContaining('防御6の敵を倒そう'), findsOneWidget);
       expect(controller.lockedPath.length, 7);
       expect(phasesOnRoute(controller).length, 3);
 

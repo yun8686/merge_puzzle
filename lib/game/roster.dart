@@ -87,7 +87,7 @@ class Mage {
 
   /// パッシブスキルの効き目。画面にそのまま出す。
   /// 条件と効き目の組から作るので、数値とずれない。
-  String get passiveEffect => passive?.describe(phase) ?? '特殊な力は持たない';
+  String get passiveEffect => passive?.describe(phase) ?? 'スキルを持たない';
 
   /// アクティブスキルの名前。持たない者は null。
   String? get activeName => active?.name;

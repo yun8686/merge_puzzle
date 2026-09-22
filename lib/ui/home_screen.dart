@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? progress.recordClear(outcome.dungeonId)
                 : progress.recordFailure(outcome.floor);
             _spoils = outcome.cleared
-                ? '${dungeon.name} を踏破した　魔晶 +$gained'
+                ? '${dungeon.name} クリア　魔晶 +$gained'
                 : 'B${outcome.floor}F まで降りた　魔晶 +$gained';
             Navigator.of(context).pop();
           },
@@ -437,7 +437,7 @@ class _TabBar extends StatelessWidget {
 
   static const _items = <(_Tab, IconData, String)>[
     (_Tab.dungeons, Icons.terrain, 'ダンジョン'),
-    (_Tab.party, Icons.groups, '一党'),
+    (_Tab.party, Icons.groups, 'パーティ'),
     (_Tab.gacha, Icons.auto_awesome, 'ガチャ'),
   ];
 
@@ -744,8 +744,8 @@ class _DungeonCard extends StatelessWidget {
                               const SizedBox(height: 5),
                               Text(
                                 locked
-                                    ? '$needs を踏破すると開く'
-                                    : '全 ${dungeon.depth} 階層　主は守り ${dungeon.bossWard}',
+                                    ? '$needs をクリアすると解放'
+                                    : '全 ${dungeon.depth} 階層　ボスの防御 ${dungeon.bossWard}',
                                 style: const TextStyle(
                                   color: Palette.textMuted,
                                   fontSize: 11.5,
@@ -769,7 +769,7 @@ class _DungeonCard extends StatelessWidget {
                           )
                         else if (cleared)
                           Text(
-                            '踏破',
+                            'クリア',
                             style: AppFont.label(10, color: Palette.gold),
                           )
                         else
@@ -840,7 +840,7 @@ class _PartyStrip extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 10, 14, 12),
           child: Row(
             children: [
-              Text('連れていく', style: AppFont.label(10)),
+              Text('編成', style: AppFont.label(10)),
               const SizedBox(width: 12),
               for (final mage in progress.partyMages) ...[
                 _Sigil(mage: mage, size: 30),
@@ -899,7 +899,7 @@ class _PartyTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _SectionLabel(
-            label: '連れていく',
+            label: '編成',
             trailing: '${progress.party.length} / ${Progress.partySlots}',
           ),
           for (var i = 0; i < Progress.partySlots; i++) ...[
@@ -923,7 +923,7 @@ class _PartyTab extends StatelessWidget {
           const SizedBox(height: 12),
           _PhaseNote(phases: progress.partyPhases),
           const SizedBox(height: 22),
-          const _SectionLabel(label: '名簿'),
+          const _SectionLabel(label: '魔導士一覧'),
           GridView.count(
             crossAxisCount: 3,
             shrinkWrap: true,
@@ -970,7 +970,7 @@ class _PhaseNote extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 11),
         child: Row(
           children: [
-            Text('盤面の相', style: AppFont.label(9)),
+            Text('盤面の色', style: AppFont.label(9)),
             const SizedBox(width: 12),
             for (final phase in phases) ...[
               Padding(
@@ -981,7 +981,7 @@ class _PhaseNote extends StatelessWidget {
             const Spacer(),
             Text(
               phases.length < Progress.minPhases
-                  ? '相が足りない'
+                  ? '色が足りない'
                   : '${phases.length} 色',
               style: AppFont.number(
                 12,
@@ -1058,7 +1058,7 @@ class _PartySlot extends StatelessWidget {
               Text('空き', style: AppFont.label(11, color: Palette.textDim)),
               const Spacer(),
               Text(
-                '名簿から選ぶ',
+                '一覧から選ぶ',
                 style: AppFont.label(9, color: Palette.textDim),
               ),
             ],
@@ -1241,7 +1241,7 @@ class _MageCard extends StatelessWidget {
                     top: 5,
                     right: 6,
                     child: Text(
-                      '同行',
+                      '編成中',
                       style: AppFont.label(8, color: tint),
                     ),
                   ),
@@ -1370,14 +1370,14 @@ class _GachaTab extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    '魔導士を招く',
+                    '魔導士を召喚',
                     style: AppFont.number(20, color: Palette.gold),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     all
-                        ? '名簿は全員揃っている'
-                        : '魔晶 ${Progress.gachaCost} で、まだ見ぬ魔導士がひとり加わる\n残り $left 人',
+                        ? '魔導士は全員揃っている'
+                        : '魔晶 ${Progress.gachaCost} で、まだ仲間になっていない魔導士がひとり加わる\n残り $left 人',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Palette.textMuted,
@@ -1391,7 +1391,7 @@ class _GachaTab extends StatelessWidget {
                         ? '全員揃った'
                         : poor
                         ? '魔晶が足りない'
-                        : '招く　魔晶 ${Progress.gachaCost}',
+                        : '召喚　魔晶 ${Progress.gachaCost}',
                     enabled: progress.canRoll,
                     onTap: onRoll,
                   ),
@@ -1401,10 +1401,10 @@ class _GachaTab extends StatelessWidget {
           ),
           if (drawn != null) ...[
             const SizedBox(height: 20),
-            const _SectionLabel(label: '直前の招き'),
+            const _SectionLabel(label: '直前の召喚'),
             _Notice(
               text: [
-                '${drawn!.name} が加わった',
+                '${drawn!.name} が仲間になった',
                 if (drawn!.passiveName case final name?)
                   '$name（パッシブ）　${drawn!.passiveEffect}'
                 else

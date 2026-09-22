@@ -22,7 +22,7 @@ final class Foresee extends Active {
   String get name => '先読み';
 
   @override
-  String describe(Phase phase) => 'いまの盤面で、敵にいちばん深く届く道を1本見せる';
+  String describe(Phase phase) => '敵にいちばん大きなダメージを与えられるルートを1本表示する';
 
   @override
   bool cast(ActiveStage stage, Phase phase) => stage.revealBestRoute();
@@ -49,7 +49,7 @@ final class Spread extends Active {
   String get name => '延焼';
 
   @override
-  String describe(Phase phase) => '次の1本だけ、${phase.label}どうしを継げるようになる';
+  String describe(Phase phase) => '次の1チェインだけ、${phase.label}どうしをつなげるようになる';
 
   @override
   bool cast(ActiveStage stage, Phase phase) => stage.spread(phase);
