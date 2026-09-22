@@ -17,7 +17,7 @@ class Progress {
     this.shards = 0,
     this.taughtTutorial = false,
     this.taughtPrism = false,
-  }) : // 従者は常に居る。ここが欠けると編成が組めなくなる。
+  }) : // 見習いは常に居る。ここが欠けると編成が組めなくなる。
        owned = <MageKind>{
          ...?owned,
          for (final m in Mage.squires) m.kind,
@@ -28,7 +28,7 @@ class Progress {
   /// 連れていける人数。ガチャで増えても、同時に出せるのはここまで。
   static const int partySlots = 3;
 
-  /// 始まりの編成。**従者は3人とも持っているが、連れていくのは2人**。
+  /// 始まりの編成。**見習いは3人とも持っているが、連れていくのは2人**。
   ///
   /// 3枠を最初から埋めてしまうと、初めて引いた魔導士が編成に入らず、
   /// 誰かを外すところから始めることになる。1枠空けておけば、引いた人が
@@ -50,7 +50,7 @@ class Progress {
   /// 2回目以降の踏破。周回しても増えはするが、初回ほどではない。
   static const int repeatClearReward = 3;
 
-  /// 所持している魔導士。始まりは相を1つずつ持つ従者3人。
+  /// 所持している魔導士。始まりは相を1つずつ持つ見習い3人。
   final Set<MageKind> owned;
 
   /// 踏破したダンジョンの id。
@@ -76,7 +76,7 @@ class Progress {
   bool taughtPrism;
 
   /// まだ持っていない魔導士。ガチャはここから引く。
-  /// 従者は最初から居るので、引く対象は [Mage.summonable] だけ。
+  /// 見習いは最初から居るので、引く対象は [Mage.summonable] だけ。
   List<Mage> get unowned =>
       [for (final m in Mage.summonable) if (!owned.contains(m.kind)) m];
 
@@ -203,7 +203,7 @@ class Progress {
 
   static Progress fromJson(Map<String, Object?> json) {
     final owned = _kinds(json['owned']).toSet();
-    // 従者は常に居る。ここを空にすると編成が組めなくなる。
+    // 見習いは常に居る。ここを空にすると編成が組めなくなる。
     owned.addAll([for (final m in Mage.squires) m.kind]);
     // 持っていない魔導士と重複は落とす。保存が古くても編成が壊れないように。
     final party = <MageKind>[];
@@ -235,7 +235,7 @@ class Progress {
   ///
   /// 相が1種類しか無い記録（相を入れる前に保存されたもの、手で書き換えた
   /// もの）でも拠点が開けるように、足りない相を所持している中から補う。
-  /// 補えなければ従者を足す。従者は必ず持っているので、必ず直る。
+  /// 補えなければ見習いを足す。見習いは必ず持っているので、必ず直る。
   static void _repair(List<MageKind> party, Set<MageKind> owned) {
     Set<Phase> phasesOf(List<MageKind> ks) => {
       for (final k in ks) Mage.of(k).phase,
@@ -248,7 +248,7 @@ class Progress {
       if (party.isNotEmpty && phasesOf(party).contains(mage.phase)) continue;
       party.add(mage.kind);
     }
-    // それでも足りなければ、従者で埋める（従者は常に所持している扱い）。
+    // それでも足りなければ、見習いで埋める（見習いは常に所持している扱い）。
     for (final mage in Mage.squires) {
       if (phasesOf(party).length >= minPhases) break;
       if (party.contains(mage.kind)) continue;
@@ -261,11 +261,11 @@ class Progress {
   static List<Object?> _list(Object? raw) =>
       raw is List<Object?> ? raw : const <Object?>[];
 
-  /// 相の呼び名を色に変える前の従者の名前。**古い記録を読むためだけに残す。**
+  /// 相の呼び名を色に変える前の見習いの名前。**古い記録を読むためだけに残す。**
   ///
   /// [toJson] は [MageKind.name] をそのまま書くので、名前を変えた分だけ
-  /// 古い保存が読めなくなる。従者は必ず所持している扱いなので欠けても
-  /// 壊れはしないが、編成に入れていた従者が黙って抜ける。ここで読み替える。
+  /// 古い保存が読めなくなる。見習いは必ず所持している扱いなので欠けても
+  /// 壊れはしないが、編成に入れていた見習いが黙って抜ける。ここで読み替える。
   static const Map<String, MageKind> _renamed = {
     'squireHeat': MageKind.squireRed,
     'squireCold': MageKind.squireBlue,

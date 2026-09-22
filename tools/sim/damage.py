@@ -97,7 +97,7 @@ def main() -> int:
         print(f"   {name} {hp}")
     hps = sorted((hp for _, hp in mages), reverse=True)
     print("\n一党の体力＝連れていく顔ぶれの合計")
-    print(f"   始まりの2人（従者2人） {mages[0][1] + mages[1][1]}")
+    print(f"   始まりの2人（見習い2人） {mages[0][1] + mages[1][1]}")
     print(f"   3人で厚いほう         {sum(hps[:3])}")
     print(f"   3人で薄いほう         {sum(hps[-3:])}")
     print()

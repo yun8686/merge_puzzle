@@ -11,7 +11,7 @@ import 'theme.dart';
 // 一党の帯では 22px まで縮むので、人の形では誰だか分からなくなる。炎・滴・
 // 稲妻のように、輪郭だけで意味が分かる形に寄せてある。
 //
-// 従者は輪郭だけ、招ける魔導士は塗り潰し。同じ相でも格の差が形で出る。
+// 見習いは輪郭だけ、招ける魔導士は塗り潰し。同じ相でも格の差が形で出る。
 //
 // 層の3つの型は tools/foe/ が作る foe_art.dart にも同じものがある。どちらも
 // 生成物なので、共有せずそれぞれが持つ。片方を直してももう片方は動かない。
@@ -44,7 +44,7 @@ class _Line extends _Op {
   final double width;
 }
 
-/// 赤の従者。
+/// 赤の見習い。
 const _squireRed = <_Op>[
   _Poly(_Layer.fill, [
     Offset(0.527, 0.200), Offset(0.592, 0.345),
@@ -68,7 +68,7 @@ const _squireRed = <_Op>[
   ]),
 ];
 
-/// 青の従者。
+/// 青の見習い。
 const _squireBlue = <_Op>[
   _Circle(_Layer.fill, Offset(0.500, 0.609), 0.211),
   _Poly(_Layer.fill, [
@@ -82,7 +82,7 @@ const _squireBlue = <_Op>[
   ]),
 ];
 
-/// 紫の従者。
+/// 紫の見習い。
 const _squireViolet = <_Op>[
   _Poly(_Layer.fill, [
     Offset(0.586, 0.195), Offset(0.275, 0.572),

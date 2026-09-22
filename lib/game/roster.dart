@@ -15,7 +15,7 @@ part of 'party.dart';
 ///
 /// 並び順は意味を持たない（見せる順は [Mage.roster]）。
 enum MageKind {
-  /// 相を1つ持つだけの従者。特殊な力は無い。始まりの3人。
+  /// 相を1つ持つだけの見習い。特殊な力は無い。始まりの3人。
   squireRed,
   squireBlue,
   squireViolet,
@@ -58,12 +58,12 @@ class Mage {
 
   /// この魔導士の体力。**一党の体力は連れていく面々の合計**（[Party.poolFor]）。
   ///
-  /// **強い力を持つ者ほど薄い。** スキルを持たない従者がいちばん厚く、盤面を
+  /// **強い力を持つ者ほど薄い。** スキルを持たない見習いがいちばん厚く、盤面を
   /// ひっくり返す力（威力+2、階層の敵すべてに一撃）を持つ者は薄い。連れて
   /// いく顔ぶれが、そのまま「何手ぶん耐えられるか」になる。
   final int hp;
 
-  /// パッシブスキル。持たない者は null（従者）。
+  /// パッシブスキル。持たない者は null（見習い）。
   ///
   /// 鎖を編むたび、条件を満たせば勝手に効く。**[Party] は中身で分岐しない**
   /// ――ここに [Passive] を1つ置けば、集計は [Boon] の種類だけで回る。
@@ -76,7 +76,7 @@ class Mage {
   /// だけ――呼ぶ側に分岐は増えない。
   final Active? active;
 
-  /// 最初から持っている従者か。
+  /// 最初から持っている見習いか。
   ///
   /// **[squires] と [summonable] はここから割る。** 名簿を1本にしておけば、
   /// 並べ忘れて「所持しているのにガチャにも出る」ような食い違いが起きない。
@@ -96,7 +96,7 @@ class Mage {
   /// **相はここで埋める**ので、力の側は誰のものかを知らないままでいられる。
   String? get activeEffect => active?.describe(phase);
 
-  /// 従者の体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
+  /// 見習いの体力。**名簿でいちばん厚い。** 特殊な力が無いぶんここで返す。
   /// 始まりの2人で 90 あり、1本目のダンジョンはこれで通る。
   static const int squireHp = 45;
 
@@ -106,21 +106,21 @@ class Mage {
   static const squireRed = Mage._(
     kind: MageKind.squireRed,
     phase: Phase.red,
-    name: '赤の従者',
+    name: '赤の見習い',
     hp: squireHp,
     starting: true,
   );
   static const squireBlue = Mage._(
     kind: MageKind.squireBlue,
     phase: Phase.blue,
-    name: '青の従者',
+    name: '青の見習い',
     hp: squireHp,
     starting: true,
   );
   static const squireViolet = Mage._(
     kind: MageKind.squireViolet,
     phase: Phase.violet,
-    name: '紫の従者',
+    name: '紫の見習い',
     hp: squireHp,
     starting: true,
   );
@@ -183,7 +183,7 @@ class Mage {
     passive: Passive('鉄壁', Always(), Guard()),
   );
 
-  /// 名簿。**この並びがそのまま画面に出る順**で、従者が先。
+  /// 名簿。**この並びがそのまま画面に出る順**で、見習いが先。
   ///
   /// 1人足したらここに並べること。並べ忘れると [of] が落ちるが、
   /// party_test.dart の「名簿の見張り」がその前に捕まえる。

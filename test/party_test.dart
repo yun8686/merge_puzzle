@@ -84,7 +84,7 @@ void main() {
       expect(Mage.aegis.passiveName, '鉄壁');
       expect(Mage.gale.activeName, '先読み');
       expect(Mage.blaze.activeName, '延焼');
-      expect(Mage.squireRed.passiveName, isNull, reason: '従者は持たない');
+      expect(Mage.squireRed.passiveName, isNull, reason: '見習いは持たない');
       expect(Mage.ember.activeName, isNull, reason: '持たない者は null');
     });
 
@@ -99,7 +99,7 @@ void main() {
       expect(Mage.ember.activeEffect, isNull, reason: '持たない者は null');
     });
 
-    test('従者はスキルを持たない', () {
+    test('見習いはスキルを持たない', () {
       for (final squire in Mage.squires) {
         expect(squire.passive, isNull, reason: squire.name);
         expect(squire.passiveEffect, 'スキルを持たない');
@@ -202,7 +202,7 @@ void main() {
       }
     });
 
-    test('従者と招ける面々で名簿を割り切る', () {
+    test('見習いと招ける面々で名簿を割り切る', () {
       // squires / summonable は roster から割っているので、別々に並べた
       // ことによる食い違い（所持しているのにガチャにも出る）は起きない。
       expect(
@@ -250,7 +250,7 @@ void main() {
       }
     });
 
-    test('従者は相を1つずつ持つ。始まりの盤面が1色にならない', () {
+    test('見習いは相を1つずつ持つ。始まりの盤面が1色にならない', () {
       expect(
         Mage.squires.map((m) => m.phase).toSet().length,
         Mage.squires.length,

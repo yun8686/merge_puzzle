@@ -6,7 +6,7 @@ import 'package:parity_chain/game/phase.dart';
 import 'package:parity_chain/game/progress.dart';
 
 void main() {
-  test('始まりは従者3人を持ち、連れていくのは2人', () {
+  test('始まりは見習い3人を持ち、連れていくのは2人', () {
     final progress = Progress();
     expect(progress.owned, {for (final m in Mage.squires) m.kind});
     expect(progress.party, Progress.startingParty);
@@ -17,8 +17,8 @@ void main() {
     expect(progress.canRoll, isFalse);
   });
 
-  test('始まりの編成は従者から取る', () {
-    // 名簿が100人に増えても、始まりの2人は必ず所持している従者であること。
+  test('始まりの編成は見習いから取る', () {
+    // 名簿が100人に増えても、始まりの2人は必ず所持している見習いであること。
     // ここが名簿と食い違うと、拠点を開いた瞬間に編成が直され続ける。
     for (final kind in Progress.startingParty) {
       expect(Mage.of(kind).starting, isTrue, reason: kind.name);
@@ -85,8 +85,8 @@ void main() {
     expect(progress.partyPhases.length, greaterThanOrEqualTo(2));
   });
 
-  test('相の呼び名を色に変える前の従者の名前も読める', () {
-    // 熱・冷・雷だった頃の保存。編成に入れていた従者がそのまま残ること。
+  test('相の呼び名を色に変える前の見習いの名前も読める', () {
+    // 熱・冷・雷だった頃の保存。編成に入れていた見習いがそのまま残ること。
     final progress = Progress.decode(
       '{"owned":["squireHeat","squireCold","squireBolt","ember"],'
       '"party":["squireBolt","ember"]}',
@@ -141,7 +141,7 @@ void main() {
       final mage = progress.roll(Random(1));
 
       expect(mage, isNotNull);
-      expect(Mage.summonable, contains(mage), reason: '従者は引かれない');
+      expect(Mage.summonable, contains(mage), reason: '見習いは引かれない');
       expect(progress.owned, contains(mage!.kind));
       expect(progress.shards, 0);
     });

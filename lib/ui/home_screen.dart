@@ -1148,7 +1148,7 @@ class _PartySlot extends StatelessWidget {
 /// スキル1つぶんの行。**名前を前に、効き目を後ろに。**
 ///
 /// パッシブもアクティブも同じ形で並べる。違うのは名前の色だけなので、
-/// どちらがどちらかは並びで読める。名前を持たない者（従者）は効き目だけ。
+/// どちらがどちらかは並びで読める。名前を持たない者（見習い）は効き目だけ。
 class _SkillLine extends StatelessWidget {
   const _SkillLine({
     required this.name,

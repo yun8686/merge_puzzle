@@ -40,7 +40,7 @@ GameController newController(int seed) =>
 /// 決め打ちで置くテストは、この2相を前提にしている。
 const twoPhases = [Mage.squireRed, Mage.squireBlue];
 
-/// 同じ2相でも、従者ではなく焔と氷雨を連れた一党。従者の印は '赤' '青' で
+/// 同じ2相でも、見習いではなく焔と氷雨を連れた一党。見習いの印は '赤' '青' で
 /// 相の呼び名とぶつかるので、印と相の数を別々に読みたいときはこちら。
 /// 焔が居るぶん、赤を3枚以上継いだ鎖には威力が1乗る。
 const emberPair = [Mage.ember, Mage.rime];

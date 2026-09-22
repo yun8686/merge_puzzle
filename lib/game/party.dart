@@ -297,7 +297,7 @@ class Party {
       hp = poolFor(members),
       maxHp = poolFor(members);
 
-  /// 始まりは相を1つずつ持つ従者3人。3色の盤面になる。
+  /// 始まりは相を1つずつ持つ見習い3人。3色の盤面になる。
   Party.initial() : this.of(Mage.squires);
 
   /// 一党の体力。**連れていく魔導士の体力の合計**（[Mage.hp]）。

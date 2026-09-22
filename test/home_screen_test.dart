@@ -90,7 +90,7 @@ void main() {
     await openBase(tester);
     await goTab(tester, 'パーティ');
 
-    // 始まりは従者3人だけ。招ける7人は伏せてある。
+    // 始まりは見習い3人だけ。招ける7人は伏せてある。
     for (final squire in Mage.squires) {
       expect(rosterText(squire, squire.name), findsOneWidget, reason: squire.name);
     }
@@ -257,7 +257,7 @@ void main() {
         tester,
         progress: Progress(
           owned: {MageKind.ember, MageKind.blaze},
-          // 焔と烈火はどちらも赤。紫の従者が抜けると1色になる。
+          // 焔と烈火はどちらも赤。紫の見習いが抜けると1色になる。
           party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
         ),
       );
@@ -295,7 +295,7 @@ void main() {
         tester,
         progress: Progress(
           owned: {MageKind.ember, MageKind.blaze},
-          // 焔と烈火はどちらも赤。紫の従者が抜けると1色になる。
+          // 焔と烈火はどちらも赤。紫の見習いが抜けると1色になる。
           party: [MageKind.ember, MageKind.blaze, MageKind.squireViolet],
         ),
       );

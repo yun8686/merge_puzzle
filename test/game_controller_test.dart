@@ -62,7 +62,7 @@ GameController newController([int seed = 3]) =>
 /// 決め打ちで置くテストは、この2相を前提にしている。
 const twoPhases = [Mage.squireRed, Mage.squireBlue];
 
-/// 同じ2相を、従者ではなく焔と氷雨で揃えた一党。焔の補正（赤3枚で威力 +1）を
+/// 同じ2相を、見習いではなく焔と氷雨で揃えた一党。焔の補正（赤3枚で威力 +1）を
 /// 見たいテストはこちらを連れていく。
 const emberPair = [Mage.ember, Mage.rime];
 
@@ -531,7 +531,7 @@ void main() {
     test('一党は連れてきた顔ぶれそのままで始まる', () {
       final controller = newController();
       expect(controller.party.members, twoPhases);
-      // 体力は連れてきた顔ぶれの合計。従者2人なら 45 + 45。
+      // 体力は連れてきた顔ぶれの合計。見習い2人なら 45 + 45。
       expect(controller.party.hp, Party.poolFor(twoPhases));
       expect(controller.party.hp, Mage.squireHp * 2);
     });
@@ -697,7 +697,7 @@ void main() {
 
     test('未所持の魔導士は名簿の順に返る', () {
       // 道中では増えないが、この並びはガチャが未所持を数えるのに使う。
-      // 始まりの記録は従者3人ぶん。返ってくるのは招ける7人の並び。
+      // 始まりの記録は見習い3人ぶん。返ってくるのは招ける7人の並び。
       final party = Party.initial();
       for (final mage in Mage.summonable) {
         expect(party.nextRecruit, mage);
@@ -888,8 +888,8 @@ void main() {
   group('増えた魔導士', () {
     /// 測りたい魔導士だけを連れた一党。
     ///
-    /// 相が1つだけの編成は組めないので、足りなければ違う相の従者を足して
-    /// 2相にする。従者は能力を持たないので、測りたい補正には影響しない。
+    /// 相が1つだけの編成は組めないので、足りなければ違う相の見習いを足して
+    /// 2相にする。見習いは能力を持たないので、測りたい補正には影響しない。
     /// 2相なら決まりは「直前1枚と違う」＝交互で、市松の盤面がそのまま使える。
     GameController withRoster(List<Mage> roster) {
       final phases = roster.map((m) => m.phase).toSet();
@@ -1006,11 +1006,11 @@ void main() {
       expect(controller.party.hp, hpBefore - 4 - 1);
     });
 
-    test('名簿は従者3人と招ける7人で、印は全員ちがう', () {
+    test('名簿は見習い3人と招ける7人で、印は全員ちがう', () {
       expect(Mage.squires.length, 3);
       expect(Mage.summonable.length, 7);
       expect(Mage.roster.length, 10);
-      // 従者は相を1つずつ、重ならないように持つ。
+      // 見習いは相を1つずつ、重ならないように持つ。
       expect(
         Mage.squires.map((m) => m.phase).toSet().length,
         Phase.values.length,
