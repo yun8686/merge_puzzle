@@ -1239,7 +1239,10 @@ class _MageCard extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: owned ? onTap : null,
+            // 札いっぱいに広げる。既定の loose のままだと中身の幅に縮んで
+            // 左上に寄り、効き目の文が短い札（見習いなど）だけ左寄りに見える。
             child: Stack(
+              fit: StackFit.expand,
               children: [
                 if (inParty)
                   Positioned(
