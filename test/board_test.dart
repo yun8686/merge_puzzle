@@ -70,31 +70,33 @@ void main() {
       ['o', 'e', 'o'],
     ]);
 
-    test('隣接していれば成立する', () {
+    test('相が交互で隣接していれば成立する', () {
       expect(
         board.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]),
         isTrue,
       );
     });
 
-    test('同じ相が隣り合っていてもつなげる', () {
-      // **色は見ない。** 以前は「隣り合う2枚は必ず違う相」だった
-      // （README 第22段階で外した）。
+    test('同じ相が隣り合っていても繋げない', () {
       final same = boardOf([
         ['o', 'o', 'e'],
         ['e', 'e', 'o'],
       ]);
       expect(
         same.canExtendPath(const [Cell(0, 0)], const Cell(0, 1)),
-        isTrue,
+        isFalse,
+      );
+      expect(
+        same.canExtendPath(const [Cell(1, 0)], const Cell(1, 1)),
+        isFalse,
       );
       expect(
         same.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
-        isTrue,
+        isFalse,
       );
-      // 全部同じ相の3枚でも通る。
+      // 交互になっていれば成立する。
       expect(
-        same.isValidPath(const [Cell(1, 0), Cell(1, 1), Cell(0, 1)]),
+        same.isValidPath(const [Cell(1, 1), Cell(0, 1), Cell(0, 2)]),
         isTrue,
       );
     });
@@ -115,17 +117,24 @@ void main() {
     });
   });
 
-  group('3色の盤面', () {
-    // **色の決まりは無い。** 3色でも2色でも、隣り合っていればつながる。
-    // 以前は「2色の交互」か「3色の巡回」のどちらかを求めていた
-    // （README 第7・第8段階、外したのは第22段階）。
+  group('3色の盤面の継ぎ方', () {
+    // 決まりは2本立てで、鎖ごとにどちらかを選ぶ。
+    //   2色の交互 … 使う相が2つだけなら、隣が違えばよい
+    //   3色の巡回 … 3色目を踏んだら、直前2枚と同じ相は継げない
+    //
+    // 3枚目で1枚目に戻れば前者に確定し、以降その2色だけ。3色目を踏めば
+    // 後者で、以降は巡回しか編めない。
+    //
+    // 巡回だけに縛っていた頃は3色の盤面が目に見えて詰まった（敵マスを通る
+    // 最長パスの平均が 6.3 枚で、2色だった頃の 8.3 枚に届かない）。2本立てに
+    // すると 7.7 枚まで戻る（README 第8段階）。
     final board = boardOf([
       ['o', 'e', 'b', 'o'],
       ['e', 'o', 'e', 'b'],
       ['o', 'b', 'o', 'e'],
     ]);
 
-    test('3色を順に踏む道はそのままつなげる', () {
+    test('3色の巡回はそのまま継げる', () {
       expect(
         board.isValidPath(const [
           Cell(0, 0),
@@ -138,20 +147,57 @@ void main() {
       );
     });
 
-    test('2色で往復してから3色目を踏んでもつなげる', () {
-      // 以前はここで巡回に切り替わって、戻った3枚目が後から無効になった。
-      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)]; // 赤→青→赤
+    test('3枚目で1枚目に戻ると2色の鎖になる', () {
+      // 赤→青→赤。ここで2色に確定する。
+      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)];
       expect(board.isValidPath(back), isTrue);
       expect(
-        board.canExtendPath(back, const Cell(2, 1)),
+        board.canExtendPath(back, const Cell(1, 2)),
         isTrue,
-        reason: '(2,1) は紫。3色目でも継げる',
+        reason: '(1,2) は青。2色の交互なので続けられる',
       );
     });
 
-    test('直前2枚と同じ相でもつなげる', () {
+    test('2色に確定した鎖に3色目は継げない', () {
+      const back = [Cell(0, 0), Cell(0, 1), Cell(1, 1)]; // 赤→青→赤
+      expect(
+        board.canExtendPath(back, const Cell(2, 1)),
+        isFalse,
+        reason: '(2,1) は紫。巡回に切り替わると、戻った3枚目が後から無効になる',
+      );
+    });
+
+    test('3色の鎖では直前2枚と同じ相は継げない', () {
+      // 赤→青→紫→赤 と来たら、次は青でなければならない。
       const ring = [Cell(0, 0), Cell(0, 1), Cell(0, 2), Cell(0, 3)];
-      expect(board.canExtendPath(ring, const Cell(1, 3)), isTrue);
+      expect(
+        board.canExtendPath(ring, const Cell(1, 3)),
+        isFalse,
+        reason: '(1,3) は紫。直前2枚に紫が居る',
+      );
+    });
+
+    test('2色の編成では決まりが変わらない', () {
+      // 相が2つなら「使う相が2つだけ」が常に成り立つので、決まりは交互1本。
+      // 相を入れる前の盤面と手触りが変わらない。
+      final two = boardOf([
+        ['o', 'e', 'o', 'e'],
+        ['e', 'o', 'e', 'o'],
+      ]);
+      expect(
+        two.isValidPath(const [
+          Cell(0, 0),
+          Cell(0, 1),
+          Cell(0, 2),
+          Cell(0, 3),
+        ]),
+        isTrue,
+      );
+      expect(
+        two.isValidPath(const [Cell(0, 0), Cell(0, 1), Cell(1, 1)]),
+        isTrue,
+        reason: '赤青赤。2色では巡回の決まりが効かない',
+      );
     });
   });
 
@@ -359,18 +405,16 @@ void main() {
       expect(board.findPathThrough(const Cell(1, 1), 100), isEmpty);
     });
 
-    test('一色の盤面でも手がある', () {
-      // 色を見ないので、マスが3枚つながっていれば必ず手がある。
-      // **手詰まりで階層を落とすことは、事実上なくなった。**
-      final mono = boardOf([
+    test('相が一色の盤面では手が無い', () {
+      final stuck = boardOf([
         ['o', 'o', 'o'],
         ['o', 'o', 'o'],
       ]);
-      expect(mono.hasAnyChain(), isTrue);
-      expect(mono.findHint().length, greaterThanOrEqualTo(3));
+      expect(stuck.hasAnyChain(), isFalse);
+      expect(stuck.findHint(), isEmpty);
     });
 
-    test('並びを問わず手がある', () {
+    test('交互に並んでいれば手がある', () {
       expect(board.hasAnyChain(), isTrue);
       expect(board.findHint().length, greaterThanOrEqualTo(3));
     });
@@ -406,23 +450,29 @@ void main() {
     });
   });
 
-  group('延焼（その相だけでつなぐ）', () {
-    test('立てても立てなくても、同じ相だけの鎖は通る', () {
-      // **色の決まりが無くなったので、延焼は盤面の振る舞いを変えない**
-      // （README 第22段階）。スキルの配線だけ残してある。
+  group('延焼（その相だけで継ぐ）', () {
+    test('立てると同じ相だけの鎖が通り、混ぜると元の決まりに戻る', () {
       final board = boardOf([
         ['o', 'o', 'o', 'e'],
         ['e', 'o', 'e', 'o'],
       ]);
       const run = [Cell(0, 0), Cell(0, 1), Cell(0, 2)];
-      expect(board.isConnected(run), isTrue, reason: '赤だけでも通る');
+      expect(board.isConnected(run), isFalse, reason: '普段は赤を続けられない');
 
       board.spreadPhase = Phase.red;
       expect(board.isConnected(run), isTrue);
+
+      // 混ぜたら元の決まり。赤赤の重なりが残るので通らない。
       expect(
         board.isConnected([...run, const Cell(0, 3)]),
+        isFalse,
+        reason: '赤だけか、いつもの決まりかのどちらか',
+      );
+      // いつもの決まりを満たす鎖は、延焼中でもそのまま通る。
+      expect(
+        board.isConnected(const [Cell(0, 3), Cell(1, 3), Cell(1, 2)]),
         isTrue,
-        reason: '混ぜても通る',
+        reason: '青→赤→青',
       );
     });
 
@@ -443,13 +493,13 @@ void main() {
       expect(run.hasSamePhaseRun(Phase.red), isTrue);
     });
 
-    test('1色で塗り潰しても、延焼の前から手がある', () {
-      // 色を見なくなったので、1色の盤面でも詰まらない（README 第22段階）。
+    test('延焼中は手詰まりの見方も変わる', () {
+      // 1色で塗り潰した盤面。普段はどこへも繋げない。
       final board = boardOf([
         ['o', 'o', 'o', 'o'],
         ['o', 'o', 'o', 'o'],
       ]);
-      expect(board.hasAnyChain(), isTrue);
+      expect(board.hasAnyChain(), isFalse);
 
       board.spreadPhase = Phase.red;
       expect(board.hasAnyChain(), isTrue);

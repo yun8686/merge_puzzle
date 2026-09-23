@@ -471,23 +471,16 @@ void main() {
 
   testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
     final controller = newController(7);
-    // **手詰まりにするには、盤面からマナを無くすしかない**（色を見なくなった
-    // ので、マナが3枚あれば必ずチェインが立つ。README 第22段階）。全部のマス
-    // を「3枚では傷もつかない敵」で埋める。遊んでいて出会う形ではない。
-    const filler = 4;
+    // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、
+    // 手数の制限が無くなってからは他に落とし方が無い。
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
-        controller.board.grid[r][c] = Tile(
-          id: id++,
-          phase: Phase.red,
-          ward: filler,
-          atk: 0,
-        );
+        controller.board.grid[r][c] = Tile(id: id++, phase: Phase.red);
       }
     }
     // 守りを散らして最下段に並べる。重力で動かないので位置が読める。
-    const wards = [4, 5, 6, 7, 8];
+    const wards = [3, 4, 5, 6, 8];
     for (var i = 0; i < wards.length; i++) {
       final base = controller.board.grid[7][i]!;
       controller.board.grid[7][i] = Tile(
@@ -496,20 +489,13 @@ void main() {
         ward: wards[i],
       );
     }
-    // 埋めたぶんの守りも反撃に乗るので、倒れないところまで上げておく。
-    controller.party.hp = 900;
-
-    // 反撃は残っている敵の守りの合計。
-    var backlash = 0;
-    for (final w in controller.board.foeWards) {
-      backlash += w;
-    }
 
     controller.isSettling = true;
     controller.settle();
     controller.strike();
     expect(controller.phase, GamePhase.floorLost);
-    expect(controller.lastBacklash, backlash);
+    // 反撃は守りの合計。
+    expect(controller.lastBacklash, 26);
 
     await tester.pumpWidget(
       MaterialApp(home: GameScreen(controller: controller)),
@@ -530,7 +516,7 @@ void main() {
     for (final ward in wards) {
       expect(find.text(foeNameFor(ward)), findsOneWidget, reason: '守り$ward');
     }
-    expect(find.text('-$backlash'), findsOneWidget);
+    expect(find.text('-26'), findsOneWidget);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });

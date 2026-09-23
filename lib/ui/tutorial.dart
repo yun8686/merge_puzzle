@@ -7,6 +7,7 @@ import '../game/board.dart';
 import '../game/dungeon.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
+import '../game/phase.dart';
 import 'board_view.dart';
 import 'mage_art.dart';
 import 'theme.dart';
@@ -56,8 +57,27 @@ import 'theme.dart';
 ///
 /// 記録は読み書きしない。通し終えたことを [onDone] で知らせるだけで、印を
 /// 付けて保存するのは拠点の仕事。
+/// 稽古の種類。**出すきっかけが違うので、筋書きも別に持つ。**
+enum TutorialCourse {
+  /// 初めて遊ぶ人に。継ぎ方から毎ターンの反撃まで。
+  basics,
+
+  /// 初めて3色で潜る人に。巡回の決まりだけ。相が2つの間は継ぎ方が
+  /// 「交互」1本で、2色だった頃と何も変わらない。3つ目を入れて初めて
+  /// 効きはじめる決まりなので、そこで一度だけ教える。
+  prism,
+}
+
 class TutorialScreen extends StatefulWidget {
-  const TutorialScreen({super.key, required this.onDone, this.controller});
+  const TutorialScreen({
+    super.key,
+    required this.onDone,
+    this.controller,
+    this.course = TutorialCourse.basics,
+  });
+
+  /// どの稽古を通すか。
+  final TutorialCourse course;
 
   final VoidCallback onDone;
 
@@ -68,6 +88,10 @@ class TutorialScreen extends StatefulWidget {
   /// 1本では討ち切れない敵の守り。**体力の稽古の教材。** 体力2なので、
   /// 討ち取るには威力5の鎖を2本、または威力6の1本。
   static const int toughWard = 5;
+
+  /// いまの道では届かない敵の守り。**盤面を崩す稽古の教材。**
+  /// 8枚つなげば届くが、3枚では弾かれる。
+  static const int thickWard = 8;
 
   /// 稽古場の階層。**ここに書いた敵は始まりの姿でしかない。**
   ///
@@ -82,9 +106,31 @@ class TutorialScreen extends StatefulWidget {
     ],
   );
 
-  /// 稽古で連れるパーティ。**スキルを持たない見習いだけ。** 威力＝枚数に
-  /// なるので、「6枚つなぐ」がそのまま「威力6」になって説明と食い違わない。
-  static const List<Mage> roster = [Mage.squireRed, Mage.squireBlue];
+  /// 3色の稽古場。敵も相の並びも稽古の側が決める。
+  static const Dungeon prismDungeon = Dungeon(
+    id: 'tutorial-prism',
+    name: 'あそびかた',
+    floors: [
+      FloorSpec([FoeSpec(3, atk: 1)]),
+    ],
+  );
+
+  static Dungeon dungeonFor(TutorialCourse course) => switch (course) {
+    TutorialCourse.basics => dungeon,
+    TutorialCourse.prism => prismDungeon,
+  };
+
+  /// その稽古で連れる一党。**スキルを持たない見習いだけ。** 威力＝枚数になるので、
+  /// 「6枚つなぐ」がそのまま「威力6」になって説明と食い違わない。
+  /// 盤面に出る相は編成で決まるので、3色の稽古は見習い3人で組む。
+  static List<Mage> rosterFor(TutorialCourse course) => switch (course) {
+    TutorialCourse.basics => const [Mage.squireRed, Mage.squireBlue],
+    TutorialCourse.prism => const [
+      Mage.squireRed,
+      Mage.squireBlue,
+      Mage.squireViolet,
+    ],
+  };
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -110,7 +156,13 @@ class _Lesson {
     required this.text,
     required this.route,
     this.foes,
+    this.shape,
+    this.keepBoard = false,
   });
+
+  /// 盤面をそのまま使う。**崩した結果を見せる稽古**だけが立てる。
+  /// 敷き直すと、崩して並びが変わったことが伝わらない。
+  final bool keepBoard;
 
   /// 終いの振り返りに並べる短い名札。
   final String label;
@@ -121,6 +173,11 @@ class _Lesson {
   /// この稽古で置く敵。**null なら盤面の敵をそのまま引き継ぐ。**
   /// 前の稽古でつけた傷を持ち越すのに使う。
   final List<_Foe>? foes;
+
+  /// 敷いたあとの手直し。**盤面を「詰まった形」にしたいときだけ使う。**
+  /// 市松のままでは長い道がどこにでも通ってしまうので、そこを崩す稽古では
+  /// これで相を揃えて袋小路を作る。
+  final void Function(Board)? shape;
 
   /// なぞらせる道。敵は前の稽古の重力で落ちていることがあるので、
   /// マスを直に書くのではなく盤面から作る。
@@ -182,15 +239,97 @@ class _TutorialScreenState extends State<TutorialScreen> {
     return _row(at.row, 0, board.cols - 1);
   }
 
-  /// 初めて遊ぶ人の筋書き。**これ1つだけ。**
+  /// 守りのいちばん厚い敵。位置は盤面に訊く。
+  static Cell _thickFoe(Board board) {
+    var best = board.foeCells.first;
+    for (final at in board.foeCells) {
+      if (board.tileAt(at)!.ward! > board.tileAt(best)!.ward!) best = at;
+    }
+    return best;
+  }
+
+  /// その敵を通る**3枚**（「届かないとき」）。威力3では守り8に弾かれるが、
+  /// **通したマナは消える**。盤面を崩す手がこれ。
+  static List<Cell> _shortAt(Board board) {
+    final at = _thickFoe(board);
+    final from = (at.col - 1).clamp(0, board.cols - 3);
+    return _row(at.row, from, from + 2);
+  }
+
+  /// 崩したあとの盤面で、同じ敵を通る**8枚**（「並びを変えて討つ」）。
   ///
-  /// 3色で初めて潜る人に巡回の決まりを教える筋書きが別にあったが、決まり
-  /// そのものが無くなったので落とした（README 第22段階）。
-  static final List<_Lesson> _lessons = [
+  /// 左右の列が1枚ぶん落ちて、敵の行から上へ折れられるようになっている。
+  /// **盤面を敷き直さずに通る道**なので、崩して並びが変わったことがそのまま
+  /// 手になる（[_pocket] が仕込んだ形）。
+  static List<Cell> _aroundThick(Board board) {
+    final at = _thickFoe(board);
+    final r = at.row;
+    final c = at.col;
+    return [
+      Cell(r - 2, c - 2),
+      Cell(r - 2, c - 1),
+      Cell(r - 1, c - 1),
+      Cell(r, c - 1),
+      at,
+      Cell(r, c + 1),
+      Cell(r - 1, c + 1),
+      Cell(r - 2, c + 1),
+    ];
+  }
+
+  /// 1マスだけ相を塗り替える。敵のマスには触らない。
+  static void _repaintAt(Board board, int r, int c, Phase phase) {
+    if (r < 0 || r >= board.rows || c < 0 || c >= board.cols) return;
+    final tile = board.grid[r][c];
+    if (tile == null || tile.isFoe) return;
+    board.grid[r][c] = Tile(id: tile.id, phase: phase);
+  }
+
+  /// 守りの厚い敵のまわりを**袋小路**にする（「届かないとき」）。
+  ///
+  /// 市松のままだと8枚の道がすでに通っていて、崩す意味が無い。敵の居る行を
+  /// 通り道として残し、**その上下と行の先を同じ相で塞ぐ**。同じ相は続けて
+  /// 継げないので、鎖は行から出られず、どう編んでも5枚止まりになる。
+  ///
+  /// 塞ぐのは敵のまわりだけ。ほかの場所は市松のままにしておく。盤面ぜんぶを
+  /// 手詰まりにすると、1手のあとに階層が落ちて稽古がやり直しになる。
+  static void _pocket(Board board) {
+    final at = _thickFoe(board);
+    final row = at.row;
+    final phases = board.phases;
+    Phase along(int c) => phases[(row + c) % phases.length];
+    Phase other(int c) => phases[(row + c + 1) % phases.length];
+
+    // 通り道は行の端まで。最後の1列は塞ぐのに使う。
+    final last = board.cols - 2;
+    for (var c = 0; c <= last; c++) {
+      _repaintAt(board, row - 1, c, along(c));
+      _repaintAt(board, row + 1, c, along(c));
+    }
+    _repaintAt(board, row, board.cols - 1, along(last));
+
+    // 崩したあとに降りてくる2列ぶんを仕込む。
+    //
+    // **塞ぎを消しただけでは、上から同じ相が降りてきて塞がったままになる。**
+    // 敵の左右の列だけ、上2枚を先に入れ替えておく。1枚ぶん落ちると、そこに
+    // 上へ折れる道ができて、[_aroundThick] の8枚が通るようになる。
+    for (final c in [at.col - 1, at.col + 1]) {
+      _repaintAt(board, row - 2, c, other(c));
+      _repaintAt(board, row - 3, c, along(c));
+    }
+  }
+
+  late final List<_Lesson> _lessons = switch (widget.course) {
+    TutorialCourse.basics => _basics,
+    TutorialCourse.prism => _prism,
+  };
+
+  /// 初めて遊ぶ人の筋書き。
+  static final List<_Lesson> _basics = [
     _Lesson(
       label: 'チェインをつなぐ',
       text: '隣り合うマスを指でなぞってつなぐ。\n'
-          '**色は問わない。同じ色どうしでもつながる。**\n'
+          '**同じ色は続けてつなげない。**\n'
           '光っている道を3枚なぞろう。',
       foes: const [_Foe(Cell(1, 4), 3)],
       route: (b) => _row(5, 1, 3),
@@ -267,12 +406,90 @@ class _TutorialScreenState extends State<TutorialScreen> {
       route: _oneShotTough,
     ),
     _Lesson(
+      label: '届かないとき',
+      text: '防御8。まわりは同じ色で塞がっていて、\n'
+          '**この敵には5枚までしかつなげない。**\n'
+          '届かなくても、なぞったマスは消える。',
+      foes: const [
+        _Foe(Cell(4, 2), TutorialScreen.thickWard),
+        _Foe(Cell(0, 0), 3),
+      ],
+      shape: _pocket,
+      route: _shortAt,
+    ),
+    _Lesson(
+      label: '並びを変えて倒す',
+      text: '落ちてきたマスで、並びが変わった。\n'
+          '**今度は8枚つなげる。**\n'
+          '威力8なら防御8に届く。倒そう。',
+      // **盤面は敷き直さない。** 崩した並びをそのまま使う。敷き直すと、
+      // 崩して変わったことが伝わらない。
+      keepBoard: true,
+      route: _aroundThick,
+    ),
+    _Lesson(
       label: '毎ターンの反撃',
       text: '**敵は毎ターン攻撃してくる。**\n'
           '体力が減るのはそのため。早く倒すほど楽になる。\n'
           '残った敵を倒そう。',
       foes: const [_Foe(Cell(3, 2), 3)],
       route: (b) => _row(3, 0, 2),
+    ),
+  ];
+
+  /// 3色で初めて潜る人の筋書き。
+  ///
+  /// 3色の盤面は `phases[(r + c) % 3]` で敷いてあるので、**右か下へ進めば
+  /// 相が 赤→青→紫→赤… と回り、上か下へ折り返せば2色で往復する**。
+  /// この2つの形が、そのまま2本立ての決まりに対応している。
+  ///
+  ///  - 右上へ階段（右・上・右・上…）… 使う相は2つ。**交互**で成立する
+  ///  - 右下へ階段（右・下・右・下…）… 3色を順に踏む。**巡回**で成立する
+  static final List<_Lesson> _prism = [
+    _Lesson(
+      label: '2色なら今までどおり',
+      text: '3つ目の色が盤面に出ている。\n'
+          'それでも**使う色が2つだけなら**、\n'
+          'これまでどおり交互につなげる。',
+      foes: const [_Foe(Cell(0, 0), 3)],
+      route: (b) => const [
+        Cell(5, 1),
+        Cell(5, 2),
+        Cell(4, 2),
+        Cell(4, 3),
+        Cell(3, 3),
+      ],
+    ),
+    _Lesson(
+      label: '3つ目の色を使う',
+      text: '3つ目の色を使うと、ルールが切り替わる。\n'
+          '**直前2枚と同じ色はつなげない。**\n'
+          '3色を順につなぐ道をなぞろう。',
+      foes: const [_Foe(Cell(0, 0), 3)],
+      route: (b) => const [
+        Cell(2, 1),
+        Cell(2, 2),
+        Cell(3, 2),
+        Cell(3, 3),
+        Cell(4, 3),
+        Cell(4, 4),
+      ],
+    ),
+    _Lesson(
+      label: '3色でもっと長く',
+      text: '同じ色に戻らないぶん、**3色のほうが長く伸びる**。\n'
+          '長いチェインほど、厚い防御を破れる。\n'
+          '7枚つないで、防御6の敵を倒そう。',
+      foes: const [_Foe(Cell(4, 3), 6)],
+      route: (b) => const [
+        Cell(1, 0),
+        Cell(1, 1),
+        Cell(2, 1),
+        Cell(2, 2),
+        Cell(3, 2),
+        Cell(3, 3),
+        Cell(4, 3),
+      ],
     ),
   ];
 
@@ -286,8 +503,8 @@ class _TutorialScreenState extends State<TutorialScreen> {
         widget.controller ??
         GameController(
           rng: Random(4),
-          dungeon: TutorialScreen.dungeon,
-          roster: TutorialScreen.roster,
+          dungeon: TutorialScreen.dungeonFor(widget.course),
+          roster: TutorialScreen.rosterFor(widget.course),
         );
     _controller.addListener(_check);
     // 最初の稽古の盤面をここで組む。描く前なので知らせる必要はない。
@@ -340,7 +557,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// か、誰かの通知の途中なので、そのまま描き直される。
   void _enterScene() {
     final lesson = _lessons[_at];
-    _paint(lesson.foes);
+    if (!lesson.keepBoard) {
+      _paint(lesson.foes);
+      lesson.shape?.call(_controller.board);
+    }
     final route = lesson.route(_controller.board);
     _controller.lockedPath = route;
     // お手本は決めた道そのもの。探すまでもない。
@@ -367,7 +587,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     // 覚える前に投げられる。
     if (_controller.phase == GamePhase.floorLost ||
         _controller.phase == GamePhase.defeated) {
-      _controller.enterDungeon(TutorialScreen.dungeon);
+      _controller.enterDungeon(TutorialScreen.dungeonFor(widget.course));
       _enterScene();
       return;
     }
@@ -460,6 +680,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
           if (_finished)
             _Finish(
               onDone: widget.onDone,
+              course: widget.course,
               learned: [for (final l in _lessons) l.label],
             ),
         ],
@@ -798,9 +1019,14 @@ class _Cheer extends StatelessWidget {
 ///
 /// 盤面では教えられない編成の話だけ、最後にここで足す。
 class _Finish extends StatefulWidget {
-  const _Finish({required this.onDone, required this.learned});
+  const _Finish({
+    required this.onDone,
+    required this.course,
+    required this.learned,
+  });
 
   final VoidCallback onDone;
+  final TutorialCourse course;
   final List<String> learned;
 
   @override
@@ -859,7 +1085,11 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                     opacity: title,
                     child: Transform.scale(
                       scale: 0.7 + 0.3 * title,
-                      child: const _Crest(text: 'ひととおり覚えた'),
+                      child: _Crest(
+                        text: widget.course == TutorialCourse.basics
+                            ? 'ひととおり覚えた'
+                            : '3色を覚えた',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -872,21 +1102,31 @@ class _FinishState extends State<_Finish> with SingleTickerProviderStateMixin {
                     ),
                   const SizedBox(height: 26),
                   // 盤面では試せない話だけを、送り出す前に言い添える。
-                  Opacity(
-                    opacity: dive,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - dive) * 12),
-                      child: const _DiveNote(),
+                  // 3色の稽古はそこだけ差し替える。
+                  if (widget.course == TutorialCourse.basics) ...[
+                    Opacity(
+                      opacity: dive,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - dive) * 12),
+                        child: const _DiveNote(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  Opacity(
-                    opacity: party,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - party) * 12),
-                      child: _PartyNote(party: _party),
+                    const SizedBox(height: 14),
+                    Opacity(
+                      opacity: party,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - party) * 12),
+                        child: _PartyNote(party: _party),
+                      ),
                     ),
-                  ),
+                  ] else
+                    Opacity(
+                      opacity: party,
+                      child: Transform.translate(
+                        offset: Offset(0, (1 - party) * 12),
+                        child: const _PrismNote(),
+                      ),
+                    ),
                   const SizedBox(height: 28),
                   Opacity(
                     opacity: button,
@@ -990,6 +1230,52 @@ class _Learned extends StatelessWidget {
   }
 }
 
+/// 3色の稽古の締め。**なぜ3色にするのか**を、盤面と同じ色で言い添える。
+///
+/// 巡回は長く伸びるぶん、厚い守りに届く。雷の魔導士が落ちるのも3色のときだけ
+/// で、盤面では試せない（稽古場の一党はスキルを持たない見習いだけなので）。
+class _PrismNote extends StatelessWidget {
+  const _PrismNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: panelDecoration(radius: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 盤面と同じ色・同じ形。ここだけの飾りを作ると繋がらない。
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final phase in Phase.values) ...[
+                  if (phase != Phase.values.first)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 5),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Palette.textDim,
+                        size: 14,
+                      ),
+                    ),
+                  PhaseSwatch(phase: phase, size: 22),
+                ],
+              ],
+            ),
+            const SizedBox(height: 14),
+            const _Body(
+              '3色の盤面は、**順番に使えば長く伸びる**。\n'
+              '長いチェインほど、厚い防御に届く。\n'
+              '雷の魔導士は、3色の盤面でだけ雷を落とす。',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// 盤面では試せない話その1。**階層と、持ち越す体力。**
 ///
@@ -1085,7 +1371,7 @@ class _PartyNote extends StatelessWidget {
             const _Body(
               'あとひとつ。盤面に出る色は、\n'
               '**連れていった魔導士で決まる。**\n'
-              '編成は2色以上にする決まり。',
+              '色が2種類以上ないと、チェインが作れない。',
             ),
           ],
         ),

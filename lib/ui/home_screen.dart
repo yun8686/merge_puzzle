@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -62,6 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
+  /// 3色の稽古を出しているあいだ、潜るのを待たせておく約束。
+  /// 通し終えた（かとばした）ら完了して、そのまま潜る。
+  Completer<void>? _prismDone;
+
   /// 記録が読めるのを待つ上限。これを過ぎたら、まっさらな記録で拠点を開く。
   ///
   /// 投げてくるとは限らない。保存のプラグインが載っていない環境では、
@@ -121,6 +126,29 @@ class _HomeScreenState extends State<HomeScreen> {
     if (blocked == null) _save();
   }
 
+  /// 初めて3色で潜るときだけ、先に3色の稽古を通す。
+  ///
+  /// 相が2つの間は継ぎ方が「交互」1本で、2色だった頃と何も変わらない。
+  /// 3つ目を入れて初めて巡回の決まりが効きはじめるので、**その形で潜る
+  /// 直前**に一度だけ出す。拠点で編成を組んだ時点では出さない――組み替えて
+  /// いる最中に覆いかぶさると、何をしていたのか分からなくなる。
+  Future<void> _teachPrism() {
+    final done = Completer<void>();
+    setState(() => _prismDone = done);
+    return done.future;
+  }
+
+  void _prismTaught() {
+    final done = _prismDone;
+    final progress = _progress;
+    setState(() => _prismDone = null);
+    if (progress != null && !progress.taughtPrism) {
+      progress.taughtPrism = true;
+      _save();
+    }
+    done?.complete();
+  }
+
   /// ダンジョンに潜って、帰ってくるまで。
   Future<void> _dive(Dungeon dungeon) async {
     final progress = _progress;
@@ -129,6 +157,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _drawn = null;
       _spoils = null;
     });
+
+    if (!progress.taughtPrism &&
+        progress.partyPhaseCount >= Progress.prismPhases) {
+      await _teachPrism();
+    }
+    // 稽古を挟んだぶん、潜る前にもう一度確かめる。
+    if (!mounted) return;
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -199,6 +234,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           if (_teaching && progress != null)
             TutorialScreen(onDone: _taught),
+          if (_prismDone != null)
+            TutorialScreen(
+              course: TutorialCourse.prism,
+              onDone: _prismTaught,
+            ),
         ],
       ),
     );
@@ -920,8 +960,8 @@ class _PartyTab extends StatelessWidget {
 
 /// 盤面に敷かれる相。編成がそのまま盤面の色になることを、ここで見せる。
 ///
-/// **相は2種類以上でなければならない。** 編成の決まりとして
-/// （[Progress.minPhases]）。だから最後の1相は外せない。
+/// **相は2種類以上でなければならない。** 同じ相は続けて継げないので、
+/// 1色の盤面では鎖が1枚も編めない。だから最後の1相は外せない。
 class _PhaseNote extends StatelessWidget {
   const _PhaseNote({required this.phases});
 

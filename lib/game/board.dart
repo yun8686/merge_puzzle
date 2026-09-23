@@ -201,7 +201,9 @@ class ClearResult {
 ///
 /// ルール:
 ///  - 上下左右に隣接するブロックを辿ってパスを作る
-///  - **色は問わない。** 隣り合っていれば、同じ色どうしでもつなげる
+///  - **[phases] の数ぶんの窓の中に、同じ相が二度現れてはいけない。**
+///    相が2つなら「交互」と同じ意味になる（それまでの盤面と規則は同じ）。
+///    3つなら「直前2枚と違う相」になる
 ///  - [minPathLength] 枚以上でチェイン成立
 ///  - パス上のマナのマスは必ず消える
 ///  - 敵には「威力 − 守り + 1」のダメージが通る。守り以下なら 0 で弾かれる。
@@ -271,12 +273,34 @@ class Board {
   /// 偶奇だった頃の 65:35 とほぼ同じ手触りになる。
   final List<int> _weights;
 
-  /// **いま延焼している相。**
+  /// 巡回する鎖の窓。相の数から1を引いたもの。
   ///
-  /// 色の決まりが無くなったので（README 第22段階）、**いまは立てても盤面の
-  /// 振る舞いは変わらない**。烈火の「延焼」（`Spread`）がここを立て、鎖を
-  /// 1本編んだところで `GameController` が下ろす、という配線だけが残して
-  /// ある。決まりを入れ直すときに、緩める先としてここを読むこと。
+  /// 継ぎ方の決まりは2本立てで、**鎖ごとにどちらかを選ぶ**（[_chainFits]）。
+  ///
+  ///  - **2色の交互**：使う相が2つだけなら、隣り合う2枚が違えばよい
+  ///  - **N 色の巡回**：3色目を踏んだら、この窓の中に同じ相を二度出せない
+  ///
+  /// 3枚目で1枚目の相に戻れば前者に確定し、以降その2色だけ。3色目を踏めば
+  /// 後者で、以降は巡回しか編めない。相が2つなら前者が常に成り立つので、
+  /// 「交互」と完全に同じ意味になる。
+  ///
+  /// 巡回だけに縛っていた頃は、3色の盤面が目に見えて詰まった。敵マスを通る
+  /// 最長パスの平均が 6.3 枚で、2色だった頃の 8.3 枚に届かない。2本立てに
+  /// すると 7.7 枚まで戻る。**選べること自体が長さを押し上げる**ので、
+  /// 1手ぶんの確率（次に置ける相の種類数）は両方1種類で同じでも差が出る。
+  ///
+  /// 緩めすぎもここで効く。「往復を1回だけ許す」だと 10.5 枚、「隣と違えば
+  /// よい」だと 14.7 枚まで伸び、希少な相のジレンマも雷の8枚条件も意味を
+  /// 失う（README 第8段階）。
+  int get window => phases.length < 2 ? 1 : phases.length - 1;
+
+  /// **いま延焼している相。** この相だけで編んだ鎖が、決まりを満たして
+  /// いなくても通る（[_chainFits]）。null なら普段どおり。
+  ///
+  /// 烈火の「延焼」（`Spread`）が立て、鎖が1本編まれたところで
+  /// `GameController` が下ろす。**1本きり**なのは、決まりそのものを緩めて
+  /// いるため――常時通ると敵マスを通る最長パスが跳ね上がって、希少な相の
+  /// ジレンマも雷の8枚条件も意味を失う（README 第8段階）。
   Phase? spreadPhase;
 
   final Random _rng;
@@ -400,13 +424,62 @@ class Board {
   bool _adjacent(Cell a, Cell b) =>
       (a.row - b.row).abs() + (a.col - b.col).abs() == 1;
 
-  /// [path] の末尾に [to] を継げるか。**隣り合っていて、マスがあればよい。**
-  ///
-  /// 色は見ない。同じ色どうしでもつなげる（README 第22段階）。
+  /// [path] の末尾に [to] を継げるか。隣接していて、継ぎ方の決まりを
+  /// 満たすこと（[window] を見よ）。
   bool canExtendPath(List<Cell> path, Cell to) {
     if (path.isEmpty) return false;
     if (!_adjacent(path.last, to)) return false;
-    return tileAt(to) != null;
+    return _fits(path, to, atFront: false);
+  }
+
+  /// [path] の端に [c] を足しても決まりを満たすか。
+  ///
+  /// 決まりは並び全体の性質（[_chainFits]）なので、端だけ見ても足りない。
+  /// 2色で往復してきた鎖に3色目を継ぐと、**それまでの往復が後から無効に
+  /// なる**（巡回の決まりに切り替わるため）。毎回並びを組み直して見る。
+  ///
+  /// 前から見ても後ろから見ても同じ決まりなので、先頭に足すときも末尾に
+  /// 足すときも同じ判定で済む。
+  bool _fits(List<Cell> path, Cell c, {required bool atFront}) {
+    final t = tileAt(c);
+    if (t == null) return false;
+    final seq = <Phase>[];
+    if (atFront) seq.add(t.phase);
+    for (final cell in path) {
+      final p = tileAt(cell)?.phase;
+      if (p == null) return false;
+      seq.add(p);
+    }
+    if (!atFront) seq.add(t.phase);
+    return _chainFits(seq);
+  }
+
+  /// 相の並びが継ぎ方の決まりを満たすか。
+  ///
+  /// **隣り合う2枚は必ず違う相。そのうえで、
+  /// 「使う相が2つだけ（＝交互）」か「[window] の中に同じ相が二度出ない
+  /// （＝巡回）」のどちらかを満たす。**
+  ///
+  /// 相が2つなら前者が常に成り立つので、決まりは「交互」1本になる。
+  ///
+  /// [spreadPhase] が立っているあいだは3本目が生える――**その相だけで
+  /// 編んだ鎖**も通る。混ぜたら元の決まりに戻るので、緩むのは一択ぶん。
+  bool _chainFits(List<Phase> seq) {
+    // 延焼。同じ相だけで編んだ鎖は、隣り合う2枚が同じでも通る。
+    final spread = spreadPhase;
+    if (spread != null && seq.every((p) => p == spread)) return true;
+    for (var i = 1; i < seq.length; i++) {
+      if (seq[i] == seq[i - 1]) return false;
+    }
+    // 2色だけで編んだ鎖。隣が違えば交互なので、ここで通る。
+    if (seq.toSet().length <= 2) return true;
+    // 3色目を踏んだ鎖。窓の中に同じ相は二度出せない。
+    for (var i = 1; i < seq.length; i++) {
+      for (var j = i - 1; j >= 0 && j >= i - window; j--) {
+        if (seq[j] == seq[i]) return false;
+      }
+    }
+    return true;
   }
 
   /// 威力 [power] の鎖が [cell] に通すダメージ。マナのマスは 0。
@@ -432,10 +505,7 @@ class Board {
     return [for (final c in path) fells(c, p)];
   }
 
-  /// パスとしての正しさ。**長さと隣接と二度通りだけ**を見る。
-  ///
-  /// 色は見ない（[canExtendPath]）。以前はここで「2色の交互」か
-  /// 「N 色の巡回」かを並び全体について確かめていた（README 第7・第8段階）。
+  /// 隣接と相の決まりだけを見た、パスとしての正しさ。
   bool isConnected(List<Cell> path) {
     if (path.length < minPathLength) return false;
     final seen = <Cell>{};
@@ -445,6 +515,7 @@ class Board {
     }
     for (var i = 1; i < path.length; i++) {
       if (!_adjacent(path[i - 1], path[i])) return false;
+      if (!_fits(path.sublist(0, i), path[i], atFront: false)) return false;
     }
     return true;
   }
@@ -613,11 +684,12 @@ class Board {
 
   /// [through] を通る、長さ [need] 以上の成立パスを1本返す。無ければ空。
   ///
-  /// [through] を起点に、後ろへ伸ばしてから前へ伸ばす。
+  /// [through] を起点に、後ろへ伸ばしてから前へ伸ばす。1本の並びとして
+  /// 持っているのは、**窓が接合部を跨ぐ**ため。相が2つだった頃は交互性が
+  /// 隣どうしだけの性質だったので、2本の腕を別々に伸ばして繋いでも
+  /// 自動的に成り立ったが、3つ以上ではそうならない。
   ///
-  /// **色の決まりが無くなってから、枝刈りが効かなくなった**（README 第22
-  /// 段階）。どの隣へも伸ばせるので、長い [need] を頼むほど深く潜る。
-  /// 呼ぶ側が要る長さだけを頼むこと。
+  /// 相の制約が強い枝刈りになるので、盤面が枯れているほど速く終わる。
   List<Cell> findPathThrough(Cell through, int need) {
     if (tileAt(through) == null) return const [];
     final seen = <Cell>{through};
@@ -627,7 +699,7 @@ class Board {
     bool growFront() {
       if (path.length >= need) return true;
       for (final n in neighborsOf(path.first)) {
-        if (seen.contains(n) || tileAt(n) == null) continue;
+        if (seen.contains(n) || !_fits(path, n, atFront: true)) continue;
         seen.add(n);
         path.insert(0, n);
         if (growFront()) return true;
@@ -641,7 +713,7 @@ class Board {
     bool growBack() {
       if (growFront()) return true;
       for (final n in neighborsOf(path.last)) {
-        if (seen.contains(n) || tileAt(n) == null) continue;
+        if (seen.contains(n) || !_fits(path, n, atFront: false)) continue;
         seen.add(n);
         path.add(n);
         if (growBack()) return true;
@@ -739,7 +811,8 @@ class Board {
   ///
   /// **敵のマスを起点にして、前後へ伸ばす。** 敵を1体も通らない道は必ず 0
   /// 点なので、盤面ぜんぶから始める必要がない。階層に居る敵は数体なので、
-  /// 探索はその数倍で済む。
+  /// 探索はその数倍で済む。1本の並びとして持つのは [findPathThrough] と
+  /// 同じ理由で、**窓が接合部を跨ぐ**ため。
   ///
   /// [powerOf] は道から威力を出す関数。**盤面は一党を読まない**ので、
   /// 魔導士の補正は呼び出し側から渡してもらう（`GameController`）。
@@ -787,7 +860,7 @@ class Board {
         score(path);
         if (path.length >= maxLength || nodes >= maxNodes) return;
         for (final n in neighborsOf(path.first)) {
-          if (seen.contains(n) || tileAt(n) == null) continue;
+          if (seen.contains(n) || !_fits(path, n, atFront: true)) continue;
           nodes++;
           seen.add(n);
           path.insert(0, n);
@@ -801,7 +874,7 @@ class Board {
         growFront();
         if (path.length >= maxLength || nodes >= maxNodes) return;
         for (final n in neighborsOf(path.last)) {
-          if (seen.contains(n) || tileAt(n) == null) continue;
+          if (seen.contains(n) || !_fits(path, n, atFront: false)) continue;
           nodes++;
           seen.add(n);
           path.add(n);

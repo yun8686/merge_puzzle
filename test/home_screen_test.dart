@@ -331,4 +331,65 @@ void main() {
       expect(find.textContaining('1色になる'), findsNothing);
     });
   });
+
+  group('3色で潜るとき', () {
+    const prismParty = [
+      MageKind.squireRed,
+      MageKind.squireBlue,
+      MageKind.squireViolet,
+    ];
+
+    testWidgets('初めてなら、潜る前に3色の稽古が出る', (tester) async {
+      final store = await openBase(
+        tester,
+        progress: Progress(party: prismParty),
+      );
+
+      final card = find.text(Dungeons.all.first.name);
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(card);
+      // 稽古場の指は repeat で回るので pumpAndSettle は使えない。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(BoardView), findsOneWidget);
+      expect(find.textContaining('使う色が2つだけなら'), findsOneWidget);
+
+      // とばしても印は残る。次からは出ない。
+      await tester.tap(find.text('とばす'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect((await store.load()).taughtPrism, isTrue);
+    });
+
+    testWidgets('もう通していれば出ない', (tester) async {
+      await openBase(
+        tester,
+        progress: Progress(party: prismParty, taughtPrism: true),
+      );
+
+      final card = find.text(Dungeons.all.first.name);
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(card);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.textContaining('使う色が2つだけなら'), findsNothing);
+    });
+
+    testWidgets('2色の編成なら出ない', (tester) async {
+      await openBase(tester);
+
+      final card = find.text(Dungeons.all.first.name);
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(card);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.textContaining('使う色が2つだけなら'), findsNothing);
+    });
+  });
 }

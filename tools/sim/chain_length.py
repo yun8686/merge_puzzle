@@ -57,7 +57,6 @@ class Chain:
       'new'    どの N+1 枚にも N 色 … 一度入れて戻した案
       'loose'  隣と違えばよい … 素直な一般化
       'spread' いまの決まり or 1色だけ … 烈火の延焼（第17段階）
-      'free'   色を見ない … **いまの決まり**（第22段階）
     """
 
     def __init__(self, first, N, kind):
@@ -73,9 +72,6 @@ class Chain:
         return list(self.seq)[:k] if at_front else list(self.seq)[-k:]
 
     def can_push(self, p, at_front):
-        # いまの決まり：色を見ない。隣り合っていればつながる。
-        if self.kind == 'free':
-            return True
         # 延焼：1色だけで編んでいるあいだは、同じ相をいくらでも続けられる。
         if self.kind == 'spread' and self.distinct == 1 and p == self.seq[0]:
             return True
@@ -167,8 +163,6 @@ def verify():
 
     def full_ok(seq, N, kind):
         w = max(1, N - 1)
-        if kind == 'free':
-            return True
         if kind == 'spread' and len(set(seq)) == 1:
             return True
         for i in range(1, len(seq)):
@@ -188,7 +182,7 @@ def verify():
 
     rng = random.Random(7)
     bad = 0
-    for kind in ('old', 'user', 'new', 'loose', 'spread', 'free'):
+    for kind in ('old', 'user', 'new', 'loose', 'spread'):
         for N in (2, 3):
             for _ in range(4000):
                 first = rng.randrange(N)
@@ -208,11 +202,9 @@ def verify():
 
 
 CASES = [
-    ('2相・色を見ない（いまの決まり）', 2, 'free'),
-    ('3相・色を見ない（いまの決まり）', 3, 'free'),
-    ('2相・交互（第6段階まで）', 2, 'old'),
+    ('2相・交互（相を入れる前の盤面）', 2, 'old'),
     ('3相・巡回のみ（第7段階）', 3, 'old'),
-    ('3相・2色の交互 or 巡回（第8〜21段階）', 3, 'user'),
+    ('3相・2色の交互 or 巡回（いま）', 3, 'user'),
     ('3相・どの4枚にも3色', 3, 'new'),
     ('3相・隣と違えばよい', 3, 'loose'),
     ('3相・いまの決まり or 1色だけ（延焼の1本）', 3, 'spread'),
