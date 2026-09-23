@@ -562,12 +562,11 @@ void main() {
       expect(Board.scoreFor(3, 1), greaterThan(Board.scoreFor(3, 0)));
     });
 
-    test('討ち漏らした敵の反撃は守りの合計', () {
+    test('残っている敵の体力を合計できる', () {
       final board = boardOf([
         ['o5', 'e', 'o3:2'],
         ['e', 'o', 'e'],
       ]);
-      expect(board.foeThreat, 8);
       expect(board.totalFoeHp, 3);
     });
   });
@@ -635,10 +634,13 @@ void main() {
       expect(counts[1] / total, closeTo(0.5, 0.02));
     });
 
-    test('同じ相を2人連れると、その相が倍で降る', () {
+    test('同じ相を2人連れると、その相が多く降る。ただし倍までは届かない', () {
+      // 真下と同じ相が降りにくい（`Board.stackDamping`）ぶん、比率は薄まる。
+      // 多い側が底に溜まって下の敵に届かなくなるのを防ぐための引き換え。
       final counts = tally(const [Phase.red, Phase.blue], weights: const [2, 1]);
       final total = counts[0] + counts[1];
-      expect(counts[0] / total, closeTo(2 / 3, 0.02));
+      expect(counts[0] / total, greaterThan(0.52));
+      expect(counts[0] / total, lessThan(2 / 3 - 0.05));
     });
 
     test('相が3つでも、ひとりずつなら 1:1:1', () {
@@ -646,6 +648,60 @@ void main() {
       final total = counts[0] + counts[1] + counts[2];
       for (final n in counts) {
         expect(n / total, closeTo(1 / 3, 0.02));
+      }
+    });
+
+    test('真下と同じ相は降りにくい', () {
+      // 同じ相を縦に積むと固まりができ、どの鎖も通れないまま底に沈む。
+      // 均等に引けば半分は真下と同じになるところを、1/(1+6) まで下げる。
+      final board = Board(rng: Random(7));
+      var same = 0;
+      var pairs = 0;
+      for (var round = 0; round < 200; round++) {
+        board.refill();
+        for (var r = 0; r < board.rows - 1; r++) {
+          for (var c = 0; c < board.cols; c++) {
+            pairs++;
+            if (board.grid[r][c]!.phase == board.grid[r + 1][c]!.phase) same++;
+          }
+        }
+        for (final row in board.grid) {
+          row.fillRange(0, row.length, null);
+        }
+      }
+      expect(same / pairs, closeTo(1 / (1 + Board.stackDamping), 0.03));
+    });
+  });
+
+  group('手詰まりの敷き直し', () {
+    /// 敵を1体置いて、敵ごと全部赤で塗り潰した盤面。どこへもつなげない。
+    Board deadBoard(int seed) {
+      final board = Board(rng: Random(seed));
+      board.buildStage(foes: const [FoeSpec(6, hp: 2)]);
+      for (var r = 0; r < board.rows; r++) {
+        for (var c = 0; c < board.cols; c++) {
+          final t = board.grid[r][c]!;
+          board.grid[r][c] =
+              Tile(id: t.id, phase: Phase.red, ward: t.ward, hp: t.hp);
+        }
+      }
+      return board;
+    }
+
+    test('敵はその場に残し、マナだけ敷き直して手を作る', () {
+      for (var seed = 0; seed < 20; seed++) {
+        final board = deadBoard(seed);
+        expect(board.hasAnyChain(), isFalse, reason: 'seed=$seed');
+        final at = board.foeCells.single;
+        final foe = board.tileAt(at)!;
+
+        final added = board.reshuffle();
+
+        expect(board.hasAnyChain(), isTrue, reason: 'seed=$seed');
+        expect(board.foeCells, [at], reason: '敵は動かない');
+        expect(identical(board.tileAt(at), foe), isTrue, reason: '傷も守りもそのまま');
+        expect(added.length, board.rows * board.cols - 1);
+        expect(added, isNot(contains(foe.id)));
       }
     });
   });

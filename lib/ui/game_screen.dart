@@ -188,8 +188,6 @@ class _GameScreenState extends State<GameScreen> {
 
   void _nextFloor() => _controller.nextFloor();
 
-  void _retryFloor() => _controller.retryFloor();
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -254,7 +252,7 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                     _HurtFlash(
                       tick: _controller.hitTick,
-                      amount: _controller.lastHit + _controller.lastBacklash,
+                      amount: _controller.lastHit,
                     ),
                     if (_controller.phase == GamePhase.stageCleared &&
                         !_holdingClear)
@@ -268,11 +266,6 @@ class _GameScreenState extends State<GameScreen> {
                         controller: _controller,
                         onNext: _nextDungeon,
                         toHome: _reportsHome,
-                      ),
-                    if (_controller.phase == GamePhase.floorLost)
-                      _FloorLostOverlay(
-                        controller: _controller,
-                        onRetry: _retryFloor,
                       ),
                     if (_confirmingAbort &&
                         _controller.phase == GamePhase.playing)
@@ -674,7 +667,10 @@ class _Footer extends StatelessWidget {
                           ),
                         ],
                       )
-                    : _RuleNote(spread: controller.board.spreadPhase),
+                    : _RuleNote(
+                        spread: controller.board.spreadPhase,
+                        reshuffled: controller.reshuffled,
+                      ),
               ),
             ),
           ),
@@ -795,57 +791,6 @@ class _Curtain extends StatelessWidget {
   }
 }
 
-/// 階層を落とした。盤面から継げる手が消えたとき。
-/// 討ち漏らした敵の反撃を受けるが、一党が立っている限り編み直せる。
-class _FloorLostOverlay extends StatelessWidget {
-  const _FloorLostOverlay({required this.controller, required this.onRetry});
-
-  final GameController controller;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Curtain(
-      children: [
-        Text(
-          'B${controller.floor}F で行き詰まった',
-          style: AppFont.number(26, color: Palette.danger),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'つなげる色がなくなった',
-          style: TextStyle(
-            color: Palette.textMuted,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _FoeLineup(wards: controller.board.foeWards),
-        const SizedBox(height: 18),
-        Text('残った敵の反撃', style: AppFont.label(10)),
-        const SizedBox(height: 8),
-        Text(
-          '-${controller.lastBacklash}',
-          style: AppFont.number(48, color: Palette.danger),
-        ),
-        const SizedBox(height: 18),
-        _ResultRow(
-          label: '残り体力',
-          value: '${controller.party.hp} / ${controller.party.maxHp}',
-        ),
-        const SizedBox(height: 8),
-        _ResultRow(
-          label: '残りの敵',
-          value: '${controller.remainingFoes} 体',
-        ),
-        const SizedBox(height: 26),
-        _PrimaryButton(label: 'この階層をやり直す', onTap: onRetry),
-      ],
-    );
-  }
-}
-
 /// 一党が倒れた。ここだけが本当の終わり。
 class _DefeatOverlay extends StatelessWidget {
   const _DefeatOverlay({
@@ -912,14 +857,28 @@ class _DefeatOverlay extends StatelessWidget {
 /// マスの光り方が変わるだけ）。緩めた相の色で出すので、どの色が繋がるように
 /// なったのかも読める。
 class _RuleNote extends StatelessWidget {
-  const _RuleNote({required this.spread});
+  const _RuleNote({required this.spread, this.reshuffled = false});
 
   /// 延焼している相。null なら普段の決まり。
   final Phase? spread;
 
+  /// 手詰まりで盤面を敷き直した直後。なぞり始めるまで出す。
+  final bool reshuffled;
+
   @override
   Widget build(BuildContext context) {
     final phase = spread;
+    if (phase == null && reshuffled) {
+      return const Text(
+        'つなげる場所がなくなったので、盤面を入れ替えた',
+        key: ValueKey('hint-reshuffled'),
+        style: TextStyle(
+          color: Palette.textPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
     if (phase == null) {
       return const Text(
         '同じ色を続けずに、なぞってつなぐ',

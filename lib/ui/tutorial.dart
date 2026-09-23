@@ -193,6 +193,10 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// この稽古に入った時点の鎖の本数。増えたら道を辿り終えたということ。
   int _chainsAtEntry = 0;
 
+  /// この稽古に入った時点で盤面が敷き直された回数。増えたら決めた道は
+  /// もう盤面に無い。
+  int _reshufflesAtEntry = 0;
+
   /// 課題が変わった直後だけ出す「できた」。
   bool _cheering = false;
 
@@ -292,7 +296,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
   /// 継げないので、鎖は行から出られず、どう編んでも5枚止まりになる。
   ///
   /// 塞ぐのは敵のまわりだけ。ほかの場所は市松のままにしておく。盤面ぜんぶを
-  /// 手詰まりにすると、1手のあとに階層が落ちて稽古がやり直しになる。
+  /// 手詰まりにすると、1手のあとに盤面が敷き直されて稽古がやり直しになる。
   static void _pocket(Board board) {
     final at = _thickFoe(board);
     final row = at.row;
@@ -566,6 +570,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     // お手本は決めた道そのもの。探すまでもない。
     _controller.hintPath = route;
     _chainsAtEntry = _controller.chains;
+    _reshufflesAtEntry = _controller.reshuffles;
   }
 
   /// お手本は出しっぱなし。ここは覚えるための場所なので、道を隠して
@@ -583,10 +588,11 @@ class _TutorialScreenState extends State<TutorialScreen> {
 
   void _check() {
     if (!mounted || _finished) return;
-    // 倒れても手詰まりでも、稽古場なので黙って組み直す。ここで躓かせると
-    // 覚える前に投げられる。
-    if (_controller.phase == GamePhase.floorLost ||
-        _controller.phase == GamePhase.defeated) {
+    // 倒れても、手詰まりで盤面が敷き直されても、稽古場なので黙って組み
+    // 直す。ここで躓かせると覚える前に投げられる。敷き直された盤面には
+    // 決めた道がもう通っていないので、そのままでは先へ進めない。
+    if (_controller.phase == GamePhase.defeated ||
+        _controller.reshuffles != _reshufflesAtEntry) {
       _controller.enterDungeon(TutorialScreen.dungeonFor(widget.course));
       _enterScene();
       return;

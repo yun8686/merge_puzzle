@@ -32,8 +32,13 @@ void paintCheckerboard(
 /// 盤面を1色で塗り潰して、**どこへも繋げない状態**にする。
 /// [foe] のマスだけ敵にして、制圧扱いにならないようにしておく。
 ///
-/// 手数の制限が無くなってから、階層を落とせるのはこの形だけになった。
-void paintDead(Board board, {required Cell foe, int ward = 8}) {
+/// 反撃のあとでこの形なら、盤面が敷き直される（[Board.reshuffle]）。
+void paintDead(
+  Board board, {
+  required Cell foe,
+  int ward = 8,
+  int hp = 1,
+}) {
   var id = 0;
   for (var r = 0; r < board.rows; r++) {
     for (var c = 0; c < board.cols; c++) {
@@ -42,6 +47,7 @@ void paintDead(Board board, {required Cell foe, int ward = 8}) {
         id: id++,
         phase: Phase.red,
         ward: isHere ? ward : null,
+        hp: isHere ? hp : 1,
       );
     }
   }
@@ -258,7 +264,6 @@ void main() {
 
       expect(controller.party.hp, 0);
       expect(controller.phase, GamePhase.defeated);
-      expect(controller.lastBacklash, 0, reason: '階層を落とす前に倒れている');
     });
 
     test('盤面が詰んでも、すぐには殴られない', () {
@@ -366,31 +371,64 @@ void main() {
     });
   });
 
-  test('落とした階層は同じ深さで編み直す', () {
-    final controller = newController();
-    paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
-    strikeThrough(controller);
-    expect(controller.phase, GamePhase.floorLost);
+  group('手詰まり', () {
+    test('階層を落とさず、敵を残して盤面を敷き直す', () {
+      // 負けるのは体力が尽きたときだけ。盤面の運で詰んでも続けられる。
+      final controller = newController();
+      paintDead(controller.board, foe: const Cell(7, 5), ward: 6, hp: 2);
+      expect(controller.board.hasAnyChain(), isFalse);
+      final floor = controller.floor;
+      final hpBefore = controller.party.hp;
+      final cells = controller.board.rows * controller.board.cols;
 
-    final floor = controller.floor;
-    final hp = controller.party.hp;
-    controller.retryFloor();
-    expect(controller.floor, floor, reason: '深さは変わらない');
-    expect(controller.party.hp, hp, reason: '体力は反撃のときに減らしてある');
-    expect(controller.phase, GamePhase.playing);
-  });
+      strikeThrough(controller);
 
-  test('反撃で体力が尽きると全滅する', () {
-    final controller = newController();
-    paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
-    // 毎ターンの攻撃 2 を受けてもまだ立っていて、反撃の 6 で倒れる高さ。
-    controller.party.hp = 4;
+      expect(controller.phase, GamePhase.playing);
+      expect(controller.floor, floor, reason: '深さは変わらない');
+      expect(controller.acceptsInput, isTrue);
+      expect(controller.board.hasAnyChain(), isTrue);
+      expect(controller.board.foeCells, [const Cell(7, 5)], reason: '敵はその場に');
+      final foe = controller.board.tileAt(const Cell(7, 5))!;
+      expect(foe.ward, 6);
+      expect(foe.hp, 2, reason: '傷もそのまま');
+      // 上乗せは無い。その手ぶんの毎ターンの攻撃だけ。
+      expect(controller.party.hp, hpBefore - Board.attackFor(6));
+      // 敵のほかは全部降り直してくる。
+      expect(controller.freshTileIds.length, cells - 1);
+      expect(controller.reshuffles, 1);
+      expect(controller.reshuffled, isTrue);
+    });
 
-    strikeThrough(controller);
+    test('敷き直したという知らせは、なぞり始めると消える', () {
+      final controller = newController();
+      paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
+      strikeThrough(controller);
+      expect(controller.reshuffled, isTrue);
 
-    expect(controller.party.hp, 0);
-    expect(controller.party.isDown, isTrue);
-    expect(controller.phase, GamePhase.defeated);
+      controller.beginPath(const Cell(0, 0));
+      expect(controller.reshuffled, isFalse);
+      expect(controller.reshuffles, 1, reason: '回数は残る');
+    });
+
+    test('その手の攻撃で倒れたなら、敷き直さずに全滅', () {
+      final controller = newController();
+      paintDead(controller.board, foe: const Cell(7, 5), ward: 6);
+      controller.party.hp = Board.attackFor(6);
+
+      strikeThrough(controller);
+
+      expect(controller.party.isDown, isTrue);
+      expect(controller.phase, GamePhase.defeated);
+      expect(controller.reshuffles, 0);
+    });
+
+    test('つなげる手があるうちは敷き直さない', () {
+      final controller = newController();
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 6);
+      strikeThrough(controller);
+      expect(controller.reshuffles, 0);
+      expect(controller.reshuffled, isFalse);
+    });
   });
 
   test('守りに届かない敵は傷もつかず、手数だけが減る', () {
@@ -924,24 +962,6 @@ void main() {
     });
   });
 
-  test('繋げる手が無くなると階層を落とし、討ち漏らした敵の反撃を受ける', () {
-    // **階層を落とすのはこの形だけ。** 手数の制限は無いので、繋げるうちは
-    // いくらでも編み直せる（そのかわり1手ごとに殴られる）。
-    final controller = newController();
-    paintDead(controller.board, foe: const Cell(7, 5));
-    final hpBefore = controller.party.hp;
-    expect(controller.board.hasAnyChain(), isFalse);
-
-    strikeThrough(controller);
-
-    expect(controller.phase, GamePhase.floorLost);
-    // 反撃は討ち漏らした敵の守りの合計。
-    expect(controller.lastBacklash, 8);
-    // その手ぶんの毎ターンの攻撃（守り8なら攻撃力2）も乗る。
-    expect(controller.lastHit, Board.attackFor(8));
-    expect(controller.party.hp, hpBefore - 8 - Board.attackFor(8));
-  });
-
   group('増えた魔導士', () {
     /// 測りたい魔導士だけを連れた一党。
     ///
@@ -1050,17 +1070,15 @@ void main() {
 
     test('盾は受ける痛手を半分にする', () {
       final controller = withRoster(const [Mage.aegis]);
-      paintDead(controller.board, foe: const Cell(7, 5), ward: 7);
+      paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 7);
       final hpBefore = controller.party.hp;
 
       strikeThrough(controller);
 
-      expect(controller.phase, GamePhase.floorLost);
-      // 守り7の敵を討ち漏らした。半分にして切り上げで4。
-      expect(controller.lastBacklash, 4);
-      // 毎ターンの攻撃も半分になる。守り7の攻撃力2が1に。
+      // 毎ターンの攻撃が半分になる。守り7の攻撃力2が1に。
+      expect(Board.attackFor(7), 2);
       expect(controller.lastHit, 1);
-      expect(controller.party.hp, hpBefore - 4 - 1);
+      expect(controller.party.hp, hpBefore - 1);
     });
 
     test('名簿は見習い3人と招ける7人で、印は全員ちがう', () {

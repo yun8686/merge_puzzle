@@ -209,7 +209,9 @@ class ClearResult {
 ///  - 敵には「威力 − 守り + 1」のダメージが通る。守り以下なら 0 で弾かれる。
 ///    体力を削り切れば討ち取れ、残れば傷ついたままその場に残る
 ///  - 何ひとつ起きないチェイン（誰にも傷がつかない）は不成立
-///  - 消えた跡は重力で詰め、上から新しいマナが降ってくる
+///  - 消えた跡は重力で詰め、上から新しいマナが降ってくる。真下と同じ相は
+///    降りにくい（[stackDamping]）
+///  - つなげる手が1つも無くなったら、敵を残してマナだけ敷き直す（[reshuffle]）
 ///  - 敵は補充されない。ステージ開始時に置かれたものが全て
 class Board {
   Board({
@@ -303,6 +305,21 @@ class Board {
   /// ジレンマも雷の8枚条件も意味を失う（README 第8段階）。
   Phase? spreadPhase;
 
+  /// 補充で、**真下のマスと同じ相が降る重みを何分の1にするか。**
+  ///
+  /// 交互の決まりでは、同じ相が固まった場所はどの鎖も通れない。鎖は色の
+  /// 混ざった場所ばかり消していくので、固まりだけが残って重力で下へ沈み、
+  /// 底に溜まる（下にいる敵に届かなくなる）。縦に同じ相を積ませないことで、
+  /// 固まりそのものを作りにくくする。
+  ///
+  /// `python3 tools/sim/clump.py` で測ってある。40手のあと、下2段のうち
+  /// どの鎖にも入れないマスは 1:1 の編成で 46%→22%（開幕の 21% とほぼ同じ）、
+  /// 2:1 で 68%→49%（README 第23段階）。
+  ///
+  /// **比率（[_weights]）は薄まる。** 真下と違う相が出やすくなるので、2:1 の
+  /// 編成でも降ってくるのは 56:44 くらいになる。
+  static const int stackDamping = 6;
+
   final Random _rng;
   late final List<List<Tile?>> grid;
   int _nextId = 0;
@@ -313,8 +330,17 @@ class Board {
   }
 
   /// マナを1枚。[even] を立てると比率を無視して均等に引く。
-  Tile _spawn({bool even = false}) {
-    final weights = even ? List<int>.filled(phases.length, 1) : _weights;
+  ///
+  /// [below] を渡すと、その相だけ重みを [stackDamping] 分の1にする
+  /// （ほかの相を掛けて、整数のまま比べる）。
+  Tile _spawn({bool even = false, Phase? below}) {
+    final base = even ? List<int>.filled(phases.length, 1) : _weights;
+    final weights = below == null
+        ? base
+        : [
+            for (var i = 0; i < phases.length; i++)
+              phases[i] == below ? base[i] : base[i] * stackDamping,
+          ];
     var total = 0;
     for (final w in weights) {
       total += w;
@@ -623,18 +649,55 @@ class Board {
 
   /// 空きマスを上から補充する。戻り値は新しく生まれたブロックの id 集合。
   /// 補充されるのはマナのマスだけ。敵は降ってこない。
+  ///
+  /// **列ごとに下から埋める。** 1枚ずつ真下のマスを見て、同じ相を積み
+  /// にくくする（[stackDamping]）。上から埋めると、真下がまだ空で見られない。
   Set<int> refill() {
     final added = <int>{};
     for (var c = 0; c < cols; c++) {
+      for (var r = rows - 1; r >= 0; r--) {
+        if (grid[r][c] != null) continue;
+        final t = _spawn(below: r + 1 < rows ? grid[r + 1][c]?.phase : null);
+        grid[r][c] = t;
+        added.add(t.id);
+      }
+    }
+    return added;
+  }
+
+  /// **手詰まりの救済。** 敵はその場に（傷も守りもそのまま）残し、マナの
+  /// マスだけを均等に敷き直す。戻り値は敷き直したマスの id 集合（降って
+  /// くる演出に使う）。
+  ///
+  /// つなげる手が無くなったら階層を落としていた頃は、底に溜まった同じ相の
+  /// せいで、手の打ちようがないまま反撃をまとめて浴びていた。盤面の運で
+  /// 負けるのは理不尽なので、負けるのは体力が尽きたときだけにする
+  /// （README 第23段階）。
+  ///
+  /// 均等に敷いて手ができるまで引き直し、それでも駄目なら市松に塗る。
+  /// 相が2つ以上あれば市松は必ずつながる。1つしか無ければ救いようが無い
+  /// （編成が2色以上を強いている：`Progress.minPhases`）。
+  Set<int> reshuffle() {
+    Set<int> paint({bool checker = false}) {
+      final added = <int>{};
       for (var r = 0; r < rows; r++) {
-        if (grid[r][c] == null) {
-          final t = _spawn();
+        for (var c = 0; c < cols; c++) {
+          if (grid[r][c]?.isFoe ?? false) continue;
+          final t = checker
+              ? Tile(id: _nextId++, phase: phases[(r + c) % phases.length])
+              : _spawn(even: true);
           grid[r][c] = t;
           added.add(t.id);
         }
       }
+      return added;
     }
-    return added;
+
+    for (var tries = 0; tries < 20; tries++) {
+      final added = paint();
+      if (hasAnyChain()) return added;
+    }
+    return paint(checker: true);
   }
 
   /// 盤面に残っている敵。
@@ -661,16 +724,6 @@ class Board {
 
   /// 盤面に残っている敵の守り。決着画面に姿を並べるのに使う。
   List<int> get foeWards => [for (final c in foeCells) tileAt(c)!.ward!];
-
-  /// 討ち漏らしたまま階層を落としたときに受ける痛手。
-  /// 守りが厚い敵を残すほど高くつく。
-  int get foeThreat {
-    var n = 0;
-    for (final cell in foeCells) {
-      n += tileAt(cell)!.ward!;
-    }
-    return n;
-  }
 
   /// 残っている敵が毎ターン浴びせてくるダメージの合計。
   /// **討ち取れば減る。** 早く討つほど後が楽になる。

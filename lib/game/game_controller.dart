@@ -11,9 +11,12 @@ import 'party.dart';
 ///
 ///  - [stageCleared] … その階層の敵を討ち果たした。そのまま次の階層へ
 ///  - [dungeonCleared] … 最下層まで討ち果たした。ダンジョンの踏破
-///  - [floorLost] … 手詰まり。討ち漏らした敵の反撃を受けて編み直す
 ///  - [defeated] … 反撃で一党の体力が尽きた。このダンジョンは失敗
-enum GamePhase { playing, stageCleared, dungeonCleared, floorLost, defeated }
+///
+/// **負けは体力が尽きたときだけ。** 手詰まりで階層を落とす決着もあったが、
+/// 盤面の運で負けるのは理不尽なので、今は盤面を敷き直して続ける
+/// （[Board.reshuffle]、README 第23段階）。
+enum GamePhase { playing, stageCleared, dungeonCleared, defeated }
 
 /// アクティブスキルを使った結果。
 ///
@@ -80,9 +83,6 @@ class GameController extends ChangeNotifier {
   int bestChain = 0;
   GamePhase phase = GamePhase.playing;
 
-  /// 階層を落としたときに受けた痛手。決着画面に出す。
-  int lastBacklash = 0;
-
   /// 直近の鎖で氷雨が戻した体力。0 なら何も起きていない。
   int lastHealed = 0;
 
@@ -103,6 +103,16 @@ class GameController extends ChangeNotifier {
   ///
   /// [settle] で立ち、[strike] で下りる。盤面を描く側が間を置いて呼ぶ。
   bool isStriking = false;
+
+  /// 手詰まりで盤面を敷き直した回数。稽古場が「決めた道が盤面ごと
+  /// 消えた」と知るのに使う。
+  int reshuffles = 0;
+
+  /// 直近の反撃のあとに盤面を敷き直した。なぞり始めるまで盤面の下で言う。
+  ///
+  /// **黙って入れ替えると、何が起きたのか分からない。** マスが全部降り直して
+  /// くるので動きは見えるが、なぜそうなったのかは言わないと伝わらない。
+  bool reshuffled = false;
 
   /// 痛手を受けた回数。**演出はこれが変わったのを見て走り出す。**
   ///
@@ -169,6 +179,7 @@ class GameController extends ChangeNotifier {
     lastHealed = 0;
     lastHit = 0;
     lastEvaded = false;
+    reshuffled = false;
     revealedPath = const [];
     felledWards.clear();
     phase = GamePhase.playing;
@@ -184,12 +195,6 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 落とした階層を編み直す。体力は既に減らしてあるので、ここでは触らない。
-  void retryFloor() {
-    _startFloor(floor);
-    notifyListeners();
-  }
-
   /// ダンジョンに入り直す。1階層目から、体力も満タンから。
   /// [roster] を渡すと連れていく顔ぶれも入れ替える（編成をやり直したとき）。
   void enterDungeon(Dungeon next, {List<Mage>? roster}) {
@@ -197,7 +202,6 @@ class GameController extends ChangeNotifier {
     if (roster != null) _roster = List.of(roster);
     score = 0;
     bestChain = 0;
-    lastBacklash = 0;
     party = _freshParty();
     _startFloor(1);
     notifyListeners();
@@ -346,6 +350,7 @@ class GameController extends ChangeNotifier {
     // 縛られているときは、決めた道の始まりからしか引けない。
     if (lockedPath.isNotEmpty && c != lockedPath.first) return;
     hintPath = const [];
+    reshuffled = false;
     path
       ..clear()
       ..add(c);
@@ -471,24 +476,22 @@ class GameController extends ChangeNotifier {
     isStriking = false;
 
     lastHit = lastEvaded ? 0 : party.damageFor(board.foeAttack);
-    var taken = lastHit;
     party.takeDamage(lastHit);
 
-    // 手数の制限は無い。落ちるのは**盤面から手が消えたとき**だけで、
-    // それ以外はいくらでも編み直せる――ただし1手ごとに殴られるので、
-    // 長居そのものが体力で値段を払っている。
-    if (!party.isDown && !board.hasAnyChain()) {
-      // 落とした階層の締め。討ち漏らした敵の守りぶんをまとめて浴びる。
-      // 守りが厚い敵を残すほど高くつく。
-      lastBacklash = party.damageFor(board.foeThreat);
-      taken += lastBacklash;
-      party.takeDamage(lastBacklash);
-      phase = party.isDown ? GamePhase.defeated : GamePhase.floorLost;
-    } else if (party.isDown) {
+    // 手数の制限は無く、負けるのは体力が尽きたときだけ。1手ごとに殴られる
+    // ので、長居そのものが体力で値段を払っている。
+    if (party.isDown) {
       phase = GamePhase.defeated;
+    } else if (!board.hasAnyChain()) {
+      // 手詰まり。階層は落とさず、敵を残して盤面だけ敷き直す。上乗せの
+      // 痛手も無い――運で詰んだ盤面に値段を付けると、打つ手が無いまま削られる。
+      freshTileIds = board.reshuffle();
+      hintPath = const [];
+      reshuffles++;
+      reshuffled = true;
     }
 
-    if (taken > 0) hitTick++;
+    if (lastHit > 0) hitTick++;
     notifyListeners();
   }
 

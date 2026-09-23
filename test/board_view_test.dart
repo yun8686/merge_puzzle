@@ -469,10 +469,9 @@ void main() {
     expect(find.text('同じ色を続けずに、なぞってつなぐ'), findsNothing);
   });
 
-  testWidgets('陥落画面に討ち漏らした敵が5体並ぶ', (tester) async {
+  testWidgets('全滅画面に残った敵が5体並ぶ', (tester) async {
     final controller = newController(7);
-    // 1色で塗り潰して手詰まりにする。**階層を落とすのはこの形だけ**で、
-    // 手数の制限が無くなってからは他に落とし方が無い。
+    // 1色で塗り潰す。敵の姿を並べる札を、5体ぶん溢れずに出せるかを見る。
     var id = 0;
     for (var r = 0; r < controller.board.rows; r++) {
       for (var c = 0; c < controller.board.cols; c++) {
@@ -490,12 +489,12 @@ void main() {
       );
     }
 
+    // 5体の攻撃力の合計ちょうどの体力にして、この1手で倒れさせる。
+    controller.party.hp = controller.board.foeAttack;
     controller.isSettling = true;
     controller.settle();
     controller.strike();
-    expect(controller.phase, GamePhase.floorLost);
-    // 反撃は守りの合計。
-    expect(controller.lastBacklash, 26);
+    expect(controller.phase, GamePhase.defeated);
 
     await tester.pumpWidget(
       MaterialApp(home: GameScreen(controller: controller)),
@@ -516,7 +515,38 @@ void main() {
     for (final ward in wards) {
       expect(find.text(foeNameFor(ward)), findsOneWidget, reason: '守り$ward');
     }
-    expect(find.text('-26'), findsOneWidget);
+
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+  });
+
+  testWidgets('手詰まりで盤面を敷き直したら、盤面の下で言う', (tester) async {
+    final controller = newController(7);
+    // 1色で塗り潰して手詰まりにする。敵は右下に1体。
+    var id = 0;
+    for (var r = 0; r < controller.board.rows; r++) {
+      for (var c = 0; c < controller.board.cols; c++) {
+        final isFoe = r == 7 && c == 5;
+        controller.board.grid[r][c] = Tile(
+          id: id++,
+          phase: Phase.red,
+          ward: isFoe ? 6 : null,
+        );
+      }
+    }
+    controller.isSettling = true;
+    controller.settle();
+    controller.strike();
+    expect(controller.phase, GamePhase.playing, reason: '階層は落とさない');
+    expect(controller.reshuffled, isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(home: GameScreen(controller: controller)),
+    );
+    await tester.pump();
+
+    // 黙って入れ替えると、何が起きたのか分からない。
+    expect(find.text('つなげる場所がなくなったので、盤面を入れ替えた'), findsOneWidget);
+    expect(find.text('同じ色を続けずに、なぞってつなぐ'), findsNothing);
 
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });
