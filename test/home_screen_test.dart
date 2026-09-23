@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity_chain/game/dungeon.dart';
+import 'package:parity_chain/game/feats.dart';
 import 'package:parity_chain/game/party.dart';
 import 'package:parity_chain/game/progress.dart';
 import 'package:parity_chain/ui/board_view.dart';
+import 'package:parity_chain/ui/game_screen.dart';
 import 'package:parity_chain/ui/home_screen.dart';
 
 /// 拠点は面によっては縦に長い。押す前に送り込む。
@@ -390,6 +392,99 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.textContaining('使う色が2つだけなら'), findsNothing);
+    });
+  });
+
+  group('記録と課題', () {
+    const squires = [Mage.squireRed, Mage.squireBlue];
+    final hollow = Dungeons.all.first;
+
+    DungeonOutcome clearedRun({
+      required int moves,
+      required int hpLeft,
+      required int bestChain,
+    }) => DungeonOutcome(
+      dungeonId: hollow.id,
+      cleared: true,
+      floor: hollow.depth,
+      score: 400,
+      bestChain: bestChain,
+      moves: moves,
+      hpLeft: hpLeft,
+      maxHp: 90,
+    );
+
+    test('クリアすると自己ベストを書き、灯った★と課題を1行ずつ言う', () {
+      final progress = Progress();
+      final run = clearedRun(moves: hollow.par, hpLeft: 60, bestChain: 8);
+      final note = settleDive(progress, hollow, squires, run);
+
+      expect(progress.recordOf(hollow.id)!.moves, hollow.par);
+      expect(note, contains('${hollow.name} クリア'));
+      expect(note, contains('★ 体力を半分以上残してクリア'));
+      expect(note, contains('★ ${hollow.par}手以内でクリア'));
+      expect(note, contains('威力8以上のチェインを出してクリア'));
+      expect(progress.hasFeat(hollow.id, 'chain8'), isTrue);
+      expect(progress.hasFeat(hollow.id, 'prism'), isFalse, reason: '2色で潜った');
+      expect(progress.shards, Progress.firstClearReward + Progress.featReward);
+
+      // 同じ戦果をもう一度。新しく灯るものはもう無い。
+      final again = settleDive(progress, hollow, squires, run);
+      expect(again, isNot(contains('★')));
+      expect(again, isNot(contains('課題')));
+    });
+
+    test('倒れた回は記録に書かない', () {
+      final progress = Progress();
+      final note = settleDive(
+        progress,
+        hollow,
+        squires,
+        DungeonOutcome(
+          dungeonId: hollow.id,
+          cleared: false,
+          floor: 3,
+          score: 999,
+          bestChain: 12,
+          moves: 5,
+          hpLeft: 0,
+          maxHp: 90,
+        ),
+      );
+      expect(note, 'B3F まで降りた　魔晶 +3');
+      expect(progress.recordOf(hollow.id), isNull);
+      expect(progress.feats, isEmpty);
+    });
+
+    testWidgets('札に★と自己ベストと課題が並ぶ', (tester) async {
+      final progress = Progress(cleared: {hollow.id});
+      progress.noteRecord(
+        hollow.id,
+        DungeonRecord(
+          score: 1234,
+          chain: 9,
+          moves: hollow.par + 5,
+          hpPercent: 80,
+        ),
+      );
+      progress.recordFeat(hollow.id, 'chain8');
+      await openBase(tester, progress: progress);
+
+      expect(find.text('★ クリア'), findsOneWidget);
+      expect(find.text('★ 体力半分以上'), findsOneWidget);
+      expect(find.text('☆ ${hollow.par}手以内'), findsOneWidget);
+      expect(
+        find.text('最高スコア 1234　最大威力 9　最少 ${hollow.par + 5}手'),
+        findsOneWidget,
+      );
+      for (final feat in Feats.of(hollow.id)) {
+        expect(find.text(feat.label), findsOneWidget, reason: feat.id);
+      }
+      // 開いていない札には出さない。
+      expect(
+        find.text(Feats.of(Dungeons.all[2].id).first.label),
+        findsNothing,
+      );
     });
   });
 }

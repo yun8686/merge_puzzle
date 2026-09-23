@@ -147,6 +147,10 @@ class GameController extends ChangeNotifier {
   /// 編んだ鎖の本数。稽古場が「決めた道はもう辿られた」と知るのに使う。
   int chains = 0;
 
+  /// **このダンジョンで**編んだ鎖の本数（＝使った手数）。[chains] は階層
+  /// ごとに戻るが、こちらは入り直すまで数え続ける。★の「手数」に使う。
+  int moves = 0;
+
   /// 消した直後、重力と補充を当てるまでの間。なぞった順に1枚ずつ消える様子を
   /// 見せたいので、その間は盤面を凍らせて穴が開いたままにしておく。
   bool isSettling = false;
@@ -202,6 +206,7 @@ class GameController extends ChangeNotifier {
     if (roster != null) _roster = List.of(roster);
     score = 0;
     bestChain = 0;
+    moves = 0;
     party = _freshParty();
     _startFloor(1);
     notifyListeners();
@@ -423,6 +428,7 @@ class GameController extends ChangeNotifier {
       if (result.cleared[i] && ward != null) felledWards.add(ward);
     }
     chains++;
+    moves++;
     for (final fall in result.bolt) {
       felledWards.add(fall.ward);
     }

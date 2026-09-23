@@ -25,6 +25,19 @@ class Dungeon {
   /// [floor] は1から数える。範囲外は端に丸める。
   FloorSpec floorAt(int floor) => floors[(floor - 1).clamp(0, depth - 1)];
 
+  /// **手数の目安。** ★の3つ目（この手数以内でクリア）の線。
+  ///
+  /// 階層ごとに「敵の体力の合計＋1手」。体力1につき1本で削り、階層ごとに
+  /// 1本だけ外してよい、という勘定。2体を1本でまとめて倒せば縮められるので、
+  /// 届かない数字ではない。階層を書き換えれば目安も一緒に動く。
+  int get par {
+    var n = 0;
+    for (final floor in floors) {
+      n += floor.totalFoeHp + 1;
+    }
+    return n;
+  }
+
   /// 最下層でいちばん守りの厚い敵。ダンジョンの顔として札に出す。
   int get bossWard {
     var ward = 0;

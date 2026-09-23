@@ -42,7 +42,8 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `lib/game/roster.dart` | **名簿**（`party.dart` の part）。`MageKind` と `Mage` の実体、調整の定数。増やすのはここ |
 | `lib/game/actives.dart` | **アクティブスキルの中身**（`party.dart` の part）。`Active` の実体。増やすのはここ |
 | `lib/game/dungeon.dart` | ダンジョンの定義。5〜7階層ぶんの敵を手で書く。増やすのはここ |
-| `lib/game/progress.dart` | 所持・踏破・魔晶・編成。**唯一の永続状態**。盤面もダンジョンも読まない |
+| `lib/game/progress.dart` | 所持・踏破・魔晶・編成・自己ベスト・課題。**唯一の永続状態**。盤面もダンジョンも読まない |
+| `lib/game/feats.dart` | ★と課題。クリアした1本の戦果（`DiveReport`）だけを見て決める。**課題を増やすのはここ** |
 | `lib/dev_switch.dart` | 試用の口（`?all`）。URL を読むのはここだけ。`main.dart` からしか呼ばない |
 | `lib/ui/title_screen.dart` | タイトル。記録を読まない。押されたら拠点に渡すだけ |
 | `lib/ui/tutorial.dart` | 遊び方。**本物の盤面をなぞらせる**稽古場。初回だけ拠点の上に出す |
@@ -56,7 +57,7 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 | `tools/foe/` | 敵の姿の定義とプレビュー。Python（Pillow）。詳細は `tools/foe/README.md` |
 | `tools/mage/` | 魔導士の姿。同上。詳細は `tools/mage/README.md` |
 | `tools/sim/` | 継ぎ方の決まりの難易度（`chain_length.py`）と、1本の潜りで浴びる痛手（`damage.py`）と、同じ相が底に溜まるか（`clump.py`）を測る。標準ライブラリだけで動く。詳細は `tools/sim/README.md` |
-| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `dev_switch_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
+| `test/` | `board_test.dart` / `party_test.dart` / `game_controller_test.dart` / `progress_test.dart` / `feats_test.dart` / `dev_switch_test.dart` / `mage_art_test.dart` / `board_view_test.dart` / `home_screen_test.dart` / `title_screen_test.dart` / `tutorial_test.dart` |
 
 `party.dart` は `board.dart` を import しない。魔導士は鎖の戦果（`ChainTally`：
 枚数・相ごとの枚数・開始した相）だけを見る。ここを繋ぐと、README に書いてある
@@ -296,6 +297,29 @@ CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、
 
 **id は保存に書かれる。** 名前を変えるのは自由だが、`id` は変えない。順番を
 入れ替えるのも、id さえ据え置きなら踏破の記録は生きる。
+
+## ★と課題
+
+**書くのはクリアしたときだけ**（`home_screen.dart` の `settleDive`）。自己ベスト
+（`DungeonRecord`）は項目ごとに良いほうを残し、★（`Stars`）はそこから割り出す
+ので保存しない。課題（`Feats`）は果たした印を `"ダンジョンの id/課題の id"` の
+文字列で `Progress.feats` に持つ。**`Progress` にダンジョンや課題の中身を
+読ませない**――照らし合わせるのは `feats.dart` と拠点。
+
+**課題の id は保存に乗るので、出したら変えない。** 増やすのは `Feats._table`
+だけ。課題の条件は `FeatRule` の組で書き、種類ごとに分岐を書かない（パッシブ
+スキルの `Trigger` と同じ考え方）。課題の無いダンジョンや、表の id の書き間違いは
+`feats_test.dart` の**課題の見張り**が捕まえる。
+
+**手の届く課題にする。** 見習いだけ・2人以下を置くなら、`tools/sim/damage.py` の
+「きつい」がその体力（見習い3人で 135、2人で 90）を超えないダンジョンに限る。
+
+★の3つ目の目安（`Dungeon.par`）は階層から割るので、階層を書き換えれば一緒に
+動く。★は保存していないので、目安が動いても記録と食い違わない。
+
+盤面の画面は**戦果を渡すだけ**（`DungeonOutcome` の `score` / `bestChain` /
+`moves` / `hpLeft` / `maxHp`）。手数は `GameController.moves`（ダンジョンを通して
+数える。階層ごとに戻る `chains` とは別）。
 
 ## 試すときは URL に `?all`
 

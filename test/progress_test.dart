@@ -106,6 +106,61 @@ void main() {
     expect(progress.partyIsValid, isTrue);
   });
 
+  group('自己ベストと課題', () {
+    const slow = DungeonRecord(score: 500, chain: 9, moves: 30, hpPercent: 20);
+    const fast = DungeonRecord(score: 300, chain: 6, moves: 18, hpPercent: 60);
+
+    test('項目ごとに良いほうを残す。手数だけは少ないほうが良い', () {
+      final progress = Progress();
+      expect(progress.recordOf('hollow'), isNull);
+      progress.noteRecord('hollow', slow);
+      progress.noteRecord('hollow', fast);
+      final best = progress.recordOf('hollow')!;
+      expect(best.score, 500);
+      expect(best.chain, 9);
+      expect(best.moves, 18);
+      expect(best.hpPercent, 60);
+    });
+
+    test('課題の魔晶は1つにつき一度きり', () {
+      final progress = Progress();
+      expect(progress.recordFeat('hollow', 'chain8'), Progress.featReward);
+      expect(progress.recordFeat('hollow', 'chain8'), 0);
+      expect(progress.shards, Progress.featReward);
+      expect(progress.hasFeat('hollow', 'chain8'), isTrue);
+      expect(progress.hasFeat('cavern', 'chain8'), isFalse, reason: '1本ごと');
+    });
+
+    test('書いて読み直しても残る', () {
+      final progress = Progress(cleared: {'hollow'});
+      progress.noteRecord('hollow', slow);
+      progress.recordFeat('hollow', 'prism');
+      final back = Progress.decode(progress.encode());
+      final best = back.recordOf('hollow')!;
+      expect(best.score, slow.score);
+      expect(best.chain, slow.chain);
+      expect(best.moves, slow.moves);
+      expect(best.hpPercent, slow.hpPercent);
+      expect(back.hasFeat('hollow', 'prism'), isTrue);
+    });
+
+    test('記録の無い古い保存も、壊れた記録も読める', () {
+      final old = Progress.decode('{"cleared":["hollow"],"shards":4}');
+      expect(old.hasCleared('hollow'), isTrue);
+      expect(old.recordOf('hollow'), isNull);
+      expect(old.feats, isEmpty);
+
+      final broken = Progress.decode(
+        '{"records":{"hollow":{"score":1},"cavern":{"score":1,"chain":2,'
+        '"moves":3,"hp":250},"ruins":7},"feats":["hollow/chain8",3]}',
+      );
+      expect(broken.recordOf('hollow'), isNull, reason: '欠けた記録は捨てる');
+      expect(broken.recordOf('ruins'), isNull);
+      expect(broken.recordOf('cavern')!.hpPercent, 100, reason: '割合は丸める');
+      expect(broken.feats, {'hollow/chain8'});
+    });
+  });
+
   group('魔晶', () {
     test('初回の踏破は厚く、2回目からは薄い', () {
       final progress = Progress();

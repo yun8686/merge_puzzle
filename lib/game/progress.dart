@@ -14,6 +14,8 @@ class Progress {
     Set<MageKind>? owned,
     Set<String>? cleared,
     List<MageKind>? party,
+    Map<String, DungeonRecord>? records,
+    Set<String>? feats,
     this.shards = 0,
     this.taughtTutorial = false,
     this.taughtPrism = false,
@@ -23,7 +25,9 @@ class Progress {
          for (final m in Mage.squires) m.kind,
        },
        cleared = cleared ?? <String>{},
-       party = party ?? <MageKind>[...startingParty];
+       party = party ?? <MageKind>[...startingParty],
+       records = records ?? <String, DungeonRecord>{},
+       feats = feats ?? <String>{};
 
   /// 連れていける人数。ガチャで増えても、同時に出せるのはここまで。
   static const int partySlots = 3;
@@ -50,6 +54,9 @@ class Progress {
   /// 2回目以降の踏破。周回しても増えはするが、初回ほどではない。
   static const int repeatClearReward = 3;
 
+  /// 課題を1つ果たしたときの魔晶。1つにつき一度きり。
+  static const int featReward = 5;
+
   /// 所持している魔導士。始まりは相を1つずつ持つ見習い3人。
   final Set<MageKind> owned;
 
@@ -58,6 +65,13 @@ class Progress {
 
   /// いまの編成。先頭から順に連れていく。[partySlots] を超えない。
   final List<MageKind> party;
+
+  /// ダンジョンごとの自己ベスト。**クリアしたときだけ**書く。鍵は id。
+  final Map<String, DungeonRecord> records;
+
+  /// 果たした課題。`"ダンジョンの id/課題の id"` の文字列で持つ
+  /// （[featKey]）。ここはダンジョンも課題の中身も読まない。
+  final Set<String> feats;
 
   /// 魔晶。ガチャを引く元手。
   int shards;
@@ -107,6 +121,29 @@ class Progress {
     cleared.add(dungeonId);
     shards += gained;
     return gained;
+  }
+
+  /// そのダンジョンの自己ベスト。まだクリアしていなければ null。
+  DungeonRecord? recordOf(String dungeonId) => records[dungeonId];
+
+  /// クリアした1本の戦果を自己ベストに重ねる。項目ごとに良いほうを残す。
+  void noteRecord(String dungeonId, DungeonRecord run) {
+    final old = records[dungeonId];
+    records[dungeonId] = old == null ? run : old.best(run);
+  }
+
+  /// 保存に書く課題の鍵。**どちらの id も保存に乗るので変えない。**
+  static String featKey(String dungeonId, String featId) =>
+      '$dungeonId/$featId';
+
+  bool hasFeat(String dungeonId, String featId) =>
+      feats.contains(featKey(dungeonId, featId));
+
+  /// 課題を果たした印を付けて、入った魔晶を返す。済んでいれば 0。
+  int recordFeat(String dungeonId, String featId) {
+    if (!feats.add(featKey(dungeonId, featId))) return 0;
+    shards += featReward;
+    return featReward;
   }
 
   /// 失敗しても、降りた階層のぶんだけは持ち帰る。
@@ -199,6 +236,10 @@ class Progress {
     'shards': shards,
     'taught': taughtTutorial,
     'taughtPrism': taughtPrism,
+    'records': {
+      for (final e in records.entries) e.key: e.value.toJson(),
+    },
+    'feats': feats.toList(),
   };
 
   static Progress fromJson(Map<String, Object?> json) {
@@ -220,6 +261,19 @@ class Progress {
           if (v is String) v,
       },
       party: party,
+      // 記録と課題が無い古い保存は、どちらも空から。クリア済みの印は
+      // [cleared] のほうに残っているので、★の1つ目は灯る。
+      records: {
+        if (json['records'] case final Map<Object?, Object?> raw)
+          for (final e in raw.entries)
+            if (e.key case final String id)
+              if (DungeonRecord.fromJson(e.value) case final record?)
+                id: record,
+      },
+      feats: {
+        for (final v in _list(json['feats']))
+          if (v is String) v,
+      },
       shards: switch (json['shards']) {
         final int n => n < 0 ? 0 : n,
         _ => 0,
@@ -319,5 +373,67 @@ class MemoryProgressStore implements ProgressStore {
   @override
   Future<void> save(Progress progress) async {
     _raw = progress.encode();
+  }
+}
+
+/// ダンジョン1本ぶんの自己ベスト。項目ごとに別の回の値でよい。
+///
+/// ★（`feats.dart` の `Stars`）はここから割り出すので、★そのものは
+/// 保存しない。目安の手数を書き換えても、★が記録どおりに付け直る。
+class DungeonRecord {
+  const DungeonRecord({
+    required this.score,
+    required this.chain,
+    required this.moves,
+    required this.hpPercent,
+  });
+
+  /// いちばん高いスコア。
+  final int score;
+
+  /// いちばん強かったチェインの威力。
+  final int chain;
+
+  /// いちばん少ない手数（つないだ本数）。
+  final int moves;
+
+  /// クリアしたときに残っていた体力の割合（0〜100）の最高。
+  final int hpPercent;
+
+  /// 項目ごとに良いほう。手数だけは少ないほうが良い。
+  DungeonRecord best(DungeonRecord other) => DungeonRecord(
+    score: max(score, other.score),
+    chain: max(chain, other.chain),
+    moves: min(moves, other.moves),
+    hpPercent: max(hpPercent, other.hpPercent),
+  );
+
+  Map<String, Object?> toJson() => {
+    'score': score,
+    'chain': chain,
+    'moves': moves,
+    'hp': hpPercent,
+  };
+
+  /// 読めなければ null。1項目でも欠けた記録は、半端に信じずに捨てる。
+  static DungeonRecord? fromJson(Object? raw) {
+    if (raw is! Map<Object?, Object?>) return null;
+    int? read(String key) => switch (raw[key]) {
+      final int n when n >= 0 => n,
+      _ => null,
+    };
+    final score = read('score');
+    final chain = read('chain');
+    final moves = read('moves');
+    final hp = read('hp');
+    if (score == null || chain == null || moves == null || hp == null) {
+      return null;
+    }
+    return DungeonRecord(
+      score: score,
+      chain: chain,
+      moves: moves,
+      hpPercent: hp.clamp(0, 100),
+    );
   }
 }

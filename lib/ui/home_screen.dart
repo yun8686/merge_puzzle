@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../game/dungeon.dart';
+import '../game/feats.dart';
 import '../game/game_controller.dart';
 import '../game/party.dart';
 import '../game/phase.dart';
@@ -165,21 +166,15 @@ class _HomeScreenState extends State<HomeScreen> {
     // 稽古を挟んだぶん、潜る前にもう一度確かめる。
     if (!mounted) return;
 
+    // 課題は「誰を連れていったか」を見るので、潜る時点の顔ぶれを控える。
+    final sent = progress.partyMages;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (context) => GameScreen(
-          controller: GameController(
-            dungeon: dungeon,
-            roster: progress.partyMages,
-          ),
+          controller: GameController(dungeon: dungeon, roster: sent),
           onFinished: (outcome) {
             // 記録を書くのはここ。盤面の画面は結末を伝えるだけ。
-            final gained = outcome.cleared
-                ? progress.recordClear(outcome.dungeonId)
-                : progress.recordFailure(outcome.floor);
-            _spoils = outcome.cleared
-                ? '${dungeon.name} クリア　魔晶 +$gained'
-                : 'B${outcome.floor}F まで降りた　魔晶 +$gained';
+            _spoils = settleDive(progress, dungeon, sent, outcome);
             Navigator.of(context).pop();
           },
         ),
@@ -250,6 +245,56 @@ class _HomeScreenState extends State<HomeScreen> {
 ///
 /// 縦に全部並べていたのをやめ、面を三つに割った。並べると「いま何ができるか」が
 /// 埋もれるうえ、下にあるダンジョンまで毎回スクロールすることになる。
+/// 帰ってきた結末を記録に書き、拠点に出す知らせの文を返す。
+///
+/// **記録に書くのはクリアしたときだけ。** 自己ベストも★も課題も、途中で
+/// 倒れた回の数字では付けない（倒れる直前まで長いチェインを出していても、
+/// それはクリアの記録ではない）。
+///
+/// 新しく灯った★と果たした課題は1行ずつ並べる。まとめて「★+1」と出すと、
+/// 何を満たしたのかが分からない。
+String settleDive(
+  Progress progress,
+  Dungeon dungeon,
+  List<Mage> party,
+  DungeonOutcome outcome,
+) {
+  if (!outcome.cleared) {
+    final gained = progress.recordFailure(outcome.floor);
+    return 'B${outcome.floor}F まで降りた　魔晶 +$gained';
+  }
+  final report = DiveReport(
+    party: party,
+    score: outcome.score,
+    bestChain: outcome.bestChain,
+    moves: outcome.moves,
+    hpLeft: outcome.hpLeft,
+    maxHp: outcome.maxHp,
+  );
+  bool lit(Star star) => Stars.lit(
+    star,
+    dungeon,
+    cleared: progress.hasCleared(dungeon.id),
+    record: progress.recordOf(dungeon.id),
+  );
+  final before = {for (final star in Star.values) if (lit(star)) star};
+  final feats = Feats.newlyMet(progress, dungeon.id, report);
+
+  final gained = progress.recordClear(dungeon.id);
+  progress.noteRecord(dungeon.id, report.record);
+  final lines = ['${dungeon.name} クリア　魔晶 +$gained'];
+  // クリアの★は1行目で言っているので重ねない。
+  for (final star in Star.values) {
+    if (star == Star.clear || before.contains(star) || !lit(star)) continue;
+    lines.add(Stars.earned(star, dungeon));
+  }
+  for (final feat in feats) {
+    final bonus = progress.recordFeat(dungeon.id, feat.id);
+    lines.add('課題「${feat.label}」達成　魔晶 +$bonus');
+  }
+  return lines.join('\n');
+}
+
 class _Base extends StatelessWidget {
   const _Base({
     required this.progress,
@@ -649,6 +694,14 @@ class _DungeonTab extends StatelessWidget {
                     child: _DungeonCard(
                       dungeon: Dungeons.all[i],
                       cleared: progress.hasCleared(Dungeons.all[i].id),
+                      record: progress.recordOf(Dungeons.all[i].id),
+                      feats: [
+                        for (final feat in Feats.of(Dungeons.all[i].id))
+                          (
+                            feat,
+                            progress.hasFeat(Dungeons.all[i].id, feat.id),
+                          ),
+                      ],
                       // 前の1本をクリアすると開く。いきなり竜の巣に入って
                       // 何も分からないまま全滅する入り方を塞ぐため。
                       //
@@ -679,6 +732,8 @@ class _DungeonCard extends StatelessWidget {
   const _DungeonCard({
     required this.dungeon,
     required this.cleared,
+    required this.record,
+    required this.feats,
     required this.locked,
     required this.needs,
     required this.onTap,
@@ -686,6 +741,13 @@ class _DungeonCard extends StatelessWidget {
 
   final Dungeon dungeon;
   final bool cleared;
+
+  /// 自己ベスト。まだクリアしていなければ null。
+  final DungeonRecord? record;
+
+  /// 課題と、果たしたかどうか。
+  final List<(Feat, bool)> feats;
+
   final bool locked;
 
   /// 開けるのに踏破が要るダンジョンの名。
@@ -762,6 +824,33 @@ class _DungeonCard extends StatelessWidget {
                                 lit: cleared,
                                 tint: tint,
                               ),
+                              // 開いていない1本には出さない。まだ挑めない
+                              // 場所の目標を並べても読まれない。
+                              if (!locked) ...[
+                                const SizedBox(height: 10),
+                                _StarRow(
+                                  dungeon: dungeon,
+                                  cleared: cleared,
+                                  record: record,
+                                ),
+                                if (record case final best?) ...[
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    '最高スコア ${best.score}　'
+                                    '最大威力 ${best.chain}　'
+                                    '最少 ${best.moves}手',
+                                    style: const TextStyle(
+                                      color: Palette.textMuted,
+                                      fontSize: 10.5,
+                                    ),
+                                  ),
+                                ],
+                                if (feats.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  for (final (feat, done) in feats)
+                                    _FeatLine(feat: feat, done: done),
+                                ],
+                              ],
                             ],
                           ),
                         ),
@@ -791,6 +880,91 @@ class _DungeonCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// ★3つ。どれも別の条件で、どの回で取ってもよい（[Stars]）。
+///
+/// 条件を★の横に書いておく。★だけ並べると、残りの1つを取るのに何を
+/// すればよいのかが分からない。
+class _StarRow extends StatelessWidget {
+  const _StarRow({
+    required this.dungeon,
+    required this.cleared,
+    required this.record,
+  });
+
+  final Dungeon dungeon;
+  final bool cleared;
+  final DungeonRecord? record;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 4,
+      children: [
+        for (final star in Star.values)
+          if (Stars.lit(star, dungeon, cleared: cleared, record: record))
+            Text(
+              '★ ${Stars.label(star, dungeon)}',
+              style: const TextStyle(
+                color: Palette.gold,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            )
+          else
+            Text(
+              '☆ ${Stars.label(star, dungeon)}',
+              style: const TextStyle(
+                color: Palette.textDim,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// 課題1つぶんの行。果たしたものは印を灯し、魔晶の額は果たす前だけ出す。
+class _FeatLine extends StatelessWidget {
+  const _FeatLine({required this.feat, required this.done});
+
+  final Feat feat;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 12,
+            color: done ? Palette.gold : Palette.textDim,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              feat.label,
+              style: TextStyle(
+                color: done ? Palette.textPrimary : Palette.textMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (!done)
+            Text(
+              '魔晶 +${Progress.featReward}',
+              style: AppFont.label(8, color: Palette.textDim),
+            ),
+        ],
       ),
     );
   }

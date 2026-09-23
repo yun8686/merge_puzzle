@@ -18,6 +18,11 @@ class DungeonOutcome {
     required this.dungeonId,
     required this.cleared,
     required this.floor,
+    required this.score,
+    required this.bestChain,
+    required this.moves,
+    required this.hpLeft,
+    required this.maxHp,
   });
 
   final String dungeonId;
@@ -27,6 +32,19 @@ class DungeonOutcome {
 
   /// 全滅したときに到達していた階層。踏破なら最下層。
   final int floor;
+
+  /// ここから下は★と課題の材料。**書くかどうかは拠点が決める**
+  /// （記録に残すのはクリアしたときだけ）。
+  final int score;
+
+  /// いちばん強かったチェインの威力。
+  final int bestChain;
+
+  /// このダンジョンで使った手数（つないだ本数）。
+  final int moves;
+
+  final int hpLeft;
+  final int maxHp;
 }
 
 class GameScreen extends StatefulWidget {
@@ -169,6 +187,11 @@ class _GameScreenState extends State<GameScreen> {
         dungeonId: _controller.dungeon.id,
         cleared: cleared,
         floor: _controller.floor,
+        score: _controller.score,
+        bestChain: _controller.bestChain,
+        moves: _controller.moves,
+        hpLeft: _controller.party.hp,
+        maxHp: _controller.party.maxHp,
       ),
     );
   }

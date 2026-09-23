@@ -371,6 +371,29 @@ void main() {
     });
   });
 
+  test('手数はダンジョンを通して数え、入り直すと戻る', () {
+    // ★の「手数以内」に使う。階層ごとに戻る chains とは別に数える。
+    final controller = newController();
+    paintCheckerboard(controller.board, foe: const Cell(0, 1), ward: 3);
+    trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+    controller.commitPath();
+    controller.settle();
+    expect(controller.phase, GamePhase.stageCleared);
+    expect(controller.moves, 1);
+
+    controller.nextFloor();
+    expect(controller.chains, 0, reason: '階層ごとの本数は戻る');
+    expect(controller.moves, 1, reason: '手数は持ち越す');
+
+    paintCheckerboard(controller.board, foe: const Cell(7, 5), ward: 8);
+    trace(controller, const [Cell(0, 0), Cell(0, 1), Cell(0, 2)]);
+    controller.commitPath();
+    expect(controller.moves, 2);
+
+    controller.enterDungeon(controller.dungeon);
+    expect(controller.moves, 0);
+  });
+
   group('手詰まり', () {
     test('階層を落とさず、敵を残して盤面を敷き直す', () {
       // 負けるのは体力が尽きたときだけ。盤面の運で詰んでも続けられる。
