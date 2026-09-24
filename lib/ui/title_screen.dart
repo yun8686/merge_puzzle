@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'chain_mark.dart';
 import 'theme.dart';
 
+/// どの公開先に向けて組んだか。`test` ブランチは
+/// `--dart-define=CHANNEL=test` を付けて組む（`deploy-pages.yml`）。
+/// 本番は何も渡さないので空。
+const String buildChannel = String.fromEnvironment('CHANNEL');
+
 /// 最初に出る画面。
 ///
 /// 遊び方は書かない。**鎖が編まれるところを見せる**ほうが速い。題の上で
@@ -12,9 +17,17 @@ import 'theme.dart';
 /// 記録は読まない。押されたら拠点（`HomeScreen`）に渡して、そこで読ませる。
 /// ここが保存の都合を持つと、タイトルを出すのに読み込みを待つことになる。
 class TitleScreen extends StatelessWidget {
-  const TitleScreen({super.key, required this.onStart});
+  const TitleScreen({
+    super.key,
+    required this.onStart,
+    this.channel = buildChannel,
+  });
 
   final VoidCallback onStart;
+
+  /// 空でなければ右上に札を出す。本番と試験版の見分けがつかないと、
+  /// どちらを触っているのか分からないまま話がすれ違う。
+  final String channel;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +81,16 @@ class TitleScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (channel.isNotEmpty)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _ChannelBadge(channel),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -108,6 +131,32 @@ class _Title extends StatelessWidget {
         const SizedBox(height: 10),
         Text('FROSTFIRE CHAIN', style: AppFont.label(11)),
       ],
+    );
+  }
+}
+
+/// 試験版の札。
+class _ChannelBadge extends StatelessWidget {
+  const _ChannelBadge(this.channel);
+
+  final String channel;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: const ValueKey('title-channel'),
+      decoration: BoxDecoration(
+        color: Palette.gold.withValues(alpha: 0.12),
+        border: Border.all(color: Palette.gold),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Text(
+          channel.toUpperCase(),
+          style: AppFont.label(12, color: Palette.gold),
+        ),
+      ),
     );
   }
 }

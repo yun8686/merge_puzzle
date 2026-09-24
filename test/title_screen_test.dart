@@ -13,6 +13,23 @@ void main() {
     expect(find.text('はじめる'), findsOneWidget);
   });
 
+  testWidgets('本番では試験版の札を出さない', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: TitleScreen(onStart: () {})));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('title-channel')), findsNothing);
+  });
+
+  testWidgets('試験版では札を出す', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: TitleScreen(onStart: () {}, channel: 'test')),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('title-channel')), findsOneWidget);
+    expect(find.text('TEST'), findsOneWidget);
+  });
+
   testWidgets('押すと始まる', (tester) async {
     var started = 0;
     await tester.pumpWidget(

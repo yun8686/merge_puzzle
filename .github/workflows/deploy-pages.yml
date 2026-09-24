@@ -88,6 +88,7 @@ jobs:
           ref: ${{ env.STAGING_BRANCH }}
           path: staging
 
+      # CHANNEL を渡すとタイトルの右上に TEST の札が出る（title_screen.dart）。
       # 試験用ブランチが壊れていても本番の公開は止めない。
       # その場合 /test/ は今回の公開から外れる。
       - name: Build staging branch
@@ -99,6 +100,7 @@ jobs:
           flutter pub get
           flutter build web --release \
             --base-href "/${GITHUB_REPOSITORY#*/}/$STAGING_BRANCH/" \
+            --dart-define=CHANNEL="$STAGING_BRANCH" \
             --no-web-resources-cdn
           mkdir -p "$GITHUB_WORKSPACE/site/$STAGING_BRANCH"
           cp -r build/web/. "$GITHUB_WORKSPACE/site/$STAGING_BRANCH/"
