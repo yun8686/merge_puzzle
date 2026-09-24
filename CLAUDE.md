@@ -8,6 +8,9 @@ Claude Code がこのリポジトリで作業するときの約束事。ゲー�
 **`main` で直接作業して `main` に push する。** ブランチを切らない。PR も作らない
 （明示的に頼まれたときだけ作る）。
 
+例外は試験用の **`test` ブランチ**。複数人で触るときに、本番を止めずに見せたい変更を
+ここに置く。`test` で作業するよう頼まれたときだけ `test` に push する。
+
 ```
 git checkout main && git pull origin main
 # 変更
@@ -20,11 +23,20 @@ git push -u origin main
 
 ## push は即デプロイ
 
-`.github/workflows/deploy-pages.yml` が push のたびに走り、**デフォルトブランチのときだけ**
-GitHub Pages に公開する。公開先は https://yun8686.github.io/merge_puzzle/ 。
+`.github/workflows/deploy-pages.yml` が push のたびに走り、**デフォルトブランチと `test`
+のときだけ** GitHub Pages に公開する。
 
-CI は `flutter analyze` → `flutter test` → `flutter build web` の順で、どれかが落ちると
-公開されない。`main` に直接 push する運用なので、**壊れたコミットはそのまま公開ページを
+| ブランチ | 公開先 |
+|---|---|
+| `main` | https://yun8686.github.io/merge_puzzle/ |
+| `test` | https://yun8686.github.io/merge_puzzle/test/ |
+
+Pages はリポジトリに1つしか置けないので、公開のたびに**両方のブランチを組んで1つに
+まとめて出す**。どちらに push しても、もう片方も最新の中身で並び直す。`test` の
+ビルドが落ちても本番は公開される（そのとき `/test/` は消えて、警告が出る）。
+
+CI は push されたブランチで `flutter analyze` → `flutter test` を走らせ、通ったら
+`flutter build web` で組む。どれかが落ちると公開されない。`main` に直接 push する運用なので、**壊れたコミットはそのまま公開ページを
 止める**。push 前に手元で確認すること。
 
 ただし作業コンテナに Flutter SDK が入っていないことがある。その場合 `flutter analyze` も

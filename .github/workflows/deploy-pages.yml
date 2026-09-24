@@ -14,18 +14,21 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  FLUTTER_VERSION: 3.35.5
+  # 試験用のブランチ。ここに push すると /test/ の下に公開される。
+  STAGING_BRANCH: test
+
 jobs:
-  build:
-    # デフォルトブランチへのプッシュのときだけ公開する。
-    # ブランチ名をベタ書きしないので、デフォルトブランチを main に変えても動く。
-    if: github.ref_name == github.event.repository.default_branch
+  # push されたブランチを検査する。どのブランチでも走る。
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.35.5
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
@@ -35,17 +38,78 @@ jobs:
 
       - run: flutter test
 
+  # GitHub Pages はリポジトリに1つしか置けない。なので公開のたびに
+  # デフォルトブランチ（ルート）と試験用ブランチ（/test/）の両方を組んで
+  # 1つにまとめて出す。どちらに push しても、もう片方も最新の状態で並ぶ。
+  build:
+    needs: check
+    # ブランチ名をベタ書きしないので、デフォルトブランチを変えても動く。
+    if: >-
+      github.ref_name == github.event.repository.default_branch ||
+      github.ref_name == 'test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: live
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
       # GitHub Pages はリポジトリ名のサブパスで配信されるので base-href が必須。
       # --no-web-resources-cdn で CanvasKit を同梱し、gstatic への依存を外す。
-      - name: Build web
+      - name: Build default branch
+        working-directory: live
         run: |
+          flutter pub get
           flutter build web --release \
             --base-href "/${GITHUB_REPOSITORY#*/}/" \
             --no-web-resources-cdn
+          mkdir -p "$GITHUB_WORKSPACE/site"
+          cp -r build/web/. "$GITHUB_WORKSPACE/site/"
+
+      - name: Look for staging branch
+        id: staging
+        working-directory: live
+        run: |
+          if git ls-remote --exit-code --heads origin "$STAGING_BRANCH" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.staging.outputs.exists == 'true'
+        with:
+          ref: ${{ env.STAGING_BRANCH }}
+          path: staging
+
+      # 試験用ブランチが壊れていても本番の公開は止めない。
+      # その場合 /test/ は今回の公開から外れる。
+      - name: Build staging branch
+        id: staging_build
+        if: steps.staging.outputs.exists == 'true'
+        continue-on-error: true
+        working-directory: staging
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --base-href "/${GITHUB_REPOSITORY#*/}/$STAGING_BRANCH/" \
+            --no-web-resources-cdn
+          mkdir -p "$GITHUB_WORKSPACE/site/$STAGING_BRANCH"
+          cp -r build/web/. "$GITHUB_WORKSPACE/site/$STAGING_BRANCH/"
+
+      - name: Warn if staging failed
+        if: steps.staging_build.outcome == 'failure'
+        run: echo "::warning::$STAGING_BRANCH ブランチのビルドに失敗したので /$STAGING_BRANCH/ は今回公開していない"
 
       # SPA なので、直リンクや再読み込みで 404 にならないよう index.html を複製する。
       - name: Add SPA fallback
-        run: cp build/web/index.html build/web/404.html
+        run: cp site/index.html site/404.html
 
       # enablement: true で Pages 自体の有効化まで行う。
       # 手動で Settings → Pages を触る必要が無くなる。
@@ -56,7 +120,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: site
 
   deploy:
     needs: build
