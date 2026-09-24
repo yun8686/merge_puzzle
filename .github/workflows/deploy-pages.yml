@@ -9,9 +9,12 @@ permissions:
   pages: write
   id-token: write
 
-# 同時に走らせない。ただし進行中のデプロイは中断せず完走させる。
+# 同じブランチの run は同時に走らせない。ただし進行中のデプロイは中断せず完走させる。
+# 公開はデフォルトブランチの run だけが行うので、公開どうしはこれで並ぶ。
+# ブランチを分けないと、test の run が main の run を待ち行列から押し出して
+# 本番の公開が消える。
 concurrency:
-  group: pages
+  group: pages-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -38,15 +41,31 @@ jobs:
 
       - run: flutter test
 
+  # 試験用ブランチへの push は、自分では公開しない。github-pages 環境は
+  # 既定でデフォルトブランチからしか公開させてくれないので、検査が通ったら
+  # デフォルトブランチでこのワークフローを起こし直して、そちらに公開させる。
+  # （GITHUB_TOKEN で起こした workflow_dispatch は例外的に run を作る）
+  request-publish:
+    needs: check
+    if: github.event_name == 'push' && github.ref_name == 'test'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          gh workflow run deploy-pages.yml \
+            --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH"
+
   # GitHub Pages はリポジトリに1つしか置けない。なので公開のたびに
   # デフォルトブランチ（ルート）と試験用ブランチ（/test/）の両方を組んで
   # 1つにまとめて出す。どちらに push しても、もう片方も最新の状態で並ぶ。
   build:
     needs: check
     # ブランチ名をベタ書きしないので、デフォルトブランチを変えても動く。
-    if: >-
-      github.ref_name == github.event.repository.default_branch ||
-      github.ref_name == 'test'
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

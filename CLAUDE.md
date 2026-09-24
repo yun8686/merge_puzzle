@@ -35,6 +35,11 @@ Pages はリポジトリに1つしか置けないので、公開のたびに**�
 まとめて出す**。どちらに push しても、もう片方も最新の中身で並び直す。`test` の
 ビルドが落ちても本番は公開される（そのとき `/test/` は消えて、警告が出る）。
 
+**公開するのは `main` の run だけ。** `github-pages` 環境は既定でデフォルトブランチ
+からしか公開させないので、`test` の run は検査が通ったら `main` で同じワークフローを
+`workflow_dispatch` で起こし直すだけ（`request-publish`）。`test` の run から直に
+公開しようとすると `deploy` が環境の保護で弾かれる。
+
 CI は push されたブランチで `flutter analyze` → `flutter test` を走らせ、通ったら
 `flutter build web` で組む。どれかが落ちると公開されない。`main` に直接 push する運用なので、**壊れたコミットはそのまま公開ページを
 止める**。push 前に手元で確認すること。
